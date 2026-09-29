@@ -14,10 +14,11 @@ jobs:
   ########################### GNUstep / Linux ###########################
   # Built against the patched stack from gnustep-patches, by that
   # repository's own Scripts/build-gnustep.sh -- the shape ODataStore uses --
-  # never a distro GNUstep. The engine is Foundation-only, so the stack is
-  # too; the designer will add libs-gui and libs-back when it lands.
+  # never a distro GNUstep. The engine needs Foundation and, for its store,
+  # FreeCoreData over SQLite; the designer will add libs-gui and libs-back
+  # when it lands.
   gnustep:
-    name: Ubuntu (GNUstep, clang, gnustep-2.0)
+    name: Ubuntu (GNUstep, FreeCoreData, clang, gnustep-2.0)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -34,6 +35,9 @@ jobs:
       # A commit, not a branch: it decides the recipe hash the stack is
       # cached under. The same pin as ODataStore.
       GNUSTEP_PATCHES_REF: b154b9f351b6413337cf57cc02827e634c05580f
+      # FreeCoreData, pinned to a commit like the stack. The same pin as
+      # ODataStore.
+      FREECOREDATA_REF: b612b0a90fcae0b0fabcd1ff71442988eb67b518
     defaults:
       run:
         working-directory: ${{ github.workspace }}/source
@@ -49,12 +53,19 @@ jobs:
           ref: ${{ env.GNUSTEP_PATCHES_REF }}
           path: gnustep-patches
 
+      - uses: actions/checkout@v4
+        with:
+          repository: ashalkhakov/FreeCoreData
+          ref: ${{ env.FREECOREDATA_REF }}
+          path: FreeCoreData
+
       - name: Install packages
         run: |
           ./.github/scripts/apt-update.sh
           sudo apt-get -q -y install \
             pkg-config libgnutls28-dev libffi-dev libicu-dev libxml2-dev libxslt1-dev \
-            libssl-dev zlib1g-dev libcurl4-gnutls-dev
+            libssl-dev zlib1g-dev libcurl4-gnutls-dev libsqlite3-dev
+          # libsqlite3-dev is FreeCoreData's: NSSQLitePersistentStore links it.
           # The gnustep-2.0 runtime needs ld.gold or lld; ld.gold is gone
           # from binutils on 24.04.
           if [ -x /usr/bin/ld.gold ]; then
@@ -90,6 +101,18 @@ jobs:
         if: steps.gnustep-cache.outputs.cache-hit == 'true'
         run: ../gnustep-patches/Scripts/build-gnustep.sh --verify-only
 
+      # The framework, and momc with the coredata-model.make fragment that
+      # compiles Model/UDWorkflow.xcdatamodeld. Built after the stack is
+      # restored, so it is not part of the cached prefix.
+      - name: Build and install FreeCoreData
+        working-directory: ${{ github.workspace }}/FreeCoreData
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make -j"$(nproc)"
+          make install
+          make -C Tools/momc
+          make -C Tools/momc install
+
       # On its own, so a compile error is reported as that and not as a
       # test failure.
       - name: Build the library
@@ -110,5 +133,4 @@ jobs:
       - name: Purchase request demo
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
-          LD_LIBRARY_PATH="$PWD/obj:$LD_LIBRARY_PATH" \
-            timeout 120 ./Examples/obj/PurchaseRequestDemo
+          timeout 120 make -C Examples run

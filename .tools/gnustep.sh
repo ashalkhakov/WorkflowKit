@@ -19,7 +19,7 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
   exit 1
 fi
 
-(cd "$root" && COPYFILE_DISABLE=1 tar cf - --exclude .git --exclude obj \
+(cd "$root" && COPYFILE_DISABLE=1 tar --no-mac-metadata -cf - --exclude .git --exclude obj \
     --exclude '*.bundle' .) \
   | docker exec -i "$container" sh -c "rm -rf $dest && mkdir -p $dest && tar xf - -C $dest"
 

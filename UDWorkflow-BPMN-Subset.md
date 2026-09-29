@@ -50,15 +50,15 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 
 ## 2. Event rules
 
-Timers use libdispatch sources on the instance serial queue. Duration is `NSTimeInterval`. ISO-8601 export is `PTnS`. On resume from `UDMemoryStore` a waiting timer is re-armed for the **full** duration (remaining time is not persisted in V1).
+A waiting timer is an absolute due time on its token and a timer job in the store; one engine-wide dispatch timer is aimed at the earliest job. A restart waits only for the time that is left. A catch or start timer that is already due fires in the step that reaches it. Duration is `NSTimeInterval`. ISO-8601 export is `PTnS`.
 
-Messages are delivered explicitly: `deliverMessage:payload:instance:` or `deliverMessage:payload:correlationKey:value:` against a `UDMemoryStore` index on `instance.correlationKeys`.
+Messages are delivered explicitly: `deliverMessage:payload:instanceId:` or `deliverMessage:payload:correlationKey:value:`, which looks the key up in the store's correlation table (set with `startProcess:variables:correlationKeys:`; active instances only).
 
 **Interrupting boundary:** host activity token is completed, other boundaries on that host are disarmed, flow leaves the boundary.
 
 **Non-interrupting:** host keeps waiting; boundary leaves on its own outgoing flow. V1 fires a non-interrupting boundary once.
 
-Service and script waits that are snapshotted come back `Ready` (at-least-once). User-task and message waits stay `Waiting`.
+A service or script task is a service job, committed before the call is made and deleted with the commit that applies its result. An engine that restarts sends every job left in the store again: at-least-once, with the job id as the idempotency key.
 
 ## 3. Conditions
 
@@ -106,10 +106,11 @@ Import of unknown elements is ignored; missing required V1 structure fails `buil
 | Piece | Rule |
 |---|---|
 | Token | Sits on a node. Fire consumes it and produces successors. |
-| Instance queue | Serial dispatch queue. All marking changes happen here. |
-| Worker queue | Concurrent. Service I/O only. Completion hops back. |
-| Public API | Delegates and target-action. Blocks are not part of the model. |
-| Persistence | `UDInstanceStore` snapshot of tokens + variables + definition id. |
+| Unit of work | Load, apply one input, fire until no token is ready, commit once. Callbacks and service calls go out after the commit. |
+| Instance queues | A fixed set of serial queues; an instance always runs on the same one. |
+| Worker queue | Concurrent. Service I/O only. Completion is a new unit of work. |
+| Public API | Instances by id. Delegates and target-action. Blocks are not part of the model. |
+| Persistence | `UDStore`: Core Data (`Model/UDWorkflow.xcdatamodeld`) over in-memory, SQLite or a FreeCoreData SQL backend. See `docs/persistence-design.md`. |
 
 Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/Height` and exported as `ud:x` `ud:y` `ud:w` `ud:h`.
 

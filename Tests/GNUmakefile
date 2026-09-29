@@ -9,17 +9,18 @@ UDWorkflowTests_OBJC_FILES = UDWorkflowTests.m
 UDWorkflowTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 UDWorkflowTests_INCLUDE_DIRS = -I../Headers
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)
-UDWorkflowTests_BUNDLE_LIBS += -lUDWorkflow -lXCTest -ldispatch
+UDWorkflowTests_BUNDLE_LIBS += -lUDWorkflow -lCoreData -lXCTest -ldispatch
+UDWorkflowTests_XCDATAMODELD_FILES = ../Model/UDWorkflow.xcdatamodeld
 UDWorkflowTests_NEEDS_GUI = no
 UDWorkflowTests_PRINCIPAL_CLASS = UDWorkflowTests
 
+include $(GNUSTEP_MAKEFILES)/coredata-model.make
 include $(GNUSTEP_MAKEFILES)/bundle.make
 
 XCTEST ?= xctest
 
-# Bounded: the engine's synchronous entry points wait on semaphores, and a
-# token that never quiesces would otherwise hang the job until CI kills it,
-# saying nothing about which test it was in.
+# Bounded: a test waiting on an instance that never settles would otherwise
+# hang the job until CI kills it, saying nothing about which test it was in.
 TEST_TIMEOUT ?= 300
 
 .PHONY: run-tests

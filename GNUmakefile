@@ -20,7 +20,7 @@ UDWorkflow_OBJC_FILES = \
 	Source/UDProcessDefinition.m \
 	Source/UDRuntimeState.m \
 	Source/UDHandlers.m \
-	Source/UDMemoryStore.m \
+	Source/UDStore.m \
 	Source/UDBpmn.m \
 	Source/UDEngine.m
 
@@ -33,14 +33,23 @@ UDWorkflow_HEADER_FILES = \
 	UDProcessDefinition.h \
 	UDRuntimeState.h \
 	UDHandlers.h \
-	UDMemoryStore.h \
+	UDStore.h \
 	UDEngine.h \
 	UDBpmn.h \
 	UDWorkflow.h
 
 UDWorkflow_INCLUDE_DIRS = -IHeaders
 UDWorkflow_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
-UDWorkflow_LIBRARIES_DEPEND_UPON += -ldispatch $(FND_LIBS) $(OBJC_LIBS)
+UDWorkflow_LIBRARIES_DEPEND_UPON += -lCoreData -ldispatch $(FND_LIBS) $(OBJC_LIBS)
+
+# The store's Core Data model, compiled by FreeCoreData's momc into
+# UDWorkflow.momd and installed in the library's resource bundle, where
+# +[NSBundle bundleForClass:] finds it. Uninstalled, the test bundle and
+# the examples carry their own copy.
+UDWorkflow_XCDATAMODELD_FILES = Model/UDWorkflow.xcdatamodeld
+UDWorkflow_HAS_RESOURCE_BUNDLE = yes
+
+include $(GNUSTEP_MAKEFILES)/coredata-model.make
 
 include $(GNUSTEP_MAKEFILES)/library.make
 

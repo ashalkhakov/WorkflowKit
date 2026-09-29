@@ -14,20 +14,29 @@
 @property (nonatomic, strong) NSError *error;
 @end
 
+/*
+ * One call of a service or script task. It is sent only after the state
+ * that asked for it is committed, and sent again if the engine restarts
+ * before the result is committed, so a handler sees each job at least
+ * once: jobId stays the same across repeats and is the idempotency key.
+ */
 @interface UDServiceInvocation : NSObject
 
+@property (nonatomic, readonly, copy) NSString *jobId;
 @property (nonatomic, readonly, copy) NSString *actionKey;
 @property (nonatomic, readonly, copy) NSDictionary *variables;
+@property (nonatomic, readonly, copy) NSString *instanceId;
 @property (nonatomic, readonly, copy) NSString *tokenId;
-@property (nonatomic, readonly, weak) UDProcessInstance *instance;
 @property (nonatomic, weak) id target;
 @property (nonatomic) SEL action;
 
-- (instancetype)initWithActionKey:(NSString *)actionKey
-                        variables:(NSDictionary *)variables
-                          tokenId:(NSString *)tokenId
-                         instance:(UDProcessInstance *)instance;
+- (instancetype)initWithJobId:(NSString *)jobId
+                    actionKey:(NSString *)actionKey
+                    variables:(NSDictionary *)variables
+                   instanceId:(NSString *)instanceId
+                      tokenId:(NSString *)tokenId;
 
+/* Variables must be property-list values; anything else fails the task. */
 - (void)finishWithVariables:(NSDictionary *)outVars error:(NSError *)error;
 
 @end
@@ -40,11 +49,6 @@
 - (void)publishWorkItemForToken:(UDToken *)token
                        instance:(UDProcessInstance *)instance
                            task:(UDTask *)task;
-@end
-
-@protocol UDInstanceStore <NSObject>
-- (BOOL)saveInstance:(UDProcessInstance *)instance error:(NSError **)error;
-- (UDProcessInstance *)loadInstance:(NSString *)instanceId error:(NSError **)error;
 @end
 
 #endif /* UDHandlers_h */

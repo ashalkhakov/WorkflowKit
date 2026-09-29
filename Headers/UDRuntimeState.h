@@ -2,12 +2,13 @@
 #define UDRuntimeState_h
 
 #import "UDTypes.h"
-#import <dispatch/dispatch.h>
 
 @class UDProcessDefinition;
 
 @interface UDToken : NSObject
 
+/* Unique in the whole instance tree, embedded subprocesses included, so
+ * (instanceId, tokenId) names a token from outside the engine. */
 @property (nonatomic, copy) NSString *tokenId;
 @property (nonatomic, copy) NSString *nodeId;
 @property (nonatomic, copy) NSString *arrivedViaFlowId;
@@ -15,9 +16,18 @@
 @property (nonatomic, copy) NSString *parentTokenId;
 @property (nonatomic, copy) NSString *forkId;
 @property (nonatomic) NSUInteger joinExpected;
+/* When a token waiting on a timer event fires. Absolute, so a restart
+ * waits only for the time that is left. */
+@property (nonatomic, copy) NSDate *dueAt;
 
 @end
 
+/*
+ * The marking of one process instance, or of an embedded subprocess inside
+ * one. The engine loads it from the store for a unit of work and drops it
+ * afterwards: an object handed out (to a delegate, or by -instanceWithId:)
+ * is a snapshot, not a live view.
+ */
 @interface UDProcessInstance : NSObject
 
 @property (nonatomic, copy) NSString *instanceId;
@@ -34,19 +44,31 @@
 @property (nonatomic, getter=isCompleted) BOOL completed;
 @property (nonatomic, getter=isFailed) BOOL failed;
 @property (nonatomic, strong) NSError *error;
+/* Kept on the root: children draw their token ids from it. */
 @property (nonatomic) NSUInteger tokenSerial;
-@property (nonatomic) NSUInteger pendingServices;
-@property (nonatomic) NSUInteger pendingTimers;
-@property (nonatomic, UD_DISPATCH_PROPERTY) dispatch_queue_t queue;
-@property (nonatomic, UD_DISPATCH_PROPERTY) dispatch_semaphore_t quiesce;
 
+- (UDProcessInstance *)rootInstance;
 - (UDToken *)nextReadyToken;
 - (NSArray<UDToken *> *)tokensAtNode:(NSString *)nodeId
                                state:(UDTokenState)state;
 - (UDToken *)tokenWithId:(NSString *)tokenId;
+/* Searches this instance and its subprocesses; *scope is the one holding
+ * the token. */
+- (UDToken *)findTokenWithId:(NSString *)tokenId
+                       scope:(UDProcessInstance **)scope;
 - (UDToken *)makeTokenOnNode:(NSString *)nodeId
               arrivedViaFlow:(NSString *)flowId
                       parent:(UDToken *)parent;
+/* Drops completed tokens here and in every subprocess. */
+- (void)pruneCompletedTokens;
+
+/* The marking as a property list, subprocesses included, and back. The
+ * definition is not in it: the caller supplies the root's, and each
+ * child's comes from its host subprocess node. */
+- (NSDictionary *)stateDictionary;
++ (instancetype)instanceWithStateDictionary:(NSDictionary *)state
+                                 definition:(UDProcessDefinition *)definition
+                                      error:(NSError **)error;
 
 @end
 

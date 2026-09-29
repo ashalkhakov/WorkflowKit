@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="1">
+    <entity name="UDDeployment" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="bpmn" optional="YES" attributeType="String"/>
+        <attribute name="deployedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="processId" attributeType="String"/>
+        <attribute name="version" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="processId"/>
+                <constraint value="version"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <fetchIndex name="byProcess">
+            <fetchIndexElement property="processId" type="Binary" order="ascending"/>
+            <fetchIndexElement property="version" type="Binary" order="descending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDInstance" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="errorCode" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="errorDomain" optional="YES" attributeType="String"/>
+        <attribute name="errorMessage" optional="YES" attributeType="String"/>
+        <attribute name="instanceId" attributeType="String"/>
+        <attribute name="processId" attributeType="String"/>
+        <attribute name="state" attributeType="Binary"/>
+        <attribute name="status" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="version" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="instanceId"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <fetchIndex name="byInstanceId">
+            <fetchIndexElement property="instanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byStatus">
+            <fetchIndexElement property="status" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDJob" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="actionKey" optional="YES" attributeType="String"/>
+        <attribute name="attempts" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="dueAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="instanceId" attributeType="String"/>
+        <attribute name="jobId" attributeType="String"/>
+        <attribute name="kind" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="lockedUntil" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="owner" optional="YES" attributeType="String"/>
+        <attribute name="tokenId" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="jobId"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <fetchIndex name="byInstance">
+            <fetchIndexElement property="instanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byDue">
+            <fetchIndexElement property="kind" type="Binary" order="ascending"/>
+            <fetchIndexElement property="dueAt" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDCorrelation" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="instanceId" attributeType="String"/>
+        <attribute name="key" attributeType="String"/>
+        <attribute name="value" attributeType="String"/>
+        <fetchIndex name="byKeyValue">
+            <fetchIndexElement property="key" type="Binary" order="ascending"/>
+            <fetchIndexElement property="value" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byInstance">
+            <fetchIndexElement property="instanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+</model>

@@ -5,17 +5,19 @@
 
 @implementation UDServiceInvocation
 
-- (instancetype)initWithActionKey:(NSString *)actionKey
-                        variables:(NSDictionary *)variables
-                          tokenId:(NSString *)tokenId
-                         instance:(UDProcessInstance *)instance
+- (instancetype)initWithJobId:(NSString *)jobId
+                    actionKey:(NSString *)actionKey
+                    variables:(NSDictionary *)variables
+                   instanceId:(NSString *)instanceId
+                      tokenId:(NSString *)tokenId
 {
 	self = [super init];
 	if (self) {
+		_jobId = [jobId copy];
 		_actionKey = [actionKey copy];
 		_variables = [variables copy];
+		_instanceId = [instanceId copy];
 		_tokenId = [tokenId copy];
-		_instance = instance;
 	}
 	return self;
 }

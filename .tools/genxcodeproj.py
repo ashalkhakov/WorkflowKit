@@ -28,6 +28,7 @@ SOURCES = make_list("GNUmakefile", "UDWorkflow_OBJC_FILES")            # Source/
 HEADERS = make_list("GNUmakefile", "UDWorkflow_HEADER_FILES")          # X.h
 TESTS = make_list("Tests/GNUmakefile", "UDWorkflowTests_OBJC_FILES")   # X.m
 DEMO = make_list("Examples/GNUmakefile", "PurchaseRequestDemo_OBJC_FILES")
+MODELS = make_list("GNUmakefile", "UDWorkflow_XCDATAMODELD_FILES")     # Model/X.xcdatamodeld
 DOCS = ["CLAUDE.md", "UDWorkflow-BPMN-Subset.md", "GNUmakefile"]
 CONFIGS = ["Common.xcconfig", "Debug.xcconfig", "Release.xcconfig"]
 
@@ -69,13 +70,40 @@ demo_refs = {d: fileref("Examples/" + d, d, ftype(d)) for d in DEMO}
 doc_refs = {d: fileref(d, d, ftype(d)) for d in DOCS}
 cfg_refs = {c: fileref("Xcode/Configs/" + c, c, "text.xcconfig") for c in CONFIGS}
 
-foundation = add(oid("sdk", "Foundation"), "Foundation.framework", [
-    ("isa", "PBXFileReference"),
-    ("lastKnownFileType", "wrapper.framework"),
-    ("name", "Foundation.framework"),
-    ("path", "System/Library/Frameworks/Foundation.framework"),
-    ("sourceTree", "SDKROOT"),
-])
+
+
+def sdk_framework(name):
+    return add(oid("sdk", name), name + ".framework", [
+        ("isa", "PBXFileReference"),
+        ("lastKnownFileType", "wrapper.framework"),
+        ("name", name + ".framework"),
+        ("path", "System/Library/Frameworks/%s.framework" % name),
+        ("sourceTree", "SDKROOT"),
+    ])
+
+
+foundation = sdk_framework("Foundation")
+coredata = sdk_framework("CoreData")
+
+
+# A data model is a version group holding one .xcdatamodel per version; the
+# current one is named in the bundle's .xccurrentversion. Xcode compiles it
+# in the Sources phase into a .momd inside the framework.
+def version_group(path):
+    bundle = os.path.join(ROOT, path)
+    current = open(os.path.join(bundle, ".xccurrentversion")).read()
+    current = re.search(r"<string>([^<]+)</string>", current).group(1)
+    versions = sorted(v for v in os.listdir(bundle) if v.endswith(".xcdatamodel"))
+    refs = {v: fileref(path + "/" + v, v, "wrapper.xcdatamodel") for v in versions}
+    name = os.path.basename(path)
+    return add(oid("ref", path), name, [
+        ("isa", "XCVersionGroup"),
+        ("children", names([refs[v] for v in versions])),
+        ("currentVersion", "%s /* %s */" % (refs[current], current)),
+        ("path", q(name)),
+        ("sourceTree", '"<group>"'),
+        ("versionGroupType", "wrapper.xcdatamodel"),
+    ])
 
 
 def product(name, ext, ftype_):
@@ -114,12 +142,17 @@ def names(ids):
     return ["%s /* %s */" % (i, objects[i][0]) for i in ids]
 
 
+model_refs = {m: version_group(m) for m in MODELS}
+
+
 fw_sources = phase("PBXSourcesBuildPhase", "UDWorkflow", "Sources", names(
-    [buildfile("UDWorkflow", src_refs[s], os.path.basename(s)) for s in SOURCES]))
+    [buildfile("UDWorkflow", src_refs[s], os.path.basename(s)) for s in SOURCES] +
+    [buildfile("UDWorkflow", model_refs[m], os.path.basename(m)) for m in MODELS]))
 fw_headers = phase("PBXHeadersBuildPhase", "UDWorkflow", "Headers", names(
     [buildfile("UDWorkflow", hdr_refs[h], h, "{ATTRIBUTES = (Public, ); }") for h in HEADERS]))
 fw_frameworks = phase("PBXFrameworksBuildPhase", "UDWorkflow", "Frameworks", names(
-    [buildfile("UDWorkflow", foundation, "Foundation.framework")]))
+    [buildfile("UDWorkflow", foundation, "Foundation.framework"),
+     buildfile("UDWorkflow", coredata, "CoreData.framework")]))
 
 t_sources = phase("PBXSourcesBuildPhase", "UDWorkflowTests", "Sources", names(
     [buildfile("UDWorkflowTests", test_refs[t], t) for t in TESTS]))
@@ -147,11 +180,12 @@ g_headers = group("Headers", "Headers", [hdr_refs[h] for h in HEADERS], "Headers
 g_source = group("Source", "Source", [src_refs[s] for s in SOURCES], "Source")
 g_tests = group("Tests", "Tests", [test_refs[t] for t in TESTS], "Tests")
 g_examples = group("Examples", "Examples", [demo_refs[d] for d in DEMO], "Examples")
+g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
 g_products = group("Products", "Products", [p_fw, p_tests, p_demo])
-g_frameworks = group("Frameworks", "Frameworks", [foundation])
+g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata])
 g_main = group("main", "UDWorkflow", [doc_refs[d] for d in DOCS] +
-               [g_headers, g_source, g_tests, g_examples, g_configs, g_frameworks, g_products])
+               [g_headers, g_source, g_model, g_tests, g_examples, g_configs, g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
 

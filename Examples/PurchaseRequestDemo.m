@@ -133,16 +133,27 @@ UDMessageWaitDefinition(NSError **error)
 	return [b build:error];
 }
 
+/* Waits for the instance's service calls, then answers it as committed. */
+static UDProcessInstance *
+UDSettled(UDEngine *engine, NSString *instanceId, NSError **error)
+{
+	if (instanceId == nil) {
+		return nil;
+	}
+	[engine waitUntilSettled:instanceId timeout:10.0];
+	return [engine instanceWithId:instanceId error:error];
+}
+
 static BOOL
 UDDrivePurchase(UDEngine *engine,
-	UDProcessDefinition *definition,
 	NSDictionary *startVars,
 	NSDictionary *approvalVars,
 	NSError **error)
 {
-	UDProcessInstance *instance = [engine startProcess:definition
-	                                         variables:startVars
-	                                             error:error];
+	NSString *instanceId = [engine startProcess:@"purchase-request"
+	                                  variables:startVars
+	                                      error:error];
+	UDProcessInstance *instance = UDSettled(engine, instanceId, error);
 	if (instance == nil) {
 		return NO;
 	}
@@ -160,9 +171,13 @@ UDDrivePurchase(UDEngine *engine,
 		}
 		NSLog(@"complete user task %@", waiting.nodeId);
 		if (![engine completeUserTask:waiting.tokenId
-		                     instance:instance
+		                   instanceId:instanceId
 		                    variables:vars
 		                        error:error]) {
+			return NO;
+		}
+		instance = UDSettled(engine, instanceId, error);
+		if (instance == nil) {
 			return NO;
 		}
 	}
@@ -178,6 +193,41 @@ UDDrivePurchase(UDEngine *engine,
 	return instance.isCompleted;
 }
 
+/* An engine over the SQLite file at url, with every definition deployed. */
+static UDEngine *
+UDMakeEngine(NSURL *url, id<UDEngineDelegate> delegate, NSError **error)
+{
+	UDStore *store = [UDStore SQLiteStoreAtURL:url error:error];
+	if (store == nil) {
+		return nil;
+	}
+	UDEngine *engine = [[UDEngine alloc] initWithStore:store];
+	engine.delegate = delegate;
+	engine.serviceHandler = [[UDDemoServices alloc] init];
+	NSArray *definitions = @[
+		UDPurchaseRequestDefinition(error),
+		UDFulfillmentDefinition(error),
+		UDTimerWaitDefinition(error),
+		UDMessageWaitDefinition(error)
+	];
+	for (UDProcessDefinition *definition in definitions) {
+		if (![engine deployDefinition:definition error:error]) {
+			return nil;
+		}
+	}
+	if (![engine openWithError:error]) {
+		return nil;
+	}
+	return engine;
+}
+
+static int
+UDFail(NSString *what, NSError *error)
+{
+	NSLog(@"%@: %@", what, error);
+	return 1;
+}
+
 int
 main(int argc, const char *argv[])
 {
@@ -186,164 +236,127 @@ main(int argc, const char *argv[])
 
 	@autoreleasepool {
 		NSError *error = nil;
-		UDProcessDefinition *definition = UDPurchaseRequestDefinition(&error);
-		if (definition == nil) {
-			NSLog(@"bad definition: %@", error);
-			return 1;
+		NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:
+			[NSString stringWithFormat:@"purchase-demo-%@.sqlite",
+				[[NSUUID UUID] UUIDString]]];
+		NSURL *url = [NSURL fileURLWithPath:path];
+		UDDemoDelegate *delegate = [[UDDemoDelegate alloc] init];
+		NSLog(@"store %@", path);
+
+		UDEngine *engine = UDMakeEngine(url, delegate, &error);
+		if (engine == nil) {
+			return UDFail(@"engine", error);
 		}
 
-		UDMemoryStore *store = [[UDMemoryStore alloc] init];
-		[store registerDefinition:definition];
-
-		UDEngine *engine = [[UDEngine alloc] init];
-		UDDemoDelegate *delegate = [[UDDemoDelegate alloc] init];
-		engine.delegate = delegate;
-		engine.serviceHandler = [[UDDemoServices alloc] init];
-		engine.store = store;
-
 		NSLog(@"--- amount 2500, approved ---");
-		if (!UDDrivePurchase(engine, definition,
-			@{ @"amount": @2500 },
-			@{ @"approved": @YES },
-			&error)) {
-			NSLog(@"run failed: %@", error);
-			return 1;
+		if (!UDDrivePurchase(engine, @{ @"amount": @2500 },
+			@{ @"approved": @YES }, &error)) {
+			return UDFail(@"run failed", error);
 		}
 
 		NSLog(@"--- amount 2500, rejected ---");
-		if (!UDDrivePurchase(engine, definition,
-			@{ @"amount": @2500 },
-			@{ @"approved": @NO },
-			&error)) {
-			NSLog(@"run failed: %@", error);
-			return 1;
+		if (!UDDrivePurchase(engine, @{ @"amount": @2500 },
+			@{ @"approved": @NO }, &error)) {
+			return UDFail(@"run failed", error);
 		}
 
 		NSLog(@"--- amount 400, auto ---");
-		if (!UDDrivePurchase(engine, definition,
-			@{ @"amount": @400 },
-			@{ @"approved": @YES },
-			&error)) {
-			NSLog(@"run failed: %@", error);
-			return 1;
+		if (!UDDrivePurchase(engine, @{ @"amount": @400 },
+			@{ @"approved": @YES }, &error)) {
+			return UDFail(@"run failed", error);
 		}
 
-		NSLog(@"--- resume from store after first user wait ---");
-		UDProcessInstance *live = [engine startProcess:definition
-		                                     variables:@{ @"amount": @2500 }
-		                                         error:&error];
-		if (live == nil) {
-			NSLog(@"start failed: %@", error);
-			return 1;
+		NSLog(@"--- restart after the first user wait ---");
+		NSString *liveId = [engine startProcess:@"purchase-request"
+		                              variables:@{ @"amount": @2500 }
+		                                  error:&error];
+		if (liveId == nil) {
+			return UDFail(@"start failed", error);
 		}
-		UDProcessInstance *restored = [store loadInstance:live.instanceId
-		                                            error:&error];
-		if (restored == nil) {
-			NSLog(@"load failed: %@", error);
-			return 1;
+		[engine close];
+		engine = nil;
+		engine = UDMakeEngine(url, delegate, &error);
+		if (engine == nil) {
+			return UDFail(@"reopen", error);
 		}
+		UDProcessInstance *restored = [engine instanceWithId:liveId error:&error];
 		UDToken *fill = UDWaitingUserToken(restored);
 		if (fill == nil || ![fill.nodeId isEqualToString:@"fill"]) {
 			NSLog(@"expected fill waiting on restored instance");
 			return 1;
 		}
-		if (![engine completeUserTask:fill.tokenId
-		                     instance:restored
-		                    variables:@{}
-		                        error:&error]) {
-			NSLog(@"resume fill failed: %@", error);
-			return 1;
+		if (![engine completeUserTask:fill.tokenId instanceId:liveId
+		                    variables:@{} error:&error]) {
+			return UDFail(@"resume fill failed", error);
 		}
-		UDToken *approve = UDWaitingUserToken(restored);
+		UDToken *approve = UDWaitingUserToken(UDSettled(engine, liveId, &error));
 		if (approve == nil) {
 			NSLog(@"expected approve waiting after restore");
 			return 1;
 		}
-		if (![engine completeUserTask:approve.tokenId
-		                     instance:restored
-		                    variables:@{ @"approved": @YES }
-		                        error:&error]) {
-			NSLog(@"resume approve failed: %@", error);
-			return 1;
+		if (![engine completeUserTask:approve.tokenId instanceId:liveId
+		                    variables:@{ @"approved": @YES } error:&error]) {
+			return UDFail(@"resume approve failed", error);
 		}
+		restored = UDSettled(engine, liveId, &error);
 		NSLog(@"restored completed=%d vars=%@",
 			restored.isCompleted, restored.variables);
+		if (!restored.isCompleted) {
+			return 1;
+		}
 
 		NSLog(@"--- parallel pick || charge ---");
-		UDProcessDefinition *fulfillment = UDFulfillmentDefinition(&error);
-		if (fulfillment == nil) {
-			NSLog(@"bad fulfillment: %@", error);
-			return 1;
-		}
-		[store registerDefinition:fulfillment];
-		UDProcessInstance *order = [engine startProcess:fulfillment
-		                                      variables:@{ @"orderId": @"SO-1" }
-		                                          error:&error];
-		if (order == nil || !order.isCompleted) {
-			NSLog(@"fulfillment failed: %@", error);
-			return 1;
-		}
-		if (![[order.variables objectForKey:@"picked"] boolValue]
+		UDProcessInstance *order = UDSettled(engine,
+			[engine startProcess:@"order-fulfillment"
+			           variables:@{ @"orderId": @"SO-1" }
+			               error:&error], &error);
+		if (order == nil || !order.isCompleted
+		    || ![[order.variables objectForKey:@"picked"] boolValue]
 		    || ![[order.variables objectForKey:@"charged"] boolValue]
 		    || ![[order.variables objectForKey:@"shipped"] boolValue]) {
-			NSLog(@"fulfillment vars incomplete: %@", order.variables);
-			return 1;
+			return UDFail(@"fulfillment failed", error);
 		}
 		NSLog(@"fulfillment ok vars=%@", order.variables);
 
 		NSLog(@"--- timer catch 0s ---");
-		UDProcessDefinition *timerDef = UDTimerWaitDefinition(&error);
-		if (timerDef == nil) {
-			NSLog(@"timer def: %@", error);
-			return 1;
-		}
-		UDProcessInstance *timed = [engine startProcess:timerDef
-		                                        variables:nil
-		                                            error:&error];
+		UDProcessInstance *timed = UDSettled(engine,
+			[engine startProcess:@"timer-wait" variables:nil error:&error], &error);
 		if (timed == nil || !timed.isCompleted) {
-			NSLog(@"timer run failed: %@", error);
-			return 1;
+			return UDFail(@"timer run failed", error);
 		}
 
 		NSLog(@"--- message catch ---");
-		UDProcessDefinition *msgDef = UDMessageWaitDefinition(&error);
-		if (msgDef == nil) {
-			NSLog(@"message def: %@", error);
-			return 1;
-		}
-		UDProcessInstance *waiting = [engine startProcess:msgDef
-		                                          variables:nil
-		                                              error:&error];
-		if (waiting == nil) {
-			NSLog(@"message start failed: %@", error);
-			return 1;
+		NSString *waitingId = [engine startProcess:@"message-wait"
+		                                 variables:nil
+		                                     error:&error];
+		if (waitingId == nil) {
+			return UDFail(@"message start failed", error);
 		}
 		if (![engine deliverMessage:@"go"
-		                     payload:@{ @"acked": @YES }
-		                    instance:waiting
-		                       error:&error]) {
-			NSLog(@"deliver failed: %@", error);
-			return 1;
+		                    payload:@{ @"acked": @YES }
+		                 instanceId:waitingId
+		                      error:&error]) {
+			return UDFail(@"deliver failed", error);
 		}
-		if (!waiting.isCompleted) {
+		UDProcessInstance *acked = UDSettled(engine, waitingId, &error);
+		if (!acked.isCompleted) {
 			NSLog(@"message instance did not complete");
 			return 1;
 		}
-		NSLog(@"message ok vars=%@", waiting.variables);
+		NSLog(@"message ok vars=%@", acked.variables);
 
 		NSLog(@"--- BPMN 2.0 round-trip ---");
+		UDProcessDefinition *definition = UDPurchaseRequestDefinition(&error);
 		NSString *purchaseXML =
 			[UDBpmnWriter XMLStringFromDefinition:definition error:&error];
 		if (purchaseXML == nil) {
-			NSLog(@"export purchase failed: %@", error);
-			return 1;
+			return UDFail(@"export purchase failed", error);
 		}
 		NSLog(@"%@", purchaseXML);
 		UDProcessDefinition *importedPurchase =
 			[UDBpmnReader definitionFromXMLString:purchaseXML error:&error];
 		if (importedPurchase == nil) {
-			NSLog(@"import purchase failed: %@", error);
-			return 1;
+			return UDFail(@"import purchase failed", error);
 		}
 		if ([importedPurchase.nodes count] != [definition.nodes count]
 		    || [importedPurchase.flows count] != [definition.flows count]) {
@@ -354,35 +367,16 @@ main(int argc, const char *argv[])
 				(unsigned long)[definition.flows count]);
 			return 1;
 		}
-		if (!UDDrivePurchase(engine, importedPurchase,
-			@{ @"amount": @400 },
-			@{ @"approved": @YES },
-			&error)) {
-			NSLog(@"imported purchase run failed: %@", error);
-			return 1;
+		/* The imported copy deploys as the same version: same content. */
+		if (![engine deployDefinition:importedPurchase error:&error]) {
+			return UDFail(@"deploy imported purchase failed", error);
 		}
-
-		NSString *fulfillXML =
-			[UDBpmnWriter XMLStringFromDefinition:fulfillment error:&error];
-		if (fulfillXML == nil) {
-			NSLog(@"export fulfillment failed: %@", error);
-			return 1;
+		if (!UDDrivePurchase(engine, @{ @"amount": @400 },
+			@{ @"approved": @YES }, &error)) {
+			return UDFail(@"imported purchase run failed", error);
 		}
-		UDProcessDefinition *importedFulfill =
-			[UDBpmnReader definitionFromXMLString:fulfillXML error:&error];
-		if (importedFulfill == nil) {
-			NSLog(@"import fulfillment failed: %@", error);
-			return 1;
-		}
-		UDProcessInstance *importedOrder =
-			[engine startProcess:importedFulfill
-			           variables:@{ @"orderId": @"SO-2" }
-			               error:&error];
-		if (importedOrder == nil || !importedOrder.isCompleted) {
-			NSLog(@"imported fulfillment failed: %@", error);
-			return 1;
-		}
-		NSLog(@"imported fulfillment ok vars=%@", importedOrder.variables);
+		[engine close];
+		[[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
 	}
 	return 0;
 }

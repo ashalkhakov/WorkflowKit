@@ -33,6 +33,13 @@ the command there. Against a prefix of your own, source
 `LD_LIBRARY_PATH` first: libobjc2 and libdispatch live there, outside the
 roots the gnustep layout knows.
 
+The store is Core Data: FreeCoreData on GNUstep (installed in `ois-dev`,
+built from the pinned `FREECOREDATA_REF` in CI), Apple's on macOS. Its model
+is `Model/UDWorkflow.xcdatamodeld`, compiled by `momc`; edit it there, never
+build a model in code. Uninstalled, the library finds the model through
+`UDWORKFLOW_MODEL` (`make -C Examples run` sets it) or a copy in the calling
+bundle (the test bundle carries one).
+
 ## macOS
 
 `UDWorkflow.xcworkspace` holds `UDWorkflow.xcodeproj`: the `UDWorkflow`
@@ -55,3 +62,8 @@ xcodebuild -workspace UDWorkflow.xcworkspace -scheme UDWorkflow \
   into the engine's table inside a `UDTimerHandle`.
 - tools-xctest's `XCTAssertEqualWithAccuracy` needs floating-point
   arguments: write `10.0`, not `10`.
+- gnustep-base's `NSPredicate` parser takes only object arguments: pass
+  numbers as `%@` with an `NSNumber`, never `%ld` or `%d`.
+- gnustep-base answers NO from
+  `+[NSPropertyListSerialization propertyList:isValidForFormat:]` for valid
+  dictionaries; the engine checks property-list values itself.

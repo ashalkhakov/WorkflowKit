@@ -1,56 +1,171 @@
 #import "UDEngine.h"
 #import "UDFlowElements.h"
 #import "UDCondition.h"
-#import "UDMemoryStore.h"
+#import "UDBpmn.h"
 #import <dispatch/dispatch.h>
+#include <time.h>
 
-@interface UDEngine ()
-@property (nonatomic, strong) NSMutableSet *inflight;
-@property (nonatomic, strong) NSMutableDictionary *timers;
-- (void)serviceInvocation:(UDServiceInvocation *)invocation
-                didFinish:(UDServiceResult *)result;
-@end
+/* Units of work run on a fixed set of serial queues, an instance always on
+ * the same one: serial per instance, bounded in number however many
+ * instances there are. */
+#define UD_STRIPES 8
+
+/* Timer jobs taken per scheduler pass. */
+#define UD_TIMER_BATCH 64
+
+static NSString * const UDUnitKey = @"UDWorkflow.unit";
 
 /*
- * Holds a timer source for the engine's timer table. A dispatch source is
- * not an object ARC manages on GNUstep, so it cannot go into a collection
- * directly.
+ * What one unit of work produced besides the new marking: callbacks for
+ * the delegate and the user-task port, in the order they happened. Traces
+ * go out whether or not the unit commits; everything else only if it does.
  */
-@interface UDTimerHandle : NSObject
-{
-@public
-	dispatch_source_t _source;
-}
+@interface UDUnit : NSObject
+@property (nonatomic, strong) NSMutableArray *effects;
+@property (nonatomic, strong) NSMutableArray *effectsNeedCommit;
+@property (nonatomic) BOOL committed;
 @end
 
-@implementation UDTimerHandle
-- (void)dealloc
-{
-	if (_source != NULL) {
-		dispatch_source_cancel(_source);
-		UDDispatchRelease(_source);
-	}
-}
-@end
-
-@implementation UDEngine
-
+@implementation UDUnit
 - (instancetype)init
 {
 	self = [super init];
 	if (self) {
-		self.workerQueue = dispatch_get_global_queue(
-			DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-		_inflight = [NSMutableSet set];
-		_timers = [NSMutableDictionary dictionary];
+		_effects = [NSMutableArray array];
+		_effectsNeedCommit = [NSMutableArray array];
 	}
+	return self;
+}
+@end
+
+/* The unit running on this thread. A unit runs start to finish inside one
+ * block on its stripe queue, so the thread identifies it. */
+static UDUnit *
+UDCurrentUnit(void)
+{
+	return [[[NSThread currentThread] threadDictionary] objectForKey:UDUnitKey];
+}
+
+static void
+UDAddEffect(BOOL needsCommit, void (^effect)(void))
+{
+	UDUnit *unit = UDCurrentUnit();
+	if (unit == nil) {
+		return;
+	}
+	[unit.effects addObject:[effect copy]];
+	[unit.effectsNeedCommit addObject:[NSNumber numberWithBool:needsCommit]];
+}
+
+/* What a binary property list can hold. Checked here rather than with
+ * +propertyList:isValidForFormat:, which gnustep-base answers NO for valid
+ * dictionaries. */
+static BOOL
+UDIsPropertyList(id object)
+{
+	if (object == nil
+	    || [object isKindOfClass:[NSString class]]
+	    || [object isKindOfClass:[NSNumber class]]
+	    || [object isKindOfClass:[NSDate class]]
+	    || [object isKindOfClass:[NSData class]]) {
+		return YES;
+	}
+	if ([object isKindOfClass:[NSArray class]]) {
+		for (id element in object) {
+			if (!UDIsPropertyList(element)) {
+				return NO;
+			}
+		}
+		return YES;
+	}
+	if ([object isKindOfClass:[NSDictionary class]]) {
+		for (id key in object) {
+			if (![key isKindOfClass:[NSString class]]
+			    || !UDIsPropertyList([object objectForKey:key])) {
+				return NO;
+			}
+		}
+		return YES;
+	}
+	return NO;
+}
+
+static NSError *
+UDError(UDWorkflowErrorCode code, NSString *message)
+{
+	return [NSError errorWithDomain:UDWorkflowErrorDomain
+	                           code:code
+	                       userInfo:@{ NSLocalizedDescriptionKey: message }];
+}
+
+typedef BOOL (^UDUnitInput)(UDProcessInstance *root, NSError **error);
+
+@interface UDEngine ()
+- (void)serviceInvocation:(UDServiceInvocation *)invocation
+                didFinish:(UDServiceResult *)result;
+@end
+
+@implementation UDEngine
+{
+	dispatch_queue_t _stripes[UD_STRIPES];
+	dispatch_queue_t _schedulerQueue;
+	dispatch_source_t _scheduler;
+	NSDate *_backoffUntil;
+	BOOL _closed;
+	NSMutableDictionary *_definitions;
+	NSCondition *_settle;
+	NSMutableDictionary *_busy;
+}
+
+- (instancetype)initWithStore:(UDStore *)store
+{
+	self = [super init];
+	if (self == nil) {
+		return nil;
+	}
+	_store = store;
+	_definitions = [NSMutableDictionary dictionary];
+	_settle = [[NSCondition alloc] init];
+	_busy = [NSMutableDictionary dictionary];
+	self.workerQueue = dispatch_get_global_queue(
+		DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+	{
+		dispatch_queue_t q = dispatch_queue_create("ud.workflow.callbacks",
+			DISPATCH_QUEUE_SERIAL);
+		self.callbackQueue = q;
+		UDDispatchRelease(q);
+	}
+	for (NSUInteger i = 0; i < UD_STRIPES; i++) {
+		_stripes[i] = dispatch_queue_create("ud.workflow.instances",
+			DISPATCH_QUEUE_SERIAL);
+	}
+	_schedulerQueue = dispatch_queue_create("ud.workflow.scheduler",
+		DISPATCH_QUEUE_SERIAL);
+	_scheduler = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+		_schedulerQueue);
+	__weak UDEngine *weakSelf = self;
+	dispatch_source_set_event_handler(_scheduler, ^{
+		[weakSelf schedulerFired];
+	});
+	dispatch_source_set_timer(_scheduler, DISPATCH_TIME_FOREVER,
+		DISPATCH_TIME_FOREVER, 0);
+	dispatch_resume(_scheduler);
 	return self;
 }
 
 - (void)dealloc
 {
+	[self close];
+	UDDispatchRelease(_scheduler);
+	UDDispatchRelease(_schedulerQueue);
+	for (NSUInteger i = 0; i < UD_STRIPES; i++) {
+		UDDispatchRelease(_stripes[i]);
+	}
 	if (_workerQueue != NULL) {
 		UDDispatchRelease(_workerQueue);
+	}
+	if (_callbackQueue != NULL) {
+		UDDispatchRelease(_callbackQueue);
 	}
 }
 
@@ -68,6 +183,25 @@
 	_workerQueue = workerQueue;
 }
 
+- (void)setCallbackQueue:(dispatch_queue_t)callbackQueue
+{
+	if (callbackQueue == _callbackQueue) {
+		return;
+	}
+	if (callbackQueue != NULL) {
+		UDDispatchRetain(callbackQueue);
+	}
+	if (_callbackQueue != NULL) {
+		UDDispatchRelease(_callbackQueue);
+	}
+	_callbackQueue = callbackQueue;
+}
+
+- (dispatch_queue_t)stripeFor:(NSString *)instanceId
+{
+	return _stripes[[instanceId hash] % UD_STRIPES];
+}
+
 - (void)logInstance:(UDProcessInstance *)instance format:(NSString *)format, ...
 {
 	id<UDEngineDelegate> delegate = self.delegate;
@@ -79,104 +213,201 @@
 	va_start(args, format);
 	NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
 	va_end(args);
-	[delegate engine:self instance:instance didTrace:message];
+	UDAddEffect(NO, ^{
+		[delegate engine:self instance:instance didTrace:message];
+	});
 }
 
-- (void)notifyFinished:(UDProcessInstance *)instance
+#pragma mark - Settling
+
+- (void)beginWork:(NSString *)instanceId
 {
-	id<UDEngineDelegate> delegate = self.delegate;
-	if (delegate == nil
-	    || ![delegate respondsToSelector:@selector(engine:instanceDidFinish:error:)]) {
-		return;
+	[_settle lock];
+	NSUInteger count = [[_busy objectForKey:instanceId] unsignedIntegerValue];
+	[_busy setObject:[NSNumber numberWithUnsignedInteger:count + 1]
+	          forKey:instanceId];
+	[_settle unlock];
+}
+
+- (void)endWork:(NSString *)instanceId
+{
+	[_settle lock];
+	NSUInteger count = [[_busy objectForKey:instanceId] unsignedIntegerValue];
+	if (count <= 1) {
+		[_busy removeObjectForKey:instanceId];
+	} else {
+		[_busy setObject:[NSNumber numberWithUnsignedInteger:count - 1]
+		          forKey:instanceId];
 	}
-	[delegate engine:self instanceDidFinish:instance error:instance.error];
+	[_settle broadcast];
+	[_settle unlock];
 }
 
-- (void)notifyPaused:(UDProcessInstance *)instance
+- (BOOL)waitUntilSettled:(NSString *)instanceId timeout:(NSTimeInterval)timeout
 {
-	id<UDEngineDelegate> delegate = self.delegate;
-	if (delegate == nil
-	    || ![delegate respondsToSelector:@selector(engine:instanceDidPause:)]) {
-		return;
-	}
-	[delegate engine:self instanceDidPause:instance];
-}
-
-- (void)persist:(UDProcessInstance *)instance
-{
-	if (self.store == nil) {
-		return;
-	}
-	[self.store saveInstance:instance error:NULL];
-}
-
-- (void)failInstance:(UDProcessInstance *)instance error:(NSError *)error
-{
-	instance.failed = YES;
-	instance.error = error;
-	[self logInstance:instance format:@"failed: %@",
-		[error localizedDescription]];
-	[self persist:instance];
-	[self signalQuiesce:instance];
-	[self notifyFinished:instance];
-	[self finishHostIfNeeded:instance];
-}
-
-- (BOOL)isExternallyWaiting:(UDProcessInstance *)instance
-{
-	BOOL anyWait = NO;
-	for (UDToken *token in instance.tokens) {
-		if (token.state == UDTokenStateReady) {
-			return NO;
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+	BOOL settled = YES;
+	[_settle lock];
+	while ([_busy objectForKey:instanceId] != nil) {
+		if (![_settle waitUntilDate:deadline]) {
+			settled = [_busy objectForKey:instanceId] == nil;
+			break;
 		}
-		if (token.state == UDTokenStateWaiting) {
-			UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-			if ([node isKindOfClass:[UDTask class]]
-			    && [(UDTask *)node kind] == UDTaskKindUser) {
-				anyWait = YES;
-				continue;
+	}
+	[_settle unlock];
+	return settled;
+}
+
+#pragma mark - Definitions
+
+- (NSString *)keyForProcess:(NSString *)processId version:(NSInteger)version
+{
+	return [NSString stringWithFormat:@"%@#%ld", processId, (long)version];
+}
+
+- (UDProcessDefinition *)definitionForProcess:(NSString *)processId
+                                      version:(NSInteger)version
+{
+	@synchronized (_definitions) {
+		return [_definitions objectForKey:[self keyForProcess:processId
+		                                              version:version]];
+	}
+}
+
+- (UDProcessDefinition *)latestDefinitionForProcess:(NSString *)processId
+{
+	UDProcessDefinition *latest = nil;
+	@synchronized (_definitions) {
+		for (UDProcessDefinition *definition in [_definitions allValues]) {
+			if ([definition.processId isEqualToString:processId]
+			    && (latest == nil || definition.version > latest.version)) {
+				latest = definition;
 			}
-			if ([node isKindOfClass:[UDGateway class]]) {
-				anyWait = YES;
-				continue;
-			}
-			return NO;
 		}
 	}
-	return anyWait || instance.pendingServices == 0;
+	return latest;
 }
 
-- (void)signalQuiesce:(UDProcessInstance *)instance
+- (BOOL)deployDefinition:(UDProcessDefinition *)definition error:(NSError **)error
 {
-	/* An armed timer is a wait, like a message catch: a caller waiting for
-	 * the instance to settle does not wait for it to fire. */
-	if (instance.isCompleted || instance.isFailed
-	    || (instance.pendingServices == 0
-	        && [instance nextReadyToken] == nil)) {
-		dispatch_semaphore_signal(instance.quiesce);
+	if (definition == nil || definition.processId == nil) {
+		if (error != NULL) {
+			*error = UDError(UDWorkflowErrorInvalidDefinition, @"no definition to deploy");
+		}
+		return NO;
 	}
+	/* A definition that BPMN cannot express yet (a target-action
+	 * condition) still deploys; it is only missing from the record. */
+	NSString *bpmn = [UDBpmnWriter XMLStringFromDefinition:definition error:NULL];
+	if (![self.store recordDeploymentOfProcess:definition.processId
+	                                   version:definition.version
+	                                      bpmn:bpmn
+	                                     error:error]) {
+		return NO;
+	}
+	@synchronized (_definitions) {
+		[_definitions setObject:definition
+		                 forKey:[self keyForProcess:definition.processId
+		                                    version:definition.version]];
+	}
+	return YES;
 }
 
-- (void)checkCompletion:(UDProcessInstance *)instance
+#pragma mark - Loading and committing
+
+- (UDProcessInstance *)loadInstance:(NSString *)instanceId error:(NSError **)error
 {
-	if (instance.isFailed || instance.isCompleted) {
-		[self signalQuiesce:instance];
-		return;
+	UDInstanceRecord *record = [self.store instanceRecord:instanceId error:error];
+	if (record == nil) {
+		return nil;
 	}
-	for (UDToken *token in instance.tokens) {
-		if (token.state == UDTokenStateReady
-		    || token.state == UDTokenStateWaiting) {
-			[self signalQuiesce:instance];
-			return;
+	UDProcessDefinition *definition = [self definitionForProcess:record.processId
+	                                                     version:record.version];
+	if (definition == nil) {
+		if (error != NULL) {
+			*error = UDError(UDWorkflowErrorInvalidDefinition,
+				[NSString stringWithFormat:
+					@"%@ version %ld is not deployed in this engine",
+					record.processId, (long)record.version]);
+		}
+		return nil;
+	}
+	NSDictionary *state = [NSPropertyListSerialization
+		propertyListWithData:record.state
+		             options:NSPropertyListImmutable
+		              format:NULL
+		               error:error];
+	if (state == nil) {
+		return nil;
+	}
+	return [UDProcessInstance instanceWithStateDictionary:state
+	                                           definition:definition
+	                                                error:error];
+}
+
+/* The jobs the marking needs: a service call per token waiting on a
+ * service or script task, a timer per token waiting on a timer event. */
+- (void)collectJobs:(NSMutableArray *)jobs scope:(UDProcessInstance *)scope
+{
+	for (UDToken *token in scope.tokens) {
+		if (token.state != UDTokenStateWaiting) {
+			continue;
+		}
+		UDFlowNode *node = [scope.definition nodeWithId:token.nodeId];
+		UDJobRecord *job = nil;
+		if ([node isKindOfClass:[UDTask class]]
+		    && [(UDTask *)node kind] != UDTaskKindUser) {
+			job = [[UDJobRecord alloc] init];
+			job.kind = UDJobKindService;
+			job.actionKey = [(UDTask *)node actionKey];
+		} else if ([node isKindOfClass:[UDEvent class]]
+		           && [(UDEvent *)node trigger] == UDEventTriggerTimer
+		           && token.dueAt != nil) {
+			job = [[UDJobRecord alloc] init];
+			job.kind = UDJobKindTimer;
+			job.dueAt = token.dueAt;
+		}
+		if (job != nil) {
+			job.tokenId = token.tokenId;
+			[jobs addObject:job];
 		}
 	}
-	instance.completed = YES;
-	[self logInstance:instance format:@"instance completed"];
-	[self persist:instance];
-	[self signalQuiesce:instance];
-	[self notifyFinished:instance];
-	[self finishHostIfNeeded:instance];
+	for (UDProcessInstance *child in [scope.children allValues]) {
+		[self collectJobs:jobs scope:child];
+	}
 }
+
+- (NSArray<UDJobRecord *> *)commit:(UDProcessInstance *)root error:(NSError **)error
+{
+	[root pruneCompletedTokens];
+	NSData *state = [NSPropertyListSerialization
+		dataWithPropertyList:[root stateDictionary]
+		              format:NSPropertyListBinaryFormat_v1_0
+		             options:0
+		               error:error];
+	if (state == nil) {
+		return nil;
+	}
+	UDInstanceRecord *record = [[UDInstanceRecord alloc] init];
+	record.instanceId = root.instanceId;
+	record.processId = root.definition.processId;
+	record.version = root.definition.version;
+	record.state = state;
+	record.status = root.isFailed ? UDInstanceStatusFailed
+		: root.isCompleted ? UDInstanceStatusCompleted
+		: UDInstanceStatusActive;
+	BOOL active = record.status == UDInstanceStatusActive;
+	NSMutableArray *jobs = [NSMutableArray array];
+	if (active) {
+		[self collectJobs:jobs scope:root];
+	}
+	return [self.store commitInstance:record
+	                             jobs:jobs
+	                  correlationKeys:active ? root.correlationKeys : @{}
+	                            error:error];
+}
+
+#pragma mark - Gateways
 
 - (NSArray<UDSequenceFlow *> *)orderedOutgoing:(UDProcessDefinition *)def
                                         fromId:(NSString *)nodeId
@@ -503,7 +734,6 @@
 		if (token.state == UDTokenStateCompleted) {
 			continue;
 		}
-		[self cancelTimerForToken:token.tokenId instance:instance];
 		token.state = UDTokenStateCompleted;
 		[self logInstance:instance format:@"event-gw cancel %@", token.nodeId];
 	}
@@ -591,15 +821,14 @@
 	return YES;
 }
 
-- (void)cancelTimerForToken:(NSString *)tokenId instance:(UDProcessInstance *)instance
+#pragma mark - Events
+
+- (void)failInstance:(UDProcessInstance *)instance error:(NSError *)error
 {
-	UDTimerHandle *handle = [self.timers objectForKey:tokenId];
-	if (handle != nil) {
-		[self.timers removeObjectForKey:tokenId];
-		if (instance.pendingTimers > 0) {
-			instance.pendingTimers -= 1;
-		}
-	}
+	instance.failed = YES;
+	instance.error = error;
+	[self logInstance:instance format:@"failed: %@",
+		[error localizedDescription]];
 }
 
 - (void)leaveEvent:(UDEvent *)event
@@ -607,7 +836,6 @@
           instance:(UDProcessInstance *)instance
            payload:(NSDictionary *)payload
 {
-	[self cancelTimerForToken:token.tokenId instance:instance];
 	[self cancelEventGatewaySiblings:token instance:instance];
 	if (payload != nil) {
 		[instance.variables addEntriesFromDictionary:payload];
@@ -626,14 +854,18 @@
 - (void)throwMessage:(UDEvent *)event instance:(UDProcessInstance *)instance
 {
 	id<UDEngineDelegate> delegate = self.delegate;
+	NSString *name = event.messageName;
+	NSDictionary *payload = [instance.variables copy];
 	if (delegate != nil
 	    && [delegate respondsToSelector:@selector(engine:instance:didThrowMessage:payload:)]) {
-		[delegate engine:self
-		         instance:instance
-		  didThrowMessage:event.messageName
-		          payload:[instance.variables copy]];
+		UDAddEffect(YES, ^{
+			[delegate engine:self
+			         instance:instance
+			  didThrowMessage:name
+			          payload:payload];
+		});
 	}
-	[self logInstance:instance format:@"throw message %@", event.messageName];
+	[self logInstance:instance format:@"throw message %@", name];
 }
 
 - (void)disarmBoundariesOn:(NSString *)taskId instance:(UDProcessInstance *)instance
@@ -642,67 +874,52 @@
 	for (UDEvent *event in boundaries) {
 		for (UDToken *token in [instance tokensAtNode:event.elementId
 		                                       state:UDTokenStateWaiting]) {
-			[self cancelTimerForToken:token.tokenId instance:instance];
 			token.state = UDTokenStateCompleted;
 		}
 	}
 }
 
-- (void)timerFiredForToken:(NSString *)tokenId
-                  instance:(UDProcessInstance *)instance
+/* Interrupting boundary: the host activity's tokens end and its other
+ * boundaries are disarmed. */
+- (void)interruptHostOf:(UDEvent *)event instance:(UDProcessInstance *)instance
 {
-	UDToken *token = [instance tokenWithId:tokenId];
-	UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-	if (token == nil || token.state != UDTokenStateWaiting
-	    || ![node isKindOfClass:[UDEvent class]]) {
-		[self signalQuiesce:instance];
+	if (event.kind != UDEventKindBoundary || !event.isInterrupting
+	    || event.attachedToId == nil) {
 		return;
 	}
-	UDEvent *event = (UDEvent *)node;
-	[self logInstance:instance format:@"timer %@", event.elementId];
-	if (event.kind == UDEventKindBoundary && event.isInterrupting
-	    && event.attachedToId != nil) {
-		for (UDToken *activity in [instance tokensAtNode:event.attachedToId
-		                                          state:UDTokenStateWaiting]) {
-			activity.state = UDTokenStateCompleted;
-		}
-		for (UDToken *activity in [instance tokensAtNode:event.attachedToId
-		                                          state:UDTokenStateReady]) {
-			activity.state = UDTokenStateCompleted;
-		}
-		[self disarmBoundariesOn:event.attachedToId instance:instance];
+	for (UDToken *activity in [instance tokensAtNode:event.attachedToId
+	                                          state:UDTokenStateWaiting]) {
+		activity.state = UDTokenStateCompleted;
 	}
-	[self leaveEvent:event token:token instance:instance payload:nil];
-	[self persist:instance];
-	[self drainInstance:instance];
+	for (UDToken *activity in [instance tokensAtNode:event.attachedToId
+	                                          state:UDTokenStateReady]) {
+		activity.state = UDTokenStateCompleted;
+	}
+	[self disarmBoundariesOn:event.attachedToId instance:instance];
 }
 
+- (void)timerFired:(UDToken *)token
+             event:(UDEvent *)event
+          instance:(UDProcessInstance *)instance
+{
+	[self logInstance:instance format:@"timer %@", event.elementId];
+	token.dueAt = nil;
+	[self interruptHostOf:event instance:instance];
+	[self leaveEvent:event token:token instance:instance payload:nil];
+}
+
+/* The token waits for its due time; the commit turns that into a timer
+ * job, and the scheduler brings it back. */
 - (void)scheduleTimer:(UDEvent *)event
                 token:(UDToken *)token
              instance:(UDProcessInstance *)instance
 {
-	token.state = UDTokenStateWaiting;
-	instance.pendingTimers += 1;
 	NSTimeInterval duration = event.timerDuration;
 	if (duration < 0) {
 		duration = 0;
 	}
-	int64_t nsec = (int64_t)(duration * (NSTimeInterval)NSEC_PER_SEC);
-	dispatch_source_t source = dispatch_source_create(
-		DISPATCH_SOURCE_TYPE_TIMER, 0, 0, instance.queue);
-	dispatch_source_set_timer(source,
-		dispatch_time(DISPATCH_TIME_NOW, nsec),
-		DISPATCH_TIME_FOREVER,
-		0);
-	NSString *tokenId = token.tokenId;
-	dispatch_source_set_event_handler(source, ^{
-		[self cancelTimerForToken:tokenId instance:instance];
-		[self timerFiredForToken:tokenId instance:instance];
-	});
-	UDTimerHandle *handle = [[UDTimerHandle alloc] init];
-	handle->_source = source;
-	[self.timers setObject:handle forKey:token.tokenId];
-	dispatch_resume(source);
+	token.state = UDTokenStateWaiting;
+	token.dueAt = [NSDate dateWithTimeIntervalSinceNow:duration];
 	[self logInstance:instance format:@"timer %@ in %.3fs",
 		event.elementId, duration];
 }
@@ -733,7 +950,7 @@
             error:(NSError **)error
 {
 	if (event.kind == UDEventKindBoundary) {
-		/* Armed explicitly; a Ready boundary token is a resume re-arm. */
+		/* Armed explicitly when the host task is entered. */
 		if (event.trigger == UDEventTriggerTimer) {
 			[self scheduleTimer:event token:token instance:instance];
 			return YES;
@@ -746,7 +963,7 @@
 	    && (event.kind == UDEventKindStart
 	        || event.kind == UDEventKindIntermediateCatch)) {
 		/* A timer that is already due fires in this step rather than
-		 * after a trip through a dispatch source. */
+		 * after a round trip through the scheduler. */
 		if (event.timerDuration <= 0) {
 			[self logInstance:instance format:@"timer %@ due", event.elementId];
 			[self leaveEvent:event token:token instance:instance payload:nil];
@@ -780,10 +997,7 @@
 			[instance.definition outgoingFlowsFrom:event.elementId];
 		if ([outgoing count] == 0) {
 			if (error != NULL) {
-				*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-				                             code:UDWorkflowErrorNoPath
-				                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"event has no outgoing flow" }];
+				*error = UDError(UDWorkflowErrorNoPath, @"event has no outgoing flow");
 			}
 			return NO;
 		}
@@ -798,32 +1012,14 @@
 	return YES;
 }
 
-- (void)applyServiceResult:(UDServiceResult *)result
-                     token:(UDToken *)token
-                      task:(UDTask *)task
-                  instance:(UDProcessInstance *)instance
+#pragma mark - Tasks
+
+- (void)leaveTask:(NSString *)taskId
+            token:(UDToken *)token
+         instance:(UDProcessInstance *)instance
 {
-	if (instance.pendingServices > 0) {
-		instance.pendingServices -= 1;
-	}
-	if (result.error != nil) {
-		NSString *ref = [[result.error userInfo] objectForKey:UDWorkflowErrorRefKey];
-		if ([self takeErrorBoundary:ref
-		                      task:task
-		                     token:token
-		                  instance:instance]) {
-			[self persist:instance];
-			[self drainInstance:instance];
-			return;
-		}
-		[self failInstance:instance error:result.error];
-		return;
-	}
-	if (result.variables != nil) {
-		[instance.variables addEntriesFromDictionary:result.variables];
-	}
-	[self disarmBoundariesOn:task.elementId instance:instance];
-	NSArray *outgoing = [instance.definition outgoingFlowsFrom:task.elementId];
+	[self disarmBoundariesOn:taskId instance:instance];
+	NSArray *outgoing = [instance.definition outgoingFlowsFrom:taskId];
 	if ([outgoing count] == 0) {
 		token.state = UDTokenStateCompleted;
 	} else {
@@ -831,63 +1027,6 @@
 		          instance:instance
 		             along:[outgoing objectAtIndex:0]];
 	}
-	[self persist:instance];
-	[self drainInstance:instance];
-}
-
-- (void)serviceInvocation:(UDServiceInvocation *)invocation
-                didFinish:(UDServiceResult *)result
-{
-	UDProcessInstance *instance = invocation.instance;
-	if (instance == nil) {
-		return;
-	}
-	dispatch_async(instance.queue, ^{
-		[self.inflight removeObject:invocation];
-		UDToken *token = [instance tokenWithId:invocation.tokenId];
-		UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-		if (token == nil || ![node isKindOfClass:[UDTask class]]) {
-			NSError *error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                                     code:UDWorkflowErrorInvalidState
-			                                 userInfo:@{ NSLocalizedDescriptionKey:
-					@"service finished for a missing token" }];
-			[self failInstance:instance error:error];
-			return;
-		}
-		[self applyServiceResult:result
-		                   token:token
-		                    task:(UDTask *)node
-		                instance:instance];
-	});
-}
-
-- (void)runServiceAction:(UDTask *)task
-                   token:(UDToken *)token
-                instance:(UDProcessInstance *)instance
-{
-	token.state = UDTokenStateWaiting;
-	instance.pendingServices += 1;
-
-	UDServiceInvocation *invocation =
-		[[UDServiceInvocation alloc] initWithActionKey:task.actionKey
-		                                     variables:[instance.variables copy]
-		                                       tokenId:token.tokenId
-		                                      instance:instance];
-	invocation.target = self;
-	invocation.action = @selector(serviceInvocation:didFinish:);
-	[self.inflight addObject:invocation];
-
-	if (self.serviceHandler == nil) {
-		[self logInstance:instance format:@"%@ no-op action %@",
-			task.elementId, task.actionKey];
-		[invocation finishWithVariables:nil error:nil];
-		return;
-	}
-
-	id<UDServiceTaskHandler> handler = self.serviceHandler;
-	dispatch_async(self.workerQueue, ^{
-		[handler performInvocation:invocation];
-	});
 }
 
 - (BOOL)fireTask:(UDTask *)task
@@ -896,21 +1035,23 @@
            error:(NSError **)error
 {
 	[self armBoundariesForTask:task token:token instance:instance];
+	token.state = UDTokenStateWaiting;
 	if (task.kind == UDTaskKindUser) {
-		token.state = UDTokenStateWaiting;
 		[self logInstance:instance format:@"user task %@ assignee=%@",
 			task.elementId, task.assignee];
-		if (self.userTaskPort != nil) {
-			[self.userTaskPort publishWorkItemForToken:token
-			                                  instance:instance
-			                                      task:task];
+		id<UDUserTaskPort> port = self.userTaskPort;
+		if (port != nil) {
+			UDAddEffect(YES, ^{
+				[port publishWorkItemForToken:token
+				                     instance:instance
+				                         task:task];
+			});
 		}
 		return YES;
 	}
-
+	/* The commit turns the waiting token into a service job. */
 	[self logInstance:instance format:@"%@ action %@",
 		task.elementId, task.actionKey];
-	[self runServiceAction:task token:token instance:instance];
 	return YES;
 }
 
@@ -944,351 +1085,362 @@
 	}
 	token.state = UDTokenStateCompleted;
 	[self disarmBoundariesOn:task.elementId instance:instance];
-	UDToken *armed = nil;
-	NSArray *waiting = [instance tokensAtNode:boundary.elementId
-	                                    state:UDTokenStateWaiting];
-	if ([waiting count] > 0) {
-		armed = [waiting objectAtIndex:0];
-	} else {
-		armed = [instance makeTokenOnNode:boundary.elementId
-		                   arrivedViaFlow:nil
-		                           parent:token];
-	}
+	UDToken *armed = [instance makeTokenOnNode:boundary.elementId
+	                            arrivedViaFlow:nil
+	                                    parent:token];
 	[self logInstance:instance format:@"error %@ on %@",
 		errorRef ?: @"*", task.elementId];
 	[self leaveEvent:boundary token:armed instance:instance
-	             payload:errorRef ? @{ @"errorRef": errorRef } : nil];
+	         payload:errorRef ? @{ @"errorRef": errorRef } : nil];
 	return YES;
 }
 
-- (void)finishHostIfNeeded:(UDProcessInstance *)child
+- (void)applyServiceResult:(UDServiceResult *)result
+                     token:(UDToken *)token
+                      task:(UDTask *)task
+                  instance:(UDProcessInstance *)instance
 {
-	UDProcessInstance *parent = child.parent;
-	if (parent == nil || child.hostTokenId == nil) {
+	NSError *failure = result.error;
+	if (failure == nil && !UDIsPropertyList(result.variables)) {
+		failure = UDError(UDWorkflowErrorHandler,
+			[NSString stringWithFormat:
+				@"%@ returned variables that are not property-list values",
+				task.actionKey]);
+	}
+	if (failure != nil) {
+		NSString *ref = [[failure userInfo] objectForKey:UDWorkflowErrorRefKey];
+		if (![self takeErrorBoundary:ref task:task token:token instance:instance]) {
+			[self failInstance:instance error:failure];
+		}
 		return;
 	}
-	dispatch_async(parent.queue, ^{
-		[parent.children removeObjectForKey:child.hostTokenId];
-		if (parent.pendingServices > 0) {
-			parent.pendingServices -= 1;
-		}
-		UDToken *host = [parent tokenWithId:child.hostTokenId];
-		if (host == nil) {
-			[self signalQuiesce:parent];
-			return;
-		}
-		if (child.isFailed) {
-			[self failInstance:parent error:child.error];
-			return;
-		}
-		[parent.variables addEntriesFromDictionary:child.variables];
-		UDFlowNode *node = [parent.definition nodeWithId:host.nodeId];
-		NSArray *outgoing =
-			[parent.definition outgoingFlowsFrom:host.nodeId];
-		if ([outgoing count] == 0) {
-			host.state = UDTokenStateCompleted;
-		} else {
-			[self advanceToken:host instance:parent along:[outgoing objectAtIndex:0]];
-		}
-		(void)node;
-		[self persist:parent];
-		[self drainInstance:parent];
-	});
+	if (result.variables != nil) {
+		[instance.variables addEntriesFromDictionary:result.variables];
+	}
+	[self leaveTask:task.elementId token:token instance:instance];
 }
+
+#pragma mark - Subprocesses
 
 - (BOOL)fireSubProcess:(UDSubProcess *)node
                  token:(UDToken *)token
               instance:(UDProcessInstance *)instance
                  error:(NSError **)error
 {
-	if (node.innerDefinition == nil) {
+	UDEvent *start = [node.innerDefinition startEvent];
+	if (start == nil) {
 		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorInvalidDefinition
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"subprocess has no inner definition" }];
+			*error = UDError(UDWorkflowErrorInvalidDefinition,
+				@"subprocess has no inner definition or no start event");
 		}
 		return NO;
 	}
 	token.state = UDTokenStateWaiting;
-	instance.pendingServices += 1;
-	NSError *childError = nil;
-	UDProcessInstance *child = [self prepareInstance:node.innerDefinition
-	                                       variables:instance.variables
-	                                           error:&childError];
-	if (child == nil) {
-		if (error != NULL) {
-			*error = childError;
-		}
-		return NO;
-	}
+	UDProcessInstance *child = [[UDProcessInstance alloc] init];
+	child.instanceId = [NSString stringWithFormat:@"%@/%@",
+		instance.instanceId, token.tokenId];
+	child.definition = node.innerDefinition;
+	[child.variables addEntriesFromDictionary:instance.variables];
 	child.parent = instance;
 	child.hostTokenId = token.tokenId;
 	[instance.children setObject:child forKey:token.tokenId];
-	child.queue = instance.queue;
+	[child makeTokenOnNode:start.elementId arrivedViaFlow:nil parent:nil];
 	[self logInstance:instance format:@"enter subprocess %@", node.elementId];
-	[self drainInstance:child];
 	return YES;
 }
+
+/* A finished subprocess hands its variables, or its failure, back to the
+ * token waiting on it. */
+- (void)finishHost:(UDProcessInstance *)child
+{
+	UDProcessInstance *parent = child.parent;
+	[parent.children removeObjectForKey:child.hostTokenId];
+	UDToken *host = [parent tokenWithId:child.hostTokenId];
+	if (host == nil) {
+		return;
+	}
+	if (child.isFailed) {
+		[self failInstance:parent error:child.error];
+		return;
+	}
+	[parent.variables addEntriesFromDictionary:child.variables];
+	[self logInstance:parent format:@"leave subprocess %@", host.nodeId];
+	NSArray *outgoing = [parent.definition outgoingFlowsFrom:host.nodeId];
+	if ([outgoing count] == 0) {
+		host.state = UDTokenStateCompleted;
+	} else {
+		[self advanceToken:host instance:parent along:[outgoing objectAtIndex:0]];
+	}
+}
+
+#pragma mark - Firing
 
 - (BOOL)fireToken:(UDToken *)token
          instance:(UDProcessInstance *)instance
             error:(NSError **)error
 {
 	UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-	if (node == nil) {
-		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorUnknownElement
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-				[NSString stringWithFormat:@"unknown node %@", token.nodeId] }];
-		}
-		return NO;
-	}
-
 	if ([node isKindOfClass:[UDEvent class]]) {
-		return [self fireEvent:(UDEvent *)node
-		                 token:token
-		              instance:instance
-		                 error:error];
+		return [self fireEvent:(UDEvent *)node token:token instance:instance error:error];
 	}
 	if ([node isKindOfClass:[UDTask class]]) {
-		return [self fireTask:(UDTask *)node
-		                token:token
-		             instance:instance
-		                error:error];
+		return [self fireTask:(UDTask *)node token:token instance:instance error:error];
 	}
 	if ([node isKindOfClass:[UDGateway class]]) {
-		return [self fireGateway:(UDGateway *)node
-		                   token:token
-		                instance:instance
-		                   error:error];
+		return [self fireGateway:(UDGateway *)node token:token instance:instance error:error];
 	}
 	if ([node isKindOfClass:[UDSubProcess class]]) {
-		return [self fireSubProcess:(UDSubProcess *)node
-		                      token:token
-		                   instance:instance
-		                      error:error];
+		return [self fireSubProcess:(UDSubProcess *)node token:token instance:instance error:error];
 	}
-
 	if (error != NULL) {
-		*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-		                             code:UDWorkflowErrorUnknownElement
-		                         userInfo:@{ NSLocalizedDescriptionKey:
-				@"unsupported flow node" }];
+		*error = UDError(UDWorkflowErrorUnknownElement, node == nil
+			? [NSString stringWithFormat:@"unknown node %@", token.nodeId]
+			: @"unsupported flow node");
 	}
 	return NO;
 }
 
-- (void)drainInstance:(UDProcessInstance *)instance
+- (void)checkCompletion:(UDProcessInstance *)instance
 {
-	if (instance.isFailed || instance.isCompleted) {
+	if (instance.isFailed || instance.isCompleted
+	    || [instance.children count] > 0) {
 		return;
 	}
-
-	UDToken *token = nil;
-	while ((token = [instance nextReadyToken]) != nil) {
-		NSError *error = nil;
-		BOOL ok = [self fireToken:token instance:instance error:&error];
-		if (!ok) {
-			[self failInstance:instance error:error];
+	for (UDToken *token in instance.tokens) {
+		if (token.state != UDTokenStateCompleted) {
 			return;
 		}
-		[self persist:instance];
 	}
-	[self checkCompletion:instance];
-	if (!instance.isCompleted && !instance.isFailed
-	    && instance.pendingServices == 0
-	    && [instance nextReadyToken] == nil) {
-		[self notifyPaused:instance];
-	}
+	instance.completed = YES;
+	[self logInstance:instance format:@"instance completed"];
 }
 
-- (UDProcessInstance *)prepareInstance:(UDProcessDefinition *)definition
-                             variables:(NSDictionary *)variables
-                                 error:(NSError **)error
-{
-	UDEvent *start = [definition startEvent];
-	if (start == nil) {
-		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorInvalidDefinition
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-				@"definition has no start event" }];
-		}
-		return nil;
-	}
-
-	UDProcessInstance *instance = [[UDProcessInstance alloc] init];
-	instance.instanceId = [[NSUUID UUID] UUIDString];
-	instance.definition = definition;
-	if (variables != nil) {
-		[instance.variables addEntriesFromDictionary:variables];
-	}
-	{
-		dispatch_queue_t q = dispatch_queue_create(
-		[[NSString stringWithFormat:@"ud.workflow.%@", instance.instanceId]
-			UTF8String],
-		DISPATCH_QUEUE_SERIAL);
-		instance.queue = q;
-		UDDispatchRelease(q);
-	}
-	[instance makeTokenOnNode:start.elementId arrivedViaFlow:nil parent:nil];
-	[self logInstance:instance format:@"start %@ v%ld",
-		definition.processId, (long)definition.version];
-	[self persist:instance];
-	return instance;
-}
-
-- (UDProcessInstance *)enqueueProcess:(UDProcessDefinition *)definition
-                            variables:(NSDictionary *)variables
-                                error:(NSError **)error
-{
-	UDProcessInstance *instance = [self prepareInstance:definition
-	                                          variables:variables
-	                                              error:error];
-	if (instance == nil) {
-		return nil;
-	}
-	dispatch_async(instance.queue, ^{
-		[self drainInstance:instance];
-	});
-	return instance;
-}
-
-- (void)waitUntilQuiet:(UDProcessInstance *)instance
+/* Fires tokens until none is ready, here and in every subprocess, and
+ * hands finished subprocesses back to their hosts. */
+- (void)runScope:(UDProcessInstance *)scope
 {
 	for (;;) {
-		dispatch_semaphore_wait(instance.quiesce, DISPATCH_TIME_FOREVER);
-		if (instance.isCompleted || instance.isFailed) {
+		if (scope.isFailed || scope.isCompleted) {
+			return;
+		}
+		UDToken *token = nil;
+		while ((token = [scope nextReadyToken]) != nil) {
+			NSError *error = nil;
+			if (![self fireToken:token instance:scope error:&error]) {
+				[self failInstance:scope error:error];
+				return;
+			}
+		}
+		BOOL progressed = NO;
+		for (NSString *hostId in [scope.children allKeys]) {
+			UDProcessInstance *child = [scope.children objectForKey:hostId];
+			[self runScope:child];
+			if (child.isCompleted || child.isFailed) {
+				[self finishHost:child];
+				progressed = YES;
+				if (scope.isFailed) {
+					return;
+				}
+			}
+		}
+		if (!progressed) {
 			break;
 		}
-		if (instance.pendingServices == 0
-		    && [instance nextReadyToken] == nil) {
-			break;
+	}
+	[self checkCompletion:scope];
+}
+
+- (BOOL)hasServiceInFlight:(UDProcessInstance *)scope
+{
+	for (UDToken *token in scope.tokens) {
+		UDFlowNode *node = [scope.definition nodeWithId:token.nodeId];
+		if (token.state == UDTokenStateWaiting
+		    && [node isKindOfClass:[UDTask class]]
+		    && [(UDTask *)node kind] != UDTaskKindUser) {
+			return YES;
 		}
+	}
+	for (UDProcessInstance *child in [scope.children allValues]) {
+		if ([self hasServiceInFlight:child]) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+#pragma mark - Units of work
+
+- (void)deliverEffects:(UDUnit *)unit
+{
+	NSMutableArray *effects = [NSMutableArray array];
+	NSUInteger count = [unit.effects count];
+	for (NSUInteger i = 0; i < count; i++) {
+		if (unit.committed
+		    || ![[unit.effectsNeedCommit objectAtIndex:i] boolValue]) {
+			[effects addObject:[unit.effects objectAtIndex:i]];
+		}
+	}
+	if ([effects count] == 0) {
+		return;
+	}
+	dispatch_async(self.callbackQueue, ^{
+		for (void (^effect)(void) in effects) {
+			effect();
+		}
+	});
+}
+
+- (void)sendServiceJob:(UDJobRecord *)job root:(UDProcessInstance *)root
+{
+	UDProcessInstance *scope = nil;
+	UDToken *token = [root findTokenWithId:job.tokenId scope:&scope];
+	if (token == nil) {
+		return;
+	}
+	UDServiceInvocation *invocation =
+		[[UDServiceInvocation alloc] initWithJobId:job.jobId
+		                                 actionKey:job.actionKey
+		                                 variables:[scope.variables copy]
+		                                instanceId:root.instanceId
+		                                   tokenId:job.tokenId];
+	invocation.target = self;
+	invocation.action = @selector(serviceInvocation:didFinish:);
+	[self beginWork:root.instanceId];
+	id<UDServiceTaskHandler> handler = self.serviceHandler;
+	dispatch_async(self.workerQueue, ^{
+		if (handler == nil) {
+			[invocation finishWithVariables:nil error:nil];
+		} else {
+			[handler performInvocation:invocation];
+		}
+	});
+}
+
+- (void)afterCommit:(UDProcessInstance *)root
+           inserted:(NSArray<UDJobRecord *> *)inserted
+          wasActive:(BOOL)wasActive
+{
+	id<UDEngineDelegate> delegate = self.delegate;
+	BOOL finished = root.isCompleted || root.isFailed;
+	if (wasActive && finished) {
+		if ([delegate respondsToSelector:@selector(engine:instanceDidFinish:error:)]) {
+			UDAddEffect(YES, ^{
+				[delegate engine:self instanceDidFinish:root error:root.error];
+			});
+		}
+	} else if (!finished && ![self hasServiceInFlight:root]) {
+		if ([delegate respondsToSelector:@selector(engine:instanceDidPause:)]) {
+			UDAddEffect(YES, ^{
+				[delegate engine:self instanceDidPause:root];
+			});
+		}
+	}
+	BOOL timers = NO;
+	for (UDJobRecord *job in inserted) {
+		if (job.kind == UDJobKindService) {
+			[self sendServiceJob:job root:root];
+		} else {
+			timers = YES;
+		}
+	}
+	if (timers) {
+		[self reschedule];
 	}
 }
 
-- (UDProcessInstance *)startProcess:(UDProcessDefinition *)definition
-                          variables:(NSDictionary *)variables
-                              error:(NSError **)error
+/*
+ * One unit of work, on the instance's stripe. fresh is a new instance not
+ * yet in the store; otherwise the instance is loaded. input applies the
+ * outside event and answers NO to reject it, in which case nothing is
+ * committed. *committed says whether the unit reached the store.
+ */
+- (BOOL)unitOn:(NSString *)instanceId
+         fresh:(UDProcessInstance *)fresh
+         input:(UDUnitInput)input
+     committed:(BOOL *)committed
+         error:(NSError **)error
 {
-	UDProcessInstance *instance = [self enqueueProcess:definition
-	                                         variables:variables
-	                                             error:error];
-	if (instance == nil) {
-		return nil;
+	*committed = NO;
+	UDProcessInstance *root = fresh;
+	if (root == nil) {
+		root = [self loadInstance:instanceId error:error];
+		if (root == nil) {
+			return NO;
+		}
 	}
-	[self waitUntilQuiet:instance];
-	if (instance.isFailed && error != NULL) {
-		*error = instance.error;
+	BOOL wasActive = !root.isCompleted && !root.isFailed;
+	if (input != nil && !input(root, error)) {
+		return NO;
 	}
-	return instance;
-}
-
-- (BOOL)resumeInstance:(UDProcessInstance *)instance error:(NSError **)error
-{
-	if (instance == nil) {
+	if (wasActive) {
+		[self runScope:root];
+	}
+	NSError *commitError = nil;
+	NSArray *inserted = [self commit:root error:&commitError];
+	if (inserted == nil) {
+		id<UDEngineDelegate> delegate = self.delegate;
+		if ([delegate respondsToSelector:@selector(engine:instanceId:didFailToCommit:)]) {
+			UDAddEffect(NO, ^{
+				[delegate engine:self instanceId:instanceId didFailToCommit:commitError];
+			});
+		}
 		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorInvalidState
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"no instance to resume" }];
+			*error = commitError;
 		}
 		return NO;
 	}
-	if (instance.queue == nil) {
-		{
-			dispatch_queue_t q = dispatch_queue_create(
-			[[NSString stringWithFormat:@"ud.workflow.%@", instance.instanceId]
-				UTF8String],
-			DISPATCH_QUEUE_SERIAL);
-			instance.queue = q;
-			UDDispatchRelease(q);
+	*committed = YES;
+	UDCurrentUnit().committed = YES;
+	[self afterCommit:root inserted:inserted wasActive:wasActive];
+	if (root.isFailed) {
+		if (error != NULL) {
+			*error = root.error;
 		}
+		return NO;
 	}
-	if (instance.quiesce == nil) {
-		{
-			dispatch_semaphore_t s = dispatch_semaphore_create(0);
-			instance.quiesce = s;
-			UDDispatchRelease(s);
-		}
-	}
-	[self logInstance:instance format:@"resume %@", instance.instanceId];
-	dispatch_async(instance.queue, ^{
-		for (UDToken *token in instance.tokens) {
-			if (token.state != UDTokenStateWaiting) {
-				continue;
-			}
-			UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-			if (![node isKindOfClass:[UDEvent class]]) {
-				continue;
-			}
-			UDEvent *event = (UDEvent *)node;
-			if (event.trigger == UDEventTriggerTimer
-			    && [self.timers objectForKey:token.tokenId] == nil) {
-				[self scheduleTimer:event token:token instance:instance];
-			}
-		}
-		[self drainInstance:instance];
-	});
-	[self waitUntilQuiet:instance];
-	if (instance.isFailed && error != NULL) {
-		*error = instance.error;
-	}
-	return !instance.isFailed;
+	return YES;
 }
 
-- (BOOL)completeUserTask:(NSString *)tokenId
-                instance:(UDProcessInstance *)instance
-               variables:(NSDictionary *)variables
-                   error:(NSError **)error
+/* Runs a unit on the calling thread. The caller is on the stripe. */
+- (BOOL)runUnitHere:(NSString *)instanceId
+              fresh:(UDProcessInstance *)fresh
+              input:(UDUnitInput)input
+          committed:(BOOL *)committed
+              error:(NSError **)error
+{
+	UDUnit *unit = [[UDUnit alloc] init];
+	NSMutableDictionary *threadDictionary = [[NSThread currentThread] threadDictionary];
+	[threadDictionary setObject:unit forKey:UDUnitKey];
+	BOOL ok = [self unitOn:instanceId
+	                 fresh:fresh
+	                 input:input
+	             committed:committed
+	                 error:error];
+	[threadDictionary removeObjectForKey:UDUnitKey];
+	[self deliverEffects:unit];
+	return ok;
+}
+
+- (BOOL)runUnit:(NSString *)instanceId
+          fresh:(UDProcessInstance *)fresh
+          input:(UDUnitInput)input
+      committed:(BOOL *)committed
+          error:(NSError **)error
 {
 	__block BOOL ok = NO;
+	__block BOOL didCommit = NO;
 	__block NSError *localError = nil;
-	dispatch_sync(instance.queue, ^{
-		UDToken *token = [instance tokenWithId:tokenId];
-		if (token == nil || token.state != UDTokenStateWaiting) {
-			localError = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                                 code:UDWorkflowErrorInvalidState
-			                             userInfo:@{ NSLocalizedDescriptionKey:
-					@"token is not a waiting user task" }];
-			return;
-		}
-		UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-		if (![node isKindOfClass:[UDTask class]]
-		    || [(UDTask *)node kind] != UDTaskKindUser) {
-			localError = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                                 code:UDWorkflowErrorInvalidState
-			                             userInfo:@{ NSLocalizedDescriptionKey:
-					@"token is not parked on a user task" }];
-			return;
-		}
-		if (variables != nil) {
-			[instance.variables addEntriesFromDictionary:variables];
-		}
-		[self disarmBoundariesOn:token.nodeId instance:instance];
-		NSArray *outgoing =
-			[instance.definition outgoingFlowsFrom:token.nodeId];
-		if ([outgoing count] == 0) {
-			token.state = UDTokenStateCompleted;
-		} else {
-			[self advanceToken:token
-			          instance:instance
-			             along:[outgoing objectAtIndex:0]];
-		}
-		[self persist:instance];
-		[self drainInstance:instance];
-		ok = !instance.isFailed;
-		localError = instance.error;
+	dispatch_sync([self stripeFor:instanceId], ^{
+		NSError *unitError = nil;
+		ok = [self runUnitHere:instanceId
+		                 fresh:fresh
+		                 input:input
+		             committed:&didCommit
+		                 error:&unitError];
+		localError = unitError;
 	});
-	/* Like -startProcess:, return once the instance has settled: the next
-	 * service task, if any, has run and its successors have fired. */
-	if (ok) {
-		[self waitUntilQuiet:instance];
-		ok = !instance.isFailed;
-		localError = instance.error;
+	if (committed != NULL) {
+		*committed = didCommit;
 	}
 	if (!ok && error != NULL) {
 		*error = localError;
@@ -1296,144 +1448,376 @@
 	return ok;
 }
 
-- (BOOL)deliverMessage:(NSString *)messageName
-               payload:(NSDictionary *)payload
-              instance:(UDProcessInstance *)instance
-                 error:(NSError **)error
+#pragma mark - Service results
+
+- (void)serviceInvocation:(UDServiceInvocation *)invocation
+                didFinish:(UDServiceResult *)result
 {
-	__block BOOL delivered = NO;
-	__block NSError *localError = nil;
-	dispatch_sync(instance.queue, ^{
-		NSMutableArray *targets = [NSMutableArray array];
-		for (UDToken *token in instance.tokens) {
-			if (token.state != UDTokenStateWaiting) {
-				continue;
+	NSString *instanceId = invocation.instanceId;
+	NSString *tokenId = invocation.tokenId;
+	dispatch_async([self stripeFor:instanceId], ^{
+		BOOL committed = NO;
+		[self runUnitHere:instanceId fresh:nil input:^BOOL(UDProcessInstance *root, NSError **error) {
+			(void)error;
+			UDProcessInstance *scope = nil;
+			UDToken *token = [root findTokenWithId:tokenId scope:&scope];
+			UDFlowNode *node = [scope.definition nodeWithId:token.nodeId];
+			if (token == nil || token.state != UDTokenStateWaiting
+			    || ![node isKindOfClass:[UDTask class]]
+			    || [(UDTask *)node kind] == UDTaskKindUser) {
+				/* The token moved on meanwhile (a boundary event took
+				 * it): the result is stale. Committing anyway drops the
+				 * job. */
+				[self logInstance:root format:@"stale result for %@", tokenId];
+				return YES;
 			}
-			UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-			if (![node isKindOfClass:[UDEvent class]]) {
-				continue;
-			}
-			UDEvent *event = (UDEvent *)node;
-			if (event.trigger != UDEventTriggerMessage) {
-				continue;
-			}
-			if (![event.messageName isEqualToString:messageName]) {
-				continue;
-			}
-			[targets addObject:token];
-		}
-		if ([targets count] == 0) {
-			localError = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                                 code:UDWorkflowErrorNoPath
-			                             userInfo:@{ NSLocalizedDescriptionKey:
-					[NSString stringWithFormat:@"no catch for message %@",
-						messageName] }];
-			return;
-		}
-		for (UDToken *token in targets) {
-			UDEvent *event = (UDEvent *)[instance.definition nodeWithId:token.nodeId];
-			if (event.kind == UDEventKindBoundary && event.isInterrupting
-			    && event.attachedToId != nil) {
-				for (UDToken *activity in [instance tokensAtNode:event.attachedToId
-				                                          state:UDTokenStateWaiting]) {
-					activity.state = UDTokenStateCompleted;
-				}
-				[self disarmBoundariesOn:event.attachedToId instance:instance];
-			}
-			[self leaveEvent:event token:token instance:instance payload:payload];
-			delivered = YES;
-		}
-		[self persist:instance];
-		[self drainInstance:instance];
+			[self applyServiceResult:result
+			                   token:token
+			                    task:(UDTask *)node
+			                instance:scope];
+			return YES;
+		} committed:&committed error:NULL];
+		[self endWork:instanceId];
 	});
-	if (delivered) {
-		[self waitUntilQuiet:instance];
+}
+
+#pragma mark - Timers
+
+- (void)reschedule
+{
+	dispatch_async(_schedulerQueue, ^{
+		[self rearmScheduler];
+	});
+}
+
+/* On the scheduler queue. */
+- (void)rearmScheduler
+{
+	if (_closed) {
+		return;
 	}
-	if (!delivered && error != NULL) {
-		*error = localError;
+	NSDate *due = [self.store earliestTimerDue];
+	if (due != nil && _backoffUntil != nil
+	    && [due compare:_backoffUntil] == NSOrderedAscending) {
+		due = _backoffUntil;
 	}
-	return delivered;
+	if (due == nil) {
+		dispatch_source_set_timer(_scheduler, DISPATCH_TIME_FOREVER,
+			DISPATCH_TIME_FOREVER, 0);
+		return;
+	}
+	NSTimeInterval seconds = [due timeIntervalSince1970];
+	struct timespec when;
+	when.tv_sec = (time_t)seconds;
+	when.tv_nsec = (long)((seconds - (double)when.tv_sec) * (double)NSEC_PER_SEC);
+	dispatch_source_set_timer(_scheduler, dispatch_walltime(&when, 0),
+		DISPATCH_TIME_FOREVER, 5 * NSEC_PER_MSEC);
+}
+
+/* On the scheduler queue: runs the due timer jobs, then aims at the next. */
+- (void)schedulerFired
+{
+	if (_closed) {
+		return;
+	}
+	NSArray *jobs = [self.store jobsOfKind:UDJobKindTimer
+	                             dueBefore:[NSDate date]
+	                                 limit:UD_TIMER_BATCH];
+	BOOL stuck = NO;
+	for (UDJobRecord *job in jobs) {
+		NSString *tokenId = job.tokenId;
+		BOOL committed = NO;
+		NSError *error = nil;
+		[self runUnit:job.instanceId fresh:nil input:^BOOL(UDProcessInstance *root, NSError **inputError) {
+			(void)inputError;
+			UDProcessInstance *scope = nil;
+			UDToken *token = [root findTokenWithId:tokenId scope:&scope];
+			UDFlowNode *node = [scope.definition nodeWithId:token.nodeId];
+			if (token != nil && token.state == UDTokenStateWaiting
+			    && [node isKindOfClass:[UDEvent class]]
+			    && [(UDEvent *)node trigger] == UDEventTriggerTimer
+			    && [token.dueAt timeIntervalSinceNow] <= 0) {
+				[self timerFired:token event:(UDEvent *)node instance:scope];
+			}
+			return YES;
+		} committed:&committed error:&error];
+		if (!committed) {
+			if ([error code] == UDWorkflowErrorUnknownElement
+			    && [[error domain] isEqualToString:UDWorkflowErrorDomain]) {
+				/* The instance is gone: so is the reason for the job. */
+				[self.store deleteJob:job.jobId error:NULL];
+			} else {
+				stuck = YES;
+			}
+		}
+	}
+	_backoffUntil = stuck ? [NSDate dateWithTimeIntervalSinceNow:1.0] : nil;
+	[self rearmScheduler];
+}
+
+#pragma mark - Lifecycle
+
+- (BOOL)openWithError:(NSError **)error
+{
+	NSError *firstError = nil;
+	for (UDJobRecord *job in [self.store jobsOfKind:UDJobKindService
+	                                      dueBefore:nil
+	                                          limit:0]) {
+		__block NSError *loadError = nil;
+		dispatch_sync([self stripeFor:job.instanceId], ^{
+			NSError *unitError = nil;
+			UDProcessInstance *root = [self loadInstance:job.instanceId error:&unitError];
+			if (root == nil) {
+				loadError = unitError;
+				return;
+			}
+			[self sendServiceJob:job root:root];
+		});
+		if (loadError != nil && firstError == nil) {
+			firstError = loadError;
+		}
+	}
+	[self reschedule];
+	if (firstError != nil) {
+		if (error != NULL) {
+			*error = firstError;
+		}
+		return NO;
+	}
+	return YES;
+}
+
+- (void)close
+{
+	if (_closed) {
+		return;
+	}
+	_closed = YES;
+	dispatch_source_cancel(_scheduler);
+}
+
+#pragma mark - Inputs
+
+- (NSString *)startProcess:(NSString *)processId
+                 variables:(NSDictionary *)variables
+                     error:(NSError **)error
+{
+	return [self startProcess:processId
+	                variables:variables
+	          correlationKeys:nil
+	                    error:error];
+}
+
+- (NSString *)startProcess:(NSString *)processId
+                 variables:(NSDictionary *)variables
+           correlationKeys:(NSDictionary *)correlationKeys
+                     error:(NSError **)error
+{
+	if (!UDIsPropertyList(variables)) {
+		if (error != NULL) {
+			*error = UDError(UDWorkflowErrorInvalidState,
+				@"variables must be property-list values");
+		}
+		return nil;
+	}
+	for (id value in [correlationKeys allValues]) {
+		if (![value isKindOfClass:[NSString class]]
+		    && ![value isKindOfClass:[NSNumber class]]) {
+			if (error != NULL) {
+				*error = UDError(UDWorkflowErrorInvalidState,
+					@"correlation values must be strings or numbers");
+			}
+			return nil;
+		}
+	}
+	UDProcessDefinition *definition = [self latestDefinitionForProcess:processId];
+	UDEvent *start = [definition startEvent];
+	if (start == nil) {
+		if (error != NULL) {
+			*error = UDError(UDWorkflowErrorInvalidDefinition, definition == nil
+				? [NSString stringWithFormat:@"%@ is not deployed", processId]
+				: @"definition has no start event");
+		}
+		return nil;
+	}
+	UDProcessInstance *instance = [[UDProcessInstance alloc] init];
+	instance.instanceId = [[NSUUID UUID] UUIDString];
+	instance.definition = definition;
+	[instance.variables addEntriesFromDictionary:variables];
+	[instance.correlationKeys addEntriesFromDictionary:correlationKeys];
+	[instance makeTokenOnNode:start.elementId arrivedViaFlow:nil parent:nil];
+	BOOL ok = [self runUnit:instance.instanceId fresh:instance input:^BOOL(UDProcessInstance *root, NSError **inputError) {
+		(void)inputError;
+		[self logInstance:root format:@"start %@ v%ld",
+			definition.processId, (long)definition.version];
+		return YES;
+	} committed:NULL error:error];
+	return ok ? instance.instanceId : nil;
+}
+
+- (BOOL)completeUserTask:(NSString *)tokenId
+              instanceId:(NSString *)instanceId
+               variables:(NSDictionary *)variables
+                   error:(NSError **)error
+{
+	if (!UDIsPropertyList(variables)) {
+		if (error != NULL) {
+			*error = UDError(UDWorkflowErrorInvalidState,
+				@"variables must be property-list values");
+		}
+		return NO;
+	}
+	return [self runUnit:instanceId fresh:nil input:^BOOL(UDProcessInstance *root, NSError **inputError) {
+		UDProcessInstance *scope = nil;
+		UDToken *token = [root findTokenWithId:tokenId scope:&scope];
+		UDFlowNode *node = [scope.definition nodeWithId:token.nodeId];
+		if (token == nil || token.state != UDTokenStateWaiting
+		    || ![node isKindOfClass:[UDTask class]]
+		    || [(UDTask *)node kind] != UDTaskKindUser) {
+			if (inputError != NULL) {
+				*inputError = UDError(UDWorkflowErrorInvalidState,
+					@"token is not a waiting user task");
+			}
+			return NO;
+		}
+		if (variables != nil) {
+			[scope.variables addEntriesFromDictionary:variables];
+		}
+		[self leaveTask:token.nodeId token:token instance:scope];
+		return YES;
+	} committed:NULL error:error];
+}
+
+/* Tokens waiting on a catch for the message, anywhere in the tree. */
+- (void)collectCatches:(NSMutableArray *)catches
+               message:(NSString *)messageName
+                 scope:(UDProcessInstance *)scope
+{
+	for (UDToken *token in scope.tokens) {
+		if (token.state != UDTokenStateWaiting) {
+			continue;
+		}
+		UDFlowNode *node = [scope.definition nodeWithId:token.nodeId];
+		if ([node isKindOfClass:[UDEvent class]]
+		    && [(UDEvent *)node trigger] == UDEventTriggerMessage
+		    && [[(UDEvent *)node messageName] isEqualToString:messageName]) {
+			[catches addObject:@[ token, scope ]];
+		}
+	}
+	for (UDProcessInstance *child in [scope.children allValues]) {
+		[self collectCatches:catches message:messageName scope:child];
+	}
 }
 
 - (BOOL)deliverMessage:(NSString *)messageName
                payload:(NSDictionary *)payload
-       correlationKey:(NSString *)correlationKey
-                value:(id)value
-                error:(NSError **)error
+            instanceId:(NSString *)instanceId
+                 error:(NSError **)error
 {
-	if (![self.store isKindOfClass:[UDMemoryStore class]]) {
+	if (!UDIsPropertyList(payload)) {
 		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorInvalidState
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"correlation lookup needs UDMemoryStore" }];
+			*error = UDError(UDWorkflowErrorInvalidState,
+				@"payload must be property-list values");
 		}
 		return NO;
 	}
-	UDMemoryStore *store = (UDMemoryStore *)self.store;
-	NSArray *matches = [store instancesWithCorrelationKey:correlationKey
-	                                                value:value
-	                                                error:error];
-	if ([matches count] == 0) {
+	return [self runUnit:instanceId fresh:nil input:^BOOL(UDProcessInstance *root, NSError **inputError) {
+		NSMutableArray *catches = [NSMutableArray array];
+		[self collectCatches:catches message:messageName scope:root];
+		if ([catches count] == 0) {
+			if (inputError != NULL) {
+				*inputError = UDError(UDWorkflowErrorNoPath,
+					[NSString stringWithFormat:@"no catch for message %@",
+						messageName]);
+			}
+			return NO;
+		}
+		for (NSArray *pair in catches) {
+			UDToken *token = [pair objectAtIndex:0];
+			UDProcessInstance *scope = [pair objectAtIndex:1];
+			if (token.state != UDTokenStateWaiting) {
+				/* An earlier catch in this delivery cancelled it. */
+				continue;
+			}
+			UDEvent *event = (UDEvent *)[scope.definition nodeWithId:token.nodeId];
+			[self interruptHostOf:event instance:scope];
+			[self leaveEvent:event token:token instance:scope payload:payload];
+		}
+		return YES;
+	} committed:NULL error:error];
+}
+
+- (BOOL)deliverMessage:(NSString *)messageName
+               payload:(NSDictionary *)payload
+        correlationKey:(NSString *)correlationKey
+                 value:(id)value
+                 error:(NSError **)error
+{
+	NSArray *ids = [self.store instanceIdsForCorrelationKey:correlationKey
+	                                                  value:value];
+	if ([ids count] == 0) {
 		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorNoPath
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"no instance for correlation key" }];
+			*error = UDError(UDWorkflowErrorNoPath, @"no instance for correlation key");
 		}
 		return NO;
 	}
 	BOOL any = NO;
-	for (UDProcessInstance *instance in matches) {
+	for (NSString *instanceId in ids) {
 		if ([self deliverMessage:messageName
-		                   payload:payload
-		                  instance:instance
-		                     error:error]) {
+		                 payload:payload
+		              instanceId:instanceId
+		                   error:error]) {
 			any = YES;
 		}
 	}
 	return any;
 }
 
+- (void)collectWaitingTasks:(NSMutableArray *)tasks scope:(UDProcessInstance *)scope
+{
+	for (UDToken *token in scope.tokens) {
+		if (token.state == UDTokenStateWaiting
+		    && [[scope.definition nodeWithId:token.nodeId] isKindOfClass:[UDTask class]]) {
+			[tasks addObject:@[ token, scope ]];
+		}
+	}
+	for (UDProcessInstance *child in [scope.children allValues]) {
+		[self collectWaitingTasks:tasks scope:child];
+	}
+}
+
 - (BOOL)throwError:(NSString *)errorRef
-          instance:(UDProcessInstance *)instance
+        instanceId:(NSString *)instanceId
              error:(NSError **)error
 {
-	__block BOOL taken = NO;
-	__block NSError *localError = nil;
-	dispatch_sync(instance.queue, ^{
-		for (UDToken *token in [instance.tokens copy]) {
-			if (token.state != UDTokenStateWaiting) {
-				continue;
-			}
-			UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-			if (![node isKindOfClass:[UDTask class]]) {
-				continue;
-			}
-			if ([self takeErrorBoundary:errorRef
-			                      task:(UDTask *)node
-			                     token:token
-			                  instance:instance]) {
+	return [self runUnit:instanceId fresh:nil input:^BOOL(UDProcessInstance *root, NSError **inputError) {
+		(void)inputError;
+		NSMutableArray *tasks = [NSMutableArray array];
+		[self collectWaitingTasks:tasks scope:root];
+		BOOL taken = NO;
+		for (NSArray *pair in tasks) {
+			UDToken *token = [pair objectAtIndex:0];
+			UDProcessInstance *scope = [pair objectAtIndex:1];
+			UDTask *task = (UDTask *)[scope.definition nodeWithId:token.nodeId];
+			if ([self takeErrorBoundary:errorRef task:task token:token instance:scope]) {
 				taken = YES;
 			}
 		}
 		if (!taken) {
-			localError = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                                 code:UDWorkflowErrorNoPath
-			                             userInfo:@{
+			[self failInstance:root error:[NSError errorWithDomain:UDWorkflowErrorDomain
+			                                                  code:UDWorkflowErrorNoPath
+			                                              userInfo:@{
 				NSLocalizedDescriptionKey: @"no error boundary",
 				UDWorkflowErrorRefKey: errorRef ?: @"*"
-			}];
-			[self failInstance:instance error:localError];
-		} else {
-			[self persist:instance];
-			[self drainInstance:instance];
+			}]];
 		}
-	});
-	if (!taken && error != NULL) {
-		*error = localError;
-	}
-	return taken;
+		return YES;
+	} committed:NULL error:error];
+}
+
+- (UDProcessInstance *)instanceWithId:(NSString *)instanceId error:(NSError **)error
+{
+	return [self loadInstance:instanceId error:error];
 }
 
 @end
