@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write UDWorkflow.xcodeproj from the same source lists the GNUmakefiles use.
+"""Write WorkflowKit.xcodeproj from the same source lists the GNUmakefiles use.
 
     python3 .tools/genxcodeproj.py
 
@@ -24,12 +24,12 @@ def make_list(path, var):
     return m.group(1).split()
 
 
-SOURCES = make_list("GNUmakefile", "UDWorkflow_OBJC_FILES")            # Source/X.m
-HEADERS = make_list("GNUmakefile", "UDWorkflow_HEADER_FILES")          # X.h
-TESTS = make_list("Tests/GNUmakefile", "UDWorkflowTests_OBJC_FILES")   # X.m
+SOURCES = make_list("GNUmakefile", "WorkflowKit_OBJC_FILES")            # Source/X.m
+HEADERS = make_list("GNUmakefile", "WorkflowKit_HEADER_FILES")          # X.h
+TESTS = make_list("Tests/GNUmakefile", "WorkflowKitTests_OBJC_FILES")   # X.m
 DEMO = make_list("Examples/GNUmakefile", "PurchaseRequestDemo_OBJC_FILES")
-MODELS = make_list("GNUmakefile", "UDWorkflow_XCDATAMODELD_FILES")     # Model/X.xcdatamodeld
-DOCS = ["CLAUDE.md", "UDWorkflow-BPMN-Subset.md", "GNUmakefile"]
+MODELS = make_list("GNUmakefile", "WorkflowKit_XCDATAMODELD_FILES")     # Model/X.xcdatamodeld
+DOCS = ["CLAUDE.md", "WorkflowKit-BPMN-Subset.md", "GNUmakefile"]
 CONFIGS = ["Common.xcconfig", "Debug.xcconfig", "Release.xcconfig"]
 
 objects = {}   # id -> (isa, body lines, comment)
@@ -116,8 +116,8 @@ def product(name, ext, ftype_):
     ])
 
 
-p_fw = product("UDWorkflow", ".framework", "wrapper.framework")
-p_tests = product("UDWorkflowTests", ".xctest", "wrapper.cfbundle")
+p_fw = product("WorkflowKit", ".framework", "wrapper.framework")
+p_tests = product("WorkflowKitTests", ".xctest", "wrapper.cfbundle")
 p_demo = product("PurchaseRequestDemo", "", '"compiled.mach-o.executable"')
 
 
@@ -145,24 +145,24 @@ def names(ids):
 model_refs = {m: version_group(m) for m in MODELS}
 
 
-fw_sources = phase("PBXSourcesBuildPhase", "UDWorkflow", "Sources", names(
-    [buildfile("UDWorkflow", src_refs[s], os.path.basename(s)) for s in SOURCES] +
-    [buildfile("UDWorkflow", model_refs[m], os.path.basename(m)) for m in MODELS]))
-fw_headers = phase("PBXHeadersBuildPhase", "UDWorkflow", "Headers", names(
-    [buildfile("UDWorkflow", hdr_refs[h], h, "{ATTRIBUTES = (Public, ); }") for h in HEADERS]))
-fw_frameworks = phase("PBXFrameworksBuildPhase", "UDWorkflow", "Frameworks", names(
-    [buildfile("UDWorkflow", foundation, "Foundation.framework"),
-     buildfile("UDWorkflow", coredata, "CoreData.framework")]))
+fw_sources = phase("PBXSourcesBuildPhase", "WorkflowKit", "Sources", names(
+    [buildfile("WorkflowKit", src_refs[s], os.path.basename(s)) for s in SOURCES] +
+    [buildfile("WorkflowKit", model_refs[m], os.path.basename(m)) for m in MODELS]))
+fw_headers = phase("PBXHeadersBuildPhase", "WorkflowKit", "Headers", names(
+    [buildfile("WorkflowKit", hdr_refs[h], h, "{ATTRIBUTES = (Public, ); }") for h in HEADERS]))
+fw_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKit", "Frameworks", names(
+    [buildfile("WorkflowKit", foundation, "Foundation.framework"),
+     buildfile("WorkflowKit", coredata, "CoreData.framework")]))
 
-t_sources = phase("PBXSourcesBuildPhase", "UDWorkflowTests", "Sources", names(
-    [buildfile("UDWorkflowTests", test_refs[t], t) for t in TESTS]))
-t_frameworks = phase("PBXFrameworksBuildPhase", "UDWorkflowTests", "Frameworks", names(
-    [buildfile("UDWorkflowTests", p_fw, "UDWorkflow.framework")]))
+t_sources = phase("PBXSourcesBuildPhase", "WorkflowKitTests", "Sources", names(
+    [buildfile("WorkflowKitTests", test_refs[t], t) for t in TESTS]))
+t_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKitTests", "Frameworks", names(
+    [buildfile("WorkflowKitTests", p_fw, "WorkflowKit.framework")]))
 
 d_sources = phase("PBXSourcesBuildPhase", "PurchaseRequestDemo", "Sources", names(
     [buildfile("PurchaseRequestDemo", demo_refs[d], d) for d in DEMO]))
 d_frameworks = phase("PBXFrameworksBuildPhase", "PurchaseRequestDemo", "Frameworks", names(
-    [buildfile("PurchaseRequestDemo", p_fw, "UDWorkflow.framework")]))
+    [buildfile("PurchaseRequestDemo", p_fw, "WorkflowKit.framework")]))
 
 
 # ---------------------------------------------------------------- groups
@@ -184,7 +184,7 @@ g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
 g_products = group("Products", "Products", [p_fw, p_tests, p_demo])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata])
-g_main = group("main", "UDWorkflow", [doc_refs[d] for d in DOCS] +
+g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
                [g_headers, g_source, g_model, g_tests, g_examples, g_configs, g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
@@ -216,12 +216,12 @@ FW = {
     "DYLIB_INSTALL_NAME_BASE": '"@rpath"',
     "INSTALL_PATH": '"$(LOCAL_LIBRARY_DIR)/Frameworks"',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks")',
-    "PRODUCT_BUNDLE_IDENTIFIER": "local.udworkflow.UDWorkflow",
+    "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKit",
     "SKIP_INSTALL": "YES",
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
 }
 TESTS_S = {
-    "PRODUCT_BUNDLE_IDENTIFIER": "local.udworkflow.UDWorkflowTests",
+    "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKitTests",
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
@@ -236,8 +236,8 @@ def settings(d):
 
 
 cl_project = configs("project", "{\n\t\t\t}", "{\n\t\t\t}")
-cl_fw = configs("UDWorkflow", settings(FW), settings(FW))
-cl_tests = configs("UDWorkflowTests", settings(TESTS_S), settings(TESTS_S))
+cl_fw = configs("WorkflowKit", settings(FW), settings(FW))
+cl_tests = configs("WorkflowKitTests", settings(TESTS_S), settings(TESTS_S))
 cl_demo = configs("PurchaseRequestDemo", settings(DEMO_S), settings(DEMO_S))
 
 project_id = oid("project")
@@ -273,20 +273,20 @@ def target(name, cfglist, phases, deps, prod, ptype):
     ])
 
 
-t_fw = oid("target", "UDWorkflow")
-t_fw = target("UDWorkflow", cl_fw, [fw_headers, fw_sources, fw_frameworks], [],
+t_fw = oid("target", "WorkflowKit")
+t_fw = target("WorkflowKit", cl_fw, [fw_headers, fw_sources, fw_frameworks], [],
               p_fw, "com.apple.product-type.framework")
-t_tests = target("UDWorkflowTests", cl_tests, [t_sources, t_frameworks],
-                 [dependency("UDWorkflowTests", t_fw, "UDWorkflow")],
+t_tests = target("WorkflowKitTests", cl_tests, [t_sources, t_frameworks],
+                 [dependency("WorkflowKitTests", t_fw, "WorkflowKit")],
                  p_tests, "com.apple.product-type.bundle.unit-test")
 t_demo = target("PurchaseRequestDemo", cl_demo, [d_sources, d_frameworks],
-                [dependency("PurchaseRequestDemo", t_fw, "UDWorkflow")],
+                [dependency("PurchaseRequestDemo", t_fw, "WorkflowKit")],
                 p_demo, "com.apple.product-type.tool")
 
 add(project_id, "Project object", [
     ("isa", "PBXProject"),
     ("attributes", "{\n\t\t\t\tBuildIndependentTargetsInParallel = 1;\n\t\t\t\tLastUpgradeCheck = 1600;\n\t\t\t}"),
-    ("buildConfigurationList", '%s /* Build configuration list for PBXProject "UDWorkflow" */' % cl_project),
+    ("buildConfigurationList", '%s /* Build configuration list for PBXProject "WorkflowKit" */' % cl_project),
     ("compatibilityVersion", '"Xcode 14.0"'),
     ("developmentRegion", "en"),
     ("hasScannedForEncodings", "0"),
@@ -332,7 +332,7 @@ def render():
     return "\n".join(out)
 
 
-proj = os.path.join(ROOT, "UDWorkflow.xcodeproj")
+proj = os.path.join(ROOT, "WorkflowKit.xcodeproj")
 os.makedirs(os.path.join(proj, "xcshareddata", "xcschemes"), exist_ok=True)
 with open(os.path.join(proj, "project.pbxproj"), "w") as f:
     f.write(render())
@@ -342,7 +342,7 @@ with open(os.path.join(proj, "project.pbxproj"), "w") as f:
 def ref(tid, name, product_name):
     return ('<BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "%s" '
             'BuildableName = "%s" BlueprintName = "%s" '
-            'ReferencedContainer = "container:UDWorkflow.xcodeproj"></BuildableReference>'
+            'ReferencedContainer = "container:WorkflowKit.xcodeproj"></BuildableReference>'
             % (tid, product_name, name))
 
 
@@ -372,9 +372,9 @@ def scheme(name, build, test=None, run=None):
         f.write(xml)
 
 
-fw_ref = ref(t_fw, "UDWorkflow", "UDWorkflow.framework")
-tests_ref = ref(t_tests, "UDWorkflowTests", "UDWorkflowTests.xctest")
+fw_ref = ref(t_fw, "WorkflowKit", "WorkflowKit.framework")
+tests_ref = ref(t_tests, "WorkflowKitTests", "WorkflowKitTests.xctest")
 demo_ref = ref(t_demo, "PurchaseRequestDemo", "PurchaseRequestDemo")
-scheme("UDWorkflow", [fw_ref], test=tests_ref)
+scheme("WorkflowKit", [fw_ref], test=tests_ref)
 scheme("PurchaseRequestDemo", [demo_ref], run=demo_ref)
 print("wrote", proj)

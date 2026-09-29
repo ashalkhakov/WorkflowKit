@@ -5,14 +5,14 @@ Status: adopted and implemented, steps 1 to 5; what each step left out is noted 
 
 ## Reference, and the clean-room rule
 
-UDWorkflow follows the design of **Camunda 7**: an execution tree persisted
+WorkflowKit follows the design of **Camunda 7**: an execution tree persisted
 as ordinary rows, commits at wait states, asynchronous continuations, a job
 executor with retries and incidents, external tasks, and history levels. When
 a construct's behaviour is in question, Camunda 7's documented behaviour
 settles it, and the BPMN 2.0 specification settles what Camunda leaves open.
 Deviations are listed at the end, each with its reason; there should be few.
 
-**Clean room.** UDWorkflow is to be licensed under the LGPL (2.1 or similar).
+**Clean room.** WorkflowKit is to be licensed under the LGPL (2.1 or similar).
 Camunda 7 is Apache-2.0, which is incompatible with GPLv2-family licences, so
 nothing is taken from its source. We work from its public documentation, its
 observable behaviour, and the specification. No code, SQL, or documentation
@@ -35,13 +35,13 @@ reference splits them:
 | `managementService` | Jobs, retries, incidents, the job executor |
 | `historyService` | Finished and running history, by level |
 
-`UDProcessEngine` is built with a Core Data store description and owns the
+`WFProcessEngine` is built with a Core Data store description and owns the
 job executor.
 
 ## Repository
 
 A **deployment** is a named set of resources: the BPMN XML files. Deploying
-parses each process into an immutable `UDProcessDefinition` graph. The engine
+parses each process into an immutable `WFProcessDefinition` graph. The engine
 **assigns versions**: a process key's first deployment is version 1, and each
 deployment whose content differs is the next version. Content that is
 identical to the latest version is not deployed again (duplicate filtering).
@@ -138,7 +138,7 @@ the same way.
 
 ## How the engine advances
 
-Behaviour lives in one class per element type (`UDActivityBehavior`):
+Behaviour lives in one class per element type (`WFActivityBehavior`):
 
 - `-execute:` enters the activity.
 - `-signal:` resumes a wait state.
@@ -184,7 +184,7 @@ keep the common case free of them.
 
 A service task is either of two kinds, as in the reference:
 
-- **Delegate.** An in-process `UDServiceDelegate` runs *inside* the command,
+- **Delegate.** An in-process `WFServiceDelegate` runs *inside* the command,
   synchronously, and its failure rolls the command back. It is meant for
   quick, local work. Combined with `asyncBefore`, it runs from a job with
   retries.
@@ -199,7 +199,7 @@ A service task is either of two kinds, as in the reference:
 
   Tasks have priorities.
 
-The asynchronous `UDServiceTaskHandler` of today becomes an **in-process
+The asynchronous `WFServiceTaskHandler` of today becomes an **in-process
 external-task worker**: the engine fetches and locks for the handler's
 topics and calls it on the worker queue. So the handler API survives, and a
 worker in another process works the same way, through the same service.
@@ -296,14 +296,14 @@ small. History is kept until a history time-to-live removes it.
 
 ## Core Data model
 
-A new `Model/UDWorkflow.xcdatamodeld`. Relationships are Core Data
+A new `Model/WorkflowKit.xcdatamodeld`. Relationships are Core Data
 relationships, so a command faults in only the executions it touches.
 
 | Group | Entities |
 |---|---|
-| Repository | `UDDeployment`, `UDResource` (BPMN bytes), `UDDefinitionRecord` (key, version, deployment, resource, suspended) |
-| Runtime | `UDExecution` (parent/children, process instance, activity id, activity instance id, active, concurrent, scope, business key, suspended, super execution and called instance), `UDVariable`, `UDTask`, `UDIdentityLink`, `UDEventSubscription`, `UDJob`, `UDExternalTask`, `UDIncident` |
-| History | `UDHistoricProcessInstance`, `UDHistoricActivityInstance`, `UDHistoricTaskInstance`, `UDHistoricVariable`, `UDHistoricVariableUpdate`, `UDHistoricIncident`, `UDHistoricJobLog` |
+| Repository | `WFDeployment`, `WFResource` (BPMN bytes), `WFDefinitionRecord` (key, version, deployment, resource, suspended) |
+| Runtime | `WFExecution` (parent/children, process instance, activity id, activity instance id, active, concurrent, scope, business key, suspended, super execution and called instance), `WFVariable`, `WFTask`, `WFIdentityLink`, `WFEventSubscription`, `WFJob`, `WFExternalTask`, `WFIncident` |
+| History | `WFHistoricProcessInstance`, `WFHistoricActivityInstance`, `WFHistoricTaskInstance`, `WFHistoricVariable`, `WFHistoricVariableUpdate`, `WFHistoricIncident`, `WFHistoricJobLog` |
 
 ## BPMN extensions and expressions
 
@@ -315,7 +315,7 @@ Camunda's `camunda:` namespace:
 - `failedJobRetryTimeCycle`;
 - input and output mappings.
 
-Files from Camunda Modeler therefore run unchanged. A `ud:` attribute is
+Files from Camunda Modeler therefore run unchanged. A `wf:` attribute is
 added only where the reference has nothing equivalent, and there should be
 very few.
 
@@ -328,7 +328,7 @@ Where an expression appears, the file says which language it is in:
 The engine implements FEEL's core the usual way: a lexer, a recursive
 descent parser with one method per precedence level, a tree whose nodes
 print themselves back as canonical FEEL, and an evaluator that walks it,
-with decimal numbers and FEEL's null semantics. `UDWorkflow-BPMN-Subset.md`
+with decimal numbers and FEEL's null semantics. `WorkflowKit-BPMN-Subset.md`
 lists what is in. A condition is a handful of nodes evaluated once per
 gateway pass, so the tree is walked directly; compiling it to bytecode for
 a small stack machine is the next step if measurement ever calls for it,
@@ -413,7 +413,7 @@ macOS:
    Later completed: `asyncAfter` on gateways and async continuations on
    boundary events (see Deviations for how `asyncAfter` behaves).
 4. ~~**External tasks.** Fetch-and-lock, the in-process worker behind
-   `UDServiceTaskHandler`, and BPMN errors from workers.~~ Done:
+   `WFServiceTaskHandler`, and BPMN errors from workers.~~ Done:
    `externalTaskService` fetches and locks by topic (priority, then age),
    completes, reports failures with a retry timeout and BPMN errors,
    extends and releases locks, and gives retries back, resolving the

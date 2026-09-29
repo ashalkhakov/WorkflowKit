@@ -1,10 +1,10 @@
-#import "UDWorkflow.h"
+#import "WorkflowKit.h"
 
-@interface UDDemoServices : NSObject <UDServiceTaskHandler>
+@interface WFDemoServices : NSObject <WFServiceTaskHandler>
 @end
 
-@implementation UDDemoServices
-- (void)performInvocation:(UDServiceInvocation *)invocation
+@implementation WFDemoServices
+- (void)performInvocation:(WFServiceInvocation *)invocation
 {
 	NSLog(@"service %@", invocation.topic);
 	if ([invocation.topic isEqualToString:@"erp.purchase-order"]) {
@@ -31,26 +31,26 @@
 }
 @end
 
-@interface UDDemoDelegate : NSObject <UDProcessEngineDelegate>
+@interface WFDemoDelegate : NSObject <WFProcessEngineDelegate>
 @end
 
-@implementation UDDemoDelegate
-- (void)processEngine:(UDProcessEngine *)engine taskCreated:(UDWorkItem *)task
+@implementation WFDemoDelegate
+- (void)processEngine:(WFProcessEngine *)engine taskCreated:(WFWorkItem *)task
 {
 	(void)engine;
 	NSLog(@"[%@] task %@ for %@", task.processInstanceId, task.taskDefinitionKey, task.assignee);
 }
-- (void)processEngine:(UDProcessEngine *)engine processInstanceEnded:(UDProcessInstance *)instance
+- (void)processEngine:(WFProcessEngine *)engine processInstanceEnded:(WFProcessInstance *)instance
 {
 	(void)engine;
 	NSLog(@"[%@] ended", instance.processInstanceId);
 }
 @end
 
-static UDProcessDefinition *
-UDPurchaseRequestDefinition(NSError **error)
+static WFProcessDefinition *
+WFPurchaseRequestDefinition(NSError **error)
 {
-	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"purchase-request"
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"purchase-request"
 	                                                 name:@"Purchase Request"];
 	[[[[b addStart:@"start"]
 		addUserTask:@"fill" name:@"Submit request" assignee:@"requester"]
@@ -70,10 +70,10 @@ UDPurchaseRequestDefinition(NSError **error)
 	return [b build:error];
 }
 
-static UDProcessDefinition *
-UDFulfillmentDefinition(NSError **error)
+static WFProcessDefinition *
+WFFulfillmentDefinition(NSError **error)
 {
-	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"order-fulfillment"
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"order-fulfillment"
 	                                                 name:@"Order Fulfillment"];
 	[[[[b addStart:@"start"]
 		addParallel:@"fork"]
@@ -89,47 +89,47 @@ UDFulfillmentDefinition(NSError **error)
 	return [b build:error];
 }
 
-static UDProcessDefinition *
-UDTimerWaitDefinition(NSError **error)
+static WFProcessDefinition *
+WFTimerWaitDefinition(NSError **error)
 {
-	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"timer-wait"
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"timer-wait"
 	                                                 name:@"Timer Wait"];
 	[[[b addStart:@"start"] addTimerCatch:@"wait" duration:0] addEnd:@"end"];
 	[[b connect:@"start" to:@"wait"] connect:@"wait" to:@"end"];
 	return [b build:error];
 }
 
-static UDProcessDefinition *
-UDMessageWaitDefinition(NSError **error)
+static WFProcessDefinition *
+WFMessageWaitDefinition(NSError **error)
 {
-	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"message-wait"
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"message-wait"
 	                                                 name:@"Message Wait"];
 	[[[b addStart:@"start"] addMessageCatch:@"go" message:@"go"] addEnd:@"end"];
 	[[b connect:@"start" to:@"go"] connect:@"go" to:@"end"];
 	return [b build:error];
 }
 
-static UDWorkItem *
-UDOpenTask(UDProcessEngine *engine, NSString *processInstanceId)
+static WFWorkItem *
+WFOpenTask(WFProcessEngine *engine, NSString *processInstanceId)
 {
 	return [[engine.taskService tasksForProcessInstance:processInstanceId] firstObject];
 }
 
 static NSDictionary *
-UDVariables(UDProcessEngine *engine, NSString *processInstanceId)
+WFVariables(WFProcessEngine *engine, NSString *processInstanceId)
 {
 	return [engine.historyService historicVariablesForProcessInstance:processInstanceId];
 }
 
 static BOOL
-UDEnded(UDProcessEngine *engine, NSString *processInstanceId)
+WFEnded(WFProcessEngine *engine, NSString *processInstanceId)
 {
 	return [[engine.historyService historicProcessInstanceWithId:processInstanceId] endTime] != nil;
 }
 
 /* Works the purchase request's user tasks until the instance ends. */
 static BOOL
-UDDrivePurchase(UDProcessEngine *engine,
+WFDrivePurchase(WFProcessEngine *engine,
 	NSDictionary *startVars,
 	NSDictionary *approvalVars,
 	NSError **error)
@@ -142,8 +142,8 @@ UDDrivePurchase(UDProcessEngine *engine,
 		return NO;
 	}
 	[engine waitUntilSettled:processInstanceId timeout:10.0];
-	UDWorkItem *task = nil;
-	while ((task = UDOpenTask(engine, processInstanceId)) != nil) {
+	WFWorkItem *task = nil;
+	while ((task = WFOpenTask(engine, processInstanceId)) != nil) {
 		NSDictionary *vars = [task.taskDefinitionKey isEqualToString:@"approve"]
 			? approvalVars : @{};
 		NSLog(@"complete %@", task.taskDefinitionKey);
@@ -152,30 +152,30 @@ UDDrivePurchase(UDProcessEngine *engine,
 		}
 		[engine waitUntilSettled:processInstanceId timeout:10.0];
 	}
-	NSLog(@"done ended=%d vars=%@", UDEnded(engine, processInstanceId),
-		UDVariables(engine, processInstanceId));
-	return UDEnded(engine, processInstanceId);
+	NSLog(@"done ended=%d vars=%@", WFEnded(engine, processInstanceId),
+		WFVariables(engine, processInstanceId));
+	return WFEnded(engine, processInstanceId);
 }
 
 /* An engine over the SQLite file at url. Deploying at every start is
  * cheap: unchanged definitions are recognised and not versioned again. */
-static UDProcessEngine *
-UDMakeEngine(NSURL *url, id<UDProcessEngineDelegate> delegate, NSError **error)
+static WFProcessEngine *
+WFMakeEngine(NSURL *url, id<WFProcessEngineDelegate> delegate, NSError **error)
 {
-	UDStore *store = [UDStore SQLiteStoreAtURL:url error:error];
+	WFStore *store = [WFStore SQLiteStoreAtURL:url error:error];
 	if (store == nil) {
 		return nil;
 	}
-	UDProcessEngine *engine = [[UDProcessEngine alloc] initWithStore:store];
+	WFProcessEngine *engine = [[WFProcessEngine alloc] initWithStore:store];
 	engine.delegate = delegate;
-	engine.serviceHandler = [[UDDemoServices alloc] init];
+	engine.serviceHandler = [[WFDemoServices alloc] init];
 	NSArray *definitions = @[
-		UDPurchaseRequestDefinition(error),
-		UDFulfillmentDefinition(error),
-		UDTimerWaitDefinition(error),
-		UDMessageWaitDefinition(error)
+		WFPurchaseRequestDefinition(error),
+		WFFulfillmentDefinition(error),
+		WFTimerWaitDefinition(error),
+		WFMessageWaitDefinition(error)
 	];
-	for (UDProcessDefinition *definition in definitions) {
+	for (WFProcessDefinition *definition in definitions) {
 		if ([engine.repositoryService deployDefinition:definition error:error] == nil) {
 			return nil;
 		}
@@ -187,7 +187,7 @@ UDMakeEngine(NSURL *url, id<UDProcessEngineDelegate> delegate, NSError **error)
 }
 
 static int
-UDFail(NSString *what, NSError *error)
+WFFail(NSString *what, NSError *error)
 {
 	NSLog(@"%@: %@", what, error);
 	return 1;
@@ -205,25 +205,25 @@ main(int argc, const char *argv[])
 			[NSString stringWithFormat:@"purchase-demo-%@.sqlite",
 				[[NSUUID UUID] UUIDString]]];
 		NSURL *url = [NSURL fileURLWithPath:path];
-		UDDemoDelegate *delegate = [[UDDemoDelegate alloc] init];
+		WFDemoDelegate *delegate = [[WFDemoDelegate alloc] init];
 		NSLog(@"store %@", path);
 
-		UDProcessEngine *engine = UDMakeEngine(url, delegate, &error);
+		WFProcessEngine *engine = WFMakeEngine(url, delegate, &error);
 		if (engine == nil) {
-			return UDFail(@"engine", error);
+			return WFFail(@"engine", error);
 		}
 
 		NSLog(@"--- amount 2500, approved ---");
-		if (!UDDrivePurchase(engine, @{ @"amount": @2500 }, @{ @"approved": @YES }, &error)) {
-			return UDFail(@"run failed", error);
+		if (!WFDrivePurchase(engine, @{ @"amount": @2500 }, @{ @"approved": @YES }, &error)) {
+			return WFFail(@"run failed", error);
 		}
 		NSLog(@"--- amount 2500, rejected ---");
-		if (!UDDrivePurchase(engine, @{ @"amount": @2500 }, @{ @"approved": @NO }, &error)) {
-			return UDFail(@"run failed", error);
+		if (!WFDrivePurchase(engine, @{ @"amount": @2500 }, @{ @"approved": @NO }, &error)) {
+			return WFFail(@"run failed", error);
 		}
 		NSLog(@"--- amount 400, auto ---");
-		if (!UDDrivePurchase(engine, @{ @"amount": @400 }, @{ @"approved": @YES }, &error)) {
-			return UDFail(@"run failed", error);
+		if (!WFDrivePurchase(engine, @{ @"amount": @400 }, @{ @"approved": @YES }, &error)) {
+			return WFFail(@"run failed", error);
 		}
 
 		NSLog(@"--- restart after the first user task ---");
@@ -231,25 +231,25 @@ main(int argc, const char *argv[])
 		                                                          variables:@{ @"amount": @2500 }
 		                                                              error:&error].processInstanceId;
 		if (liveId == nil) {
-			return UDFail(@"start failed", error);
+			return WFFail(@"start failed", error);
 		}
 		[engine close];
 		engine = nil;
-		engine = UDMakeEngine(url, delegate, &error);
+		engine = WFMakeEngine(url, delegate, &error);
 		if (engine == nil) {
-			return UDFail(@"reopen", error);
+			return WFFail(@"reopen", error);
 		}
-		UDWorkItem *task = nil;
-		while ((task = UDOpenTask(engine, liveId)) != nil) {
+		WFWorkItem *task = nil;
+		while ((task = WFOpenTask(engine, liveId)) != nil) {
 			NSDictionary *vars = [task.taskDefinitionKey isEqualToString:@"approve"]
 				? @{ @"approved": @YES } : @{};
 			if (![engine.taskService completeTask:task.taskId variables:vars error:&error]) {
-				return UDFail(@"resume failed", error);
+				return WFFail(@"resume failed", error);
 			}
 			[engine waitUntilSettled:liveId timeout:10.0];
 		}
-		NSLog(@"restored ended=%d vars=%@", UDEnded(engine, liveId), UDVariables(engine, liveId));
-		if (!UDEnded(engine, liveId)) {
+		NSLog(@"restored ended=%d vars=%@", WFEnded(engine, liveId), WFVariables(engine, liveId));
+		if (!WFEnded(engine, liveId)) {
 			return 1;
 		}
 
@@ -258,12 +258,12 @@ main(int argc, const char *argv[])
 		                                                        variables:@{ @"orderId": @"SO-1" }
 		                                                            error:&error].processInstanceId;
 		[engine waitUntilSettled:order timeout:10.0];
-		NSDictionary *orderVars = UDVariables(engine, order);
-		if (!UDEnded(engine, order)
+		NSDictionary *orderVars = WFVariables(engine, order);
+		if (!WFEnded(engine, order)
 		    || ![[orderVars objectForKey:@"picked"] boolValue]
 		    || ![[orderVars objectForKey:@"charged"] boolValue]
 		    || ![[orderVars objectForKey:@"shipped"] boolValue]) {
-			return UDFail(@"fulfillment failed", error);
+			return WFFail(@"fulfillment failed", error);
 		}
 		NSLog(@"fulfillment ok vars=%@", orderVars);
 
@@ -272,8 +272,8 @@ main(int argc, const char *argv[])
 		                                                        variables:nil
 		                                                            error:&error].processInstanceId;
 		[engine waitUntilSettled:timed timeout:10.0];
-		if (!UDEnded(engine, timed)) {
-			return UDFail(@"timer run failed", error);
+		if (!WFEnded(engine, timed)) {
+			return WFFail(@"timer run failed", error);
 		}
 
 		NSLog(@"--- message catch ---");
@@ -281,37 +281,37 @@ main(int argc, const char *argv[])
 		                                         businessKey:@"M-1"
 		                                           variables:nil
 		                                               error:&error] == nil) {
-			return UDFail(@"message start failed", error);
+			return WFFail(@"message start failed", error);
 		}
 		if (![engine.runtimeService correlateMessage:@"go"
 		                                 businessKey:@"M-1"
 		                             correlationKeys:nil
 		                                   variables:@{ @"acked": @YES }
 		                                       error:&error]) {
-			return UDFail(@"correlate failed", error);
+			return WFFail(@"correlate failed", error);
 		}
 
 		NSLog(@"--- BPMN 2.0 round-trip ---");
-		UDProcessDefinition *definition = UDPurchaseRequestDefinition(&error);
-		NSString *purchaseXML = [UDBpmnWriter XMLStringFromDefinition:definition error:&error];
+		WFProcessDefinition *definition = WFPurchaseRequestDefinition(&error);
+		NSString *purchaseXML = [WFBpmnWriter XMLStringFromDefinition:definition error:&error];
 		if (purchaseXML == nil) {
-			return UDFail(@"export purchase failed", error);
+			return WFFail(@"export purchase failed", error);
 		}
 		NSLog(@"%@", purchaseXML);
-		UDProcessDefinition *importedPurchase =
-			[UDBpmnReader definitionFromXMLString:purchaseXML error:&error];
+		WFProcessDefinition *importedPurchase =
+			[WFBpmnReader definitionFromXMLString:purchaseXML error:&error];
 		if (importedPurchase == nil) {
-			return UDFail(@"import purchase failed", error);
+			return WFFail(@"import purchase failed", error);
 		}
 		/* The imported copy writes back to the same BPMN, so deploying it
 		 * is a duplicate: still version 1. */
-		UDDeployment *redeployed =
+		WFDeployment *redeployed =
 			[engine.repositoryService deployDefinition:importedPurchase error:&error];
 		if ([[redeployed.definitions lastObject] version] != 1) {
-			return UDFail(@"round-tripped definition was versioned again", error);
+			return WFFail(@"round-tripped definition was versioned again", error);
 		}
-		if (!UDDrivePurchase(engine, @{ @"amount": @400 }, @{ @"approved": @YES }, &error)) {
-			return UDFail(@"imported purchase run failed", error);
+		if (!WFDrivePurchase(engine, @{ @"amount": @400 }, @{ @"approved": @YES }, &error)) {
+			return WFFail(@"imported purchase run failed", error);
 		}
 		[engine close];
 		[[NSFileManager defaultManager] removeItemAtPath:path error:NULL];

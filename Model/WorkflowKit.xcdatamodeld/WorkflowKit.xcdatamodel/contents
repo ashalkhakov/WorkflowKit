@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="1">
+    <entity name="WFDefinitionRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="historyTimeToLive" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
+        <attribute name="key" attributeType="String"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="resourceName" attributeType="String"/>
+        <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="version" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFDeployment" inverseName="definitions" inverseEntity="WFDeployment"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="definitionId"/>
+            </uniquenessConstraint>
+            <uniquenessConstraint>
+                <constraint value="key"/>
+                <constraint value="version"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <fetchIndex name="byKeyVersion">
+            <fetchIndexElement property="key" type="Binary" order="ascending"/>
+            <fetchIndexElement property="version" type="Binary" order="descending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFDeployment" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="deployedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deploymentId" attributeType="String"/>
+        <attribute name="name" attributeType="String"/>
+        <relationship name="definitions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFDefinitionRecord" inverseName="deployment" inverseEntity="WFDefinitionRecord"/>
+        <relationship name="resources" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFResource" inverseName="deployment" inverseEntity="WFResource"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="deploymentId"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <fetchIndex name="byName">
+            <fetchIndexElement property="name" type="Binary" order="ascending"/>
+            <fetchIndexElement property="deployedAt" type="Binary" order="descending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFResource" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="bytes" attributeType="Binary"/>
+        <attribute name="name" attributeType="String"/>
+        <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFDeployment" inverseName="resources" inverseEntity="WFDeployment"/>
+    </entity>
+    <entity name="WFExecution" representedClassName="WFExecutionEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="businessKey" optional="YES" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="executionId" attributeType="String"/>
+        <attribute name="isActive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="isCompensation" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isConcurrent" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isMultiInstanceBody" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isScope" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lockRevision" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="superProcessInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFExecution" inverseName="parent" inverseEntity="WFExecution"/>
+        <relationship name="eventSubscriptions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFEventSubscription" inverseName="execution" inverseEntity="WFEventSubscription"/>
+        <relationship name="externalTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFExternalTask" inverseName="execution" inverseEntity="WFExternalTask"/>
+        <relationship name="incidents" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFIncident" inverseName="execution" inverseEntity="WFIncident"/>
+        <relationship name="jobs" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFJob" inverseName="execution" inverseEntity="WFJob"/>
+        <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="children" inverseEntity="WFExecution"/>
+        <relationship name="subProcessInstance" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="WFExecution" inverseName="superExecution" inverseEntity="WFExecution"/>
+        <relationship name="superExecution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="subProcessInstance" inverseEntity="WFExecution"/>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFTask" inverseName="execution" inverseEntity="WFTask"/>
+        <relationship name="variables" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFVariable" inverseName="execution" inverseEntity="WFVariable"/>
+        <fetchIndex name="byExecutionId">
+            <fetchIndexElement property="executionId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byBusinessKey">
+            <fetchIndexElement property="businessKey" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="bySuperProcessInstance">
+            <fetchIndexElement property="superProcessInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFVariable" representedClassName="WFVariableEntity" syncable="YES">
+        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="textValue" optional="YES" attributeType="String"/>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="variableId" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="variables" inverseEntity="WFExecution"/>
+        <fetchIndex name="byNameText">
+            <fetchIndexElement property="name" type="Binary" order="ascending"/>
+            <fetchIndexElement property="textValue" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFTask" representedClassName="WFTaskEntity" syncable="YES">
+        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="assignee" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="priority" attributeType="Integer 32" defaultValueString="50" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="taskDefinitionKey" attributeType="String"/>
+        <attribute name="taskId" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="tasks" inverseEntity="WFExecution"/>
+        <fetchIndex name="byTaskId">
+            <fetchIndexElement property="taskId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byAssignee">
+            <fetchIndexElement property="assignee" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFEventSubscription" representedClassName="WFEventSubscriptionEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="definitionId" optional="YES" attributeType="String"/>
+        <attribute name="eventName" attributeType="String"/>
+        <attribute name="eventType" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="subscriptionId" attributeType="String"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="eventSubscriptions" inverseEntity="WFExecution"/>
+        <fetchIndex name="byEvent">
+            <fetchIndexElement property="eventType" type="Binary" order="ascending"/>
+            <fetchIndexElement property="eventName" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFJob" representedClassName="WFJobEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="definitionId" optional="YES" attributeType="String"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="exceptionMessage" optional="YES" attributeType="String"/>
+        <attribute name="exclusive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="jobId" attributeType="String"/>
+        <attribute name="jobType" attributeType="String"/>
+        <attribute name="lockExpiration" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lockOwner" optional="YES" attributeType="String"/>
+        <attribute name="priority" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="repeat" optional="YES" attributeType="String"/>
+        <attribute name="retries" attributeType="Integer 32" defaultValueString="3" usesScalarValueType="YES"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="jobs" inverseEntity="WFExecution"/>
+        <fetchIndex name="byDue">
+            <fetchIndexElement property="dueDate" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFExternalTask" representedClassName="WFExternalTaskEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="errorMessage" optional="YES" attributeType="String"/>
+        <attribute name="externalTaskId" attributeType="String"/>
+        <attribute name="lockExpiration" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="priority" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="retries" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
+        <attribute name="topic" attributeType="String"/>
+        <attribute name="workerId" optional="YES" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="externalTasks" inverseEntity="WFExecution"/>
+        <fetchIndex name="byTopic">
+            <fetchIndexElement property="topic" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricProcessInstance" representedClassName="WFHistoricProcessInstanceEntity" syncable="YES">
+        <attribute name="businessKey" optional="YES" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="definitionKey" attributeType="String"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="state" attributeType="String"/>
+        <attribute name="superProcessInstanceId" optional="YES" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricVariable" representedClassName="WFHistoricVariableEntity" syncable="YES">
+        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="scopeIsProcessInstance" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="textValue" optional="YES" attributeType="String"/>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="variableId" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byVariableId">
+            <fetchIndexElement property="variableId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFIncident" representedClassName="WFIncidentEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="configuration" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="incidentId" attributeType="String"/>
+        <attribute name="incidentType" attributeType="String"/>
+        <attribute name="message" optional="YES" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="incidents" inverseEntity="WFExecution"/>
+        <fetchIndex name="byConfiguration">
+            <fetchIndexElement property="configuration" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricActivityInstance" representedClassName="WFHistoricActivityInstanceEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="activityInstanceId" attributeType="String"/>
+        <attribute name="activityName" optional="YES" attributeType="String"/>
+        <attribute name="activityType" attributeType="String"/>
+        <attribute name="calledProcessInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="canceled" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byActivityInstance">
+            <fetchIndexElement property="activityInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricTaskInstance" representedClassName="WFHistoricTaskInstanceEntity" syncable="YES">
+        <attribute name="assignee" optional="YES" attributeType="String"/>
+        <attribute name="deleteReason" optional="YES" attributeType="String"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="taskDefinitionKey" attributeType="String"/>
+        <attribute name="taskId" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byTaskId">
+            <fetchIndexElement property="taskId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricVariableUpdate" representedClassName="WFHistoricVariableUpdateEntity" syncable="YES">
+        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="textValue" optional="YES" attributeType="String"/>
+        <attribute name="time" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="variableId" attributeType="String"/>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricIncident" representedClassName="WFHistoricIncidentEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="configuration" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="incidentId" attributeType="String"/>
+        <attribute name="incidentType" attributeType="String"/>
+        <attribute name="message" optional="YES" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="state" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byIncidentId">
+            <fetchIndexElement property="incidentId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricJobLog" representedClassName="WFHistoricJobLogEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="exceptionMessage" optional="YES" attributeType="String"/>
+        <attribute name="jobId" attributeType="String"/>
+        <attribute name="jobType" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="retries" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="state" attributeType="String"/>
+        <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFProperty" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="name" attributeType="String"/>
+        <attribute name="value" optional="YES" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="name"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+</model>

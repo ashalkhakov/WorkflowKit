@@ -9,12 +9,12 @@ PurchaseRequestDemo_OBJC_FILES = PurchaseRequestDemo.m
 PurchaseRequestDemo_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 PurchaseRequestDemo_INCLUDE_DIRS = -I../Headers
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)
-PurchaseRequestDemo_TOOL_LIBS += -lUDWorkflow -lCoreData -ldispatch
+PurchaseRequestDemo_TOOL_LIBS += -lWorkflowKit -lCoreData -ldispatch
 
 include $(GNUSTEP_MAKEFILES)/tool.make
 
 .PHONY: run
 run: all
 	LD_LIBRARY_PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$$LD_LIBRARY_PATH" \
-	UDWORKFLOW_MODEL="$(CURDIR)/../UDWorkflow/Versions/0/Resources/UDWorkflow.momd" \
+	WORKFLOWKIT_MODEL="$(CURDIR)/../WorkflowKit/Versions/0/Resources/WorkflowKit.momd" \
 	  $(GNUSTEP_OBJ_DIR)/PurchaseRequestDemo

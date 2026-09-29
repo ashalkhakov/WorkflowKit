@@ -12,7 +12,7 @@
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
 container=${GNUSTEP_CONTAINER:-ois-dev}
-dest=/w/udworkflow
+dest=/w/workflowkit
 
 if ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
   echo "container $container is not running (docker ps -a | grep $container)" >&2

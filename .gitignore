@@ -10,4 +10,4 @@ DerivedData/
 # momc output
 *.momd
 # the library resource bundle gnustep-make builds
-/UDWorkflow/
+/WorkflowKit/

@@ -1,6 +1,6 @@
-# UDWorkflow on GNUstep.
+# WorkflowKit on GNUstep.
 #
-#   make                 the library, obj/libUDWorkflow.so
+#   make                 the library, obj/libWorkflowKit.so
 #   make examples        the demo tools in Examples/
 #   make test            the library, then the XCTest suite (tools-xctest)
 #
@@ -8,63 +8,63 @@
 # GNUstep: see CLAUDE.md for the docker box and CI for the pinned recipe.
 #
 # A library rather than a framework, like RDLKit: on GNUstep a framework puts
-# its binary under UDWorkflow.framework/Versions/<v>/<target>/, which every
+# its binary under WorkflowKit.framework/Versions/<v>/<target>/, which every
 # tool and test bundle in the tree then has to name to link against it.
 include $(GNUSTEP_MAKEFILES)/common.make
 
-LIBRARY_NAME = UDWorkflow
+LIBRARY_NAME = WorkflowKit
 
-UDWorkflow_OBJC_FILES = \
-	Source/UDFlowElements.m \
-	Source/UDFeelLexer.m \
-	Source/UDFeelParser.m \
-	Source/UDFeelEvaluator.m \
-	Source/UDFeelFunctions.m \
-	Source/UDFeelTemporal.m \
-	Source/UDFeel.m \
-	Source/UDTimers.m \
-	Source/UDProcessDefinition.m \
-	Source/UDHandlers.m \
-	Source/UDStore.m \
-	Source/UDRepositoryService.m \
-	Source/UDDuration.m \
-	Source/UDBpmn.m \
-	Source/UDEntities.m \
-	Source/UDCommandContext.m \
-	Source/UDServices.m \
-	Source/UDExternalTaskService.m \
-	Source/UDProcessEngine.m
+WorkflowKit_OBJC_FILES = \
+	Source/WFFlowElements.m \
+	Source/WFFeelLexer.m \
+	Source/WFFeelParser.m \
+	Source/WFFeelEvaluator.m \
+	Source/WFFeelFunctions.m \
+	Source/WFFeelTemporal.m \
+	Source/WFFeel.m \
+	Source/WFTimers.m \
+	Source/WFProcessDefinition.m \
+	Source/WFHandlers.m \
+	Source/WFStore.m \
+	Source/WFRepositoryService.m \
+	Source/WFDuration.m \
+	Source/WFBpmn.m \
+	Source/WFEntities.m \
+	Source/WFCommandContext.m \
+	Source/WFServices.m \
+	Source/WFExternalTaskService.m \
+	Source/WFProcessEngine.m
 
-UDWorkflow_HEADER_FILES_DIR = Headers
-UDWorkflow_HEADER_FILES_INSTALL_DIR = UDWorkflow
-UDWorkflow_HEADER_FILES = \
-	UDTypes.h \
-	UDCondition.h \
-	UDFeel.h \
-	UDFlowElements.h \
-	UDProcessDefinition.h \
-	UDHandlers.h \
-	UDStore.h \
-	UDRepositoryService.h \
-	UDRuntimeService.h \
-	UDTaskService.h \
-	UDHistoryService.h \
-	UDManagementService.h \
-	UDExternalTaskService.h \
-	UDProcessEngine.h \
-	UDBpmn.h \
-	UDWorkflow.h
+WorkflowKit_HEADER_FILES_DIR = Headers
+WorkflowKit_HEADER_FILES_INSTALL_DIR = WorkflowKit
+WorkflowKit_HEADER_FILES = \
+	WFTypes.h \
+	WFCondition.h \
+	WFFeel.h \
+	WFFlowElements.h \
+	WFProcessDefinition.h \
+	WFHandlers.h \
+	WFStore.h \
+	WFRepositoryService.h \
+	WFRuntimeService.h \
+	WFTaskService.h \
+	WFHistoryService.h \
+	WFManagementService.h \
+	WFExternalTaskService.h \
+	WFProcessEngine.h \
+	WFBpmn.h \
+	WorkflowKit.h
 
-UDWorkflow_INCLUDE_DIRS = -IHeaders
-UDWorkflow_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
-UDWorkflow_LIBRARIES_DEPEND_UPON += -lCoreData -ldispatch $(FND_LIBS) $(OBJC_LIBS)
+WorkflowKit_INCLUDE_DIRS = -IHeaders
+WorkflowKit_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
+WorkflowKit_LIBRARIES_DEPEND_UPON += -lCoreData -ldispatch $(FND_LIBS) $(OBJC_LIBS)
 
 # The store's Core Data model, compiled by FreeCoreData's momc into
-# UDWorkflow.momd and installed in the library's resource bundle, where
+# WorkflowKit.momd and installed in the library's resource bundle, where
 # +[NSBundle bundleForClass:] finds it. Uninstalled, the test bundle and
 # the examples carry their own copy.
-UDWorkflow_XCDATAMODELD_FILES = Model/UDWorkflow.xcdatamodeld
-UDWorkflow_HAS_RESOURCE_BUNDLE = yes
+WorkflowKit_XCDATAMODELD_FILES = Model/WorkflowKit.xcdatamodeld
+WorkflowKit_HAS_RESOURCE_BUNDLE = yes
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 

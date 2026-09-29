@@ -102,7 +102,7 @@ jobs:
         run: ../gnustep-patches/Scripts/build-gnustep.sh --verify-only
 
       # The framework, and momc with the coredata-model.make fragment that
-      # compiles Model/UDWorkflow.xcdatamodeld. Built after the stack is
+      # compiles Model/WorkflowKit.xcdatamodeld. Built after the stack is
       # restored, so it is not part of the cached prefix.
       - name: Build and install FreeCoreData
         working-directory: ${{ github.workspace }}/FreeCoreData

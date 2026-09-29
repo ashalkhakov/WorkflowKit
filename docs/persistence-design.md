@@ -1,6 +1,6 @@
 # Durable execution on Core Data — design
 
-> **Superseded** by [execution-model.md](execution-model.md): UDWorkflow now
+> **Superseded** by [execution-model.md](execution-model.md): WorkflowKit now
 > follows Camunda 7's execution model, and the token-marking engine this page
 > describes was removed with step 2 of that design. Kept for the record.
 
@@ -23,7 +23,7 @@ rules out several engines sharing one database later.
 
 ## The store is a Core Data stack
 
-`UDStore` owns a coordinator and one private-queue context, and runs every
+`WFStore` owns a coordinator and one private-queue context, and runs every
 call on it; after each save it resets the context, so no rows stay resident
 between units of work. It is opened with a store type and URL, so the backend
 is a configuration choice:
@@ -36,19 +36,19 @@ is a configuration choice:
 
 The model is compiled from an `.xcdatamodeld`, so the library has a momc build step and the same model runs on Apple's Core Data and FreeCoreData.
 
-`UDStore` is a class, not a protocol: there is one implementation, and the
+`WFStore` is a class, not a protocol: there is one implementation, and the
 backends vary underneath it through Core Data.
 
 ### Entities
 
-`Model/UDWorkflow.xcdatamodeld`:
+`Model/WorkflowKit.xcdatamodeld`:
 
 | Entity | Attributes | Notes |
 |---|---|---|
-| `UDDeployment` | processId, version, bpmn, deployedAt | Unique (processId, version). Redeploying different BPMN under the same version is an error. |
-| `UDInstance` | instanceId, processId, version, status, state, error fields, createdAt, updatedAt | `state` is a binary plist of tokens, variables, fork counters, token serial and embedded subprocess children. Core Data's `Z_OPT` is the optimistic version. |
-| `UDJob` | jobId, instanceId, tokenId, kind, actionKey, dueAt, attempts, owner, lockedUntil, lastError | kind = service or timer. |
-| `UDCorrelation` | instanceId, key, value | Values are tagged text (`s:SO-9`, `n:7`), so a string and a number never match. |
+| `WFDeployment` | processId, version, bpmn, deployedAt | Unique (processId, version). Redeploying different BPMN under the same version is an error. |
+| `WFInstance` | instanceId, processId, version, status, state, error fields, createdAt, updatedAt | `state` is a binary plist of tokens, variables, fork counters, token serial and embedded subprocess children. Core Data's `Z_OPT` is the optimistic version. |
+| `WFJob` | jobId, instanceId, tokenId, kind, actionKey, dueAt, attempts, owner, lockedUntil, lastError | kind = service or timer. |
+| `WFCorrelation` | instanceId, key, value | Values are tagged text (`s:SO-9`, `n:7`), so a string and a number never match. |
 
 `status` is active / completed / failed, so listing and cleanup queries never
 unpack `state`.
@@ -111,7 +111,7 @@ is sent to the handler only after that commit. The result arrives as a new
 unit of work, whose commit deletes the job; a result for a token that has
 moved on is stale and only drops the job. `-openWithError:` sends every
 service job in the store again, so delivery is at-least-once, and
-`UDServiceInvocation.jobId` — the same across repeats — is the idempotency
+`WFServiceInvocation.jobId` — the same across repeats — is the idempotency
 key handlers use to spot a repeat.
 
 A **timer** puts an absolute `dueAt` on its token; the commit writes a timer
@@ -122,7 +122,7 @@ due fire in the step that reaches them. A timer unit that cannot commit
 backs the scheduler off for a second rather than spinning.
 
 **Failures** (next, step 4): a failed service job is retried with backoff
-(`ud:retries`, default 3). When retries run out, it becomes an incident: the
+(`wf:retries`, default 3). When retries run out, it becomes an incident: the
 token and the instance are marked incident, and nothing else in the instance
 is failed. `retryIncident:` resets the job. An error boundary still takes
 precedence over retrying. Today a failed service call without an error
@@ -131,7 +131,7 @@ boundary fails the instance.
 ## Definitions
 
 `-deployDefinition:error:` makes a definition runnable in the engine and
-records its BPMN in `UDDeployment`. Instances run on the definitions deployed
+records its BPMN in `WFDeployment`. Instances run on the definitions deployed
 into the engine, so an application deploys every version that may still have
 instances before `-openWithError:`. The stored BPMN is not yet enough to
 rebuild every definition (the writer emits a subprocess as a reference, and
@@ -141,7 +141,7 @@ the engine can load a definition it was not handed from the store.
 ## API
 
 ```objc
-UDEngine *engine = [[UDEngine alloc] initWithStore:[UDStore SQLiteStoreAtURL:url error:&error]];
+WFEngine *engine = [[WFEngine alloc] initWithStore:[WFStore SQLiteStoreAtURL:url error:&error]];
 engine.serviceHandler = handler;
 [engine deployDefinition:definition error:&error];
 [engine openWithError:&error];            /* resend service jobs, arm timers */
@@ -150,14 +150,14 @@ NSString *instanceId = [engine startProcess:@"purchase" variables:vars error:&er
 [engine completeUserTask:tokenId instanceId:instanceId variables:vars error:&error];
 [engine deliverMessage:@"paid" payload:vars instanceId:instanceId error:&error];
 [engine deliverMessage:@"paid" payload:vars correlationKey:@"orderId" value:@"SO-9" error:&error];
-UDProcessInstance *snapshot = [engine instanceWithId:instanceId error:&error];
+WFProcessInstance *snapshot = [engine instanceWithId:instanceId error:&error];
 [engine waitUntilSettled:instanceId timeout:10];   /* service calls in flight */
 ```
 
 Each call returns once its own unit is committed. `waitUntilSettled:` waits
 for the service calls the instance has in flight; timers and user tasks are
 waits, not work. Delegates and the user-task port receive a
-`UDProcessInstance` snapshot.
+`WFProcessInstance` snapshot.
 
 ## Left open for later, on purpose
 
@@ -172,7 +172,7 @@ waits, not work. Delegates and the user-task port receive a
 
 Each step lands with its tests green on GNUstep and macOS:
 
-1. ~~`UDStore` over the model; `UDMemoryStore` replaced by its in-memory
+1. ~~`WFStore` over the model; `WFMemoryStore` replaced by its in-memory
    configuration; commit per unit of work.~~
 2. ~~Service jobs with the outbox and recovery; absolute timers and the
    single scheduler.~~

@@ -1,8 +1,8 @@
-# UDWorkflow
+# WorkflowKit
 
 A BPMN 2.0 workflow engine in Objective-C (ARC, libdispatch) for GNUstep and
 Cocoa. `Headers/` and `Source/` are the engine library, `Examples/` the demo
-tools, `Tests/` the XCTest suite. `UDWorkflow-BPMN-Subset.md` is the scope:
+tools, `Tests/` the XCTest suite. `WorkflowKit-BPMN-Subset.md` is the scope:
 what the engine loads, persists and fires, and what it rejects.
 
 ## Build against the patched GNUstep, never a distro one
@@ -22,14 +22,14 @@ reproduction into a test in GNUstep's own suite, and push it there.
 
 The engine follows Camunda 7's execution model: `docs/execution-model.md`
 is the design, and Camunda's documented behaviour settles open questions.
-UDWorkflow is meant to be LGPL-licensed and Camunda 7 is Apache-2.0, so work
+WorkflowKit is meant to be LGPL-licensed and Camunda 7 is Apache-2.0, so work
 from its public documentation and the BPMN spec only. Never read, copy or
 paraphrase its source code, SQL or documentation text into this repository.
 
 ## Building and testing
 
 ```sh
-make                 # obj/libUDWorkflow.so
+make                 # obj/libWorkflowKit.so
 make examples        # Examples/obj/PurchaseRequestDemo
 make test            # the library, then the XCTest bundle under xctest
 ```
@@ -43,21 +43,21 @@ roots the gnustep layout knows.
 
 The store is Core Data: FreeCoreData on GNUstep (installed in `ois-dev`,
 built from the pinned `FREECOREDATA_REF` in CI), Apple's on macOS. Its model
-is `Model/UDWorkflow.xcdatamodeld`, compiled by `momc`; edit it there, never
+is `Model/WorkflowKit.xcdatamodeld`, compiled by `momc`; edit it there, never
 build a model in code. Uninstalled, the library finds the model through
-`UDWORKFLOW_MODEL` (`make -C Examples run` sets it) or a copy in the calling
+`WORKFLOWKIT_MODEL` (`make -C Examples run` sets it) or a copy in the calling
 bundle (the test bundle carries one).
 
 ## macOS
 
-`UDWorkflow.xcworkspace` holds `UDWorkflow.xcodeproj`: the `UDWorkflow`
-framework, the `UDWorkflowTests` bundle and the `PurchaseRequestDemo` tool,
+`WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`
+framework, the `WorkflowKitTests` bundle and the `PurchaseRequestDemo` tool,
 with shared settings in `Xcode/Configs` (the same as ODataKit's). The project
 is generated from the GNUmakefiles' source lists, so after adding a file run
 `python3 .tools/genxcodeproj.py` rather than editing `project.pbxproj`.
 
 ```sh
-xcodebuild -workspace UDWorkflow.xcworkspace -scheme UDWorkflow \
+xcodebuild -workspace WorkflowKit.xcworkspace -scheme WorkflowKit \
     -destination 'platform=macOS' test
 ```
 
@@ -65,9 +65,9 @@ xcodebuild -workspace UDWorkflow.xcworkspace -scheme UDWorkflow \
 
 - Dispatch objects are Objective-C objects only on Apple. On GNUstep
   `OS_OBJECT_USE_OBJC` is 0, so a `dispatch_queue_t` cannot be `strong` or go
-  into a collection. Properties use `UD_DISPATCH_PROPERTY` with setters that
-  retain, owners release with `UDDispatchRelease`, and a timer source goes
-  into the engine's table inside a `UDTimerHandle`.
+  into a collection. Properties use `WF_DISPATCH_PROPERTY` with setters that
+  retain, owners release with `WFDispatchRelease`, and a timer source goes
+  into the engine's table inside a `WFTimerHandle`.
 - tools-xctest's `XCTAssertEqualWithAccuracy` needs floating-point
   arguments: write `10.0`, not `10`.
 - gnustep-base's `NSPredicate` parser takes only object arguments: pass
