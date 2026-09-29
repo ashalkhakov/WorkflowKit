@@ -1,6 +1,6 @@
 # Execution model
 
-Status: adopted; steps 1 to 4 (repository, core, jobs, external tasks) implemented. Replaces the token-marking model of
+Status: adopted and implemented, steps 1 to 5; what each step left out is noted under Implementation order. Replaces the token-marking model of
 `persistence-design.md`, which describes the code as it stands today.
 
 ## Reference, and the clean-room rule
@@ -334,7 +334,11 @@ macOS:
    incident. The in-process worker is a client of it. Not yet: reading
    `camunda:taskPriority`, so every task has priority 0, and choosing
    which variables a fetch returns.
-5. **History**, by level.
+5. ~~**History**, by level.~~ Done: process, activity and task instances
+   (canceled ones marked), latest variable values, and at FULL every
+   variable update, incidents from open to resolved or deleted, and the
+   job log. Not yet: removing history after a time to live, and recording
+   the level in the database so that engines sharing it agree.
 
 The token engine is removed at step 2. After that come standard BPMN
 reading (phase 2) and the remaining constructs (phase 5), each one following

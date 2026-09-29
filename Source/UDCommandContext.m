@@ -15,6 +15,42 @@ static NSString * const UDExternalTaskName = @"UDExternalTask";
 static NSString * const UDIncidentName = @"UDIncident";
 static NSString * const UDHistoricInstanceName = @"UDHistoricProcessInstance";
 static NSString * const UDHistoricVariableName = @"UDHistoricVariable";
+static NSString * const UDHistoricActivityName = @"UDHistoricActivityInstance";
+static NSString * const UDHistoricTaskName = @"UDHistoricTaskInstance";
+static NSString * const UDHistoricUpdateName = @"UDHistoricVariableUpdate";
+static NSString * const UDHistoricIncidentName = @"UDHistoricIncident";
+static NSString * const UDHistoricJobLogName = @"UDHistoricJobLog";
+
+/* The BPMN element a node is, as history names activity types. */
+static NSString *
+UDActivityType(UDFlowNode *node)
+{
+	if ([node isKindOfClass:[UDEvent class]]) {
+		switch ([(UDEvent *)node kind]) {
+		case UDEventKindStart: return @"startEvent";
+		case UDEventKindEnd: return @"endEvent";
+		case UDEventKindIntermediateCatch: return @"intermediateCatchEvent";
+		case UDEventKindIntermediateThrow: return @"intermediateThrowEvent";
+		case UDEventKindBoundary: return @"boundaryEvent";
+		}
+	}
+	if ([node isKindOfClass:[UDTask class]]) {
+		switch ([(UDTask *)node kind]) {
+		case UDTaskKindUser: return @"userTask";
+		case UDTaskKindService: return @"serviceTask";
+		case UDTaskKindScript: return @"scriptTask";
+		}
+	}
+	if ([node isKindOfClass:[UDGateway class]]) {
+		switch ([(UDGateway *)node kind]) {
+		case UDGatewayKindExclusive: return @"exclusiveGateway";
+		case UDGatewayKindParallel: return @"parallelGateway";
+		case UDGatewayKindInclusive: return @"inclusiveGateway";
+		case UDGatewayKindEventBased: return @"eventBasedGateway";
+		}
+	}
+	return [node isKindOfClass:[UDSubProcess class]] ? @"subProcess" : @"activity";
+}
 
 static NSError *
 UDCommandError(UDWorkflowErrorCode code, NSString *message)
@@ -31,6 +67,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	NSError *_failure;
 	NSMutableDictionary *_definitions;
 	NSMutableDictionary *_historicVariables;
+	NSMutableDictionary *_openActivities;
 }
 
 - (instancetype)initWithEngine:(UDProcessEngine *)engine
@@ -43,6 +80,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		_afterCommit = [NSMutableArray array];
 		_definitions = [NSMutableDictionary dictionary];
 		_historicVariables = [NSMutableDictionary dictionary];
+		_openActivities = [NSMutableDictionary dictionary];
 	}
 	return self;
 }
@@ -275,7 +313,8 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	root.isScope = YES;
 	root.isActive = YES;
 
-	UDHistoricProcessInstanceEntity *history = [self insert:UDHistoricInstanceName];
+	UDHistoricProcessInstanceEntity *history =
+		[self records:UDHistoryLevelActivity] ? [self insert:UDHistoricInstanceName] : nil;
 	history.processInstanceId = root.processInstanceId;
 	history.businessKey = businessKey;
 	history.definitionId = definition.definitionId;
@@ -328,6 +367,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	execution.activityId = node.elementId;
 	execution.activityInstanceId = [UDCommandContext newId];
 	execution.isActive = YES;
+	[self activityStarted:node execution:execution];
 	if (![self isScopeActivity:node scope:scope]) {
 		[self execute:node scope:scope execution:execution];
 		return;
@@ -391,6 +431,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		if (event.trigger == UDEventTriggerMessage) {
 			[self throwMessage:event execution:execution];
 		}
+		[self activityEnded:execution.activityInstanceId canceled:NO];
 		[self endPath:execution];
 		return;
 	case UDEventKindIntermediateCatch:
@@ -465,6 +506,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	job.retries = (int32_t)attempts;
 	job.exclusive = node.isExclusive;
 	job.execution = execution;
+	[self historyJob:job state:UDJobLogStateCreated];
 	NSString *jobId = job.jobId;
 	NSString *processInstanceId = job.processInstanceId;
 	BOOL exclusive = job.exclusive;
@@ -490,6 +532,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 
 - (void)runJob:(UDJobEntity *)job
 {
+	[self historyJob:job state:UDJobLogStateSuccessful];
 	NSString *type = job.jobType;
 	if ([type isEqualToString:UDJobTypeTimerStart]) {
 		NSError *error = nil;
@@ -537,6 +580,17 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	incident.processInstanceId = processInstanceId;
 	incident.createdAt = [NSDate date];
 	incident.execution = execution;
+	if ([self records:UDHistoryLevelFull]) {
+		UDHistoricIncidentEntity *row = [self insert:UDHistoricIncidentName];
+		row.incidentId = incident.incidentId;
+		row.incidentType = type;
+		row.configuration = configuration;
+		row.message = message;
+		row.activityId = activityId;
+		row.processInstanceId = processInstanceId;
+		row.createdAt = incident.createdAt;
+		row.state = UDIncidentStateOpen;
+	}
 }
 
 - (void)resolveIncidentsFor:(NSString *)configuration
@@ -546,6 +600,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	                                         @"configuration == %@", configuration]
 	                                          sort:nil
 	                                         limit:0]) {
+		[self incident:incident.incidentId endedAs:UDIncidentStateResolved];
 		[self remove:incident];
 	}
 }
@@ -566,11 +621,14 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		for (NSManagedObject *other in [execution.eventSubscriptions allObjects]) {
 			[self remove:other];
 		}
-		for (NSManagedObject *other in [execution.jobs allObjects]) {
+		for (UDJobEntity *other in [execution.jobs allObjects]) {
+			[self historyJob:other state:UDJobLogStateDeleted];
 			[self remove:other];
 		}
+		[self activityEnded:execution.activityInstanceId canceled:NO];
 		execution.activityId = event.elementId;
 		execution.activityInstanceId = [UDCommandContext newId];
+		[self activityStarted:event execution:execution];
 	} else if (subscription != nil) {
 		[self remove:subscription];
 	}
@@ -584,10 +642,12 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 {
 	UDExecutionEntity *host = inner.parent;
 	if (boundary.isInterrupting) {
+		[self cancelSubtree:inner];
 		[self remove:inner];
 		host.isActive = YES;
 		host.activityId = boundary.elementId;
 		host.activityInstanceId = [UDCommandContext newId];
+		[self activityStarted:boundary execution:host];
 		[self leave:boundary execution:host];
 		return;
 	}
@@ -610,6 +670,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	}
 	path.activityId = boundary.elementId;
 	path.activityInstanceId = [UDCommandContext newId];
+	[self activityStarted:boundary execution:path];
 	[self leave:boundary execution:path];
 }
 
@@ -642,9 +703,11 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	/* Nothing catches it: the path ends, as the reference does by default. */
 	if (activityScope) {
 		UDExecutionEntity *host = execution.parent;
+		[self cancelSubtree:execution];
 		[self remove:execution];
 		[self endPath:host];
 	} else {
+		[self activityEnded:execution.activityInstanceId canceled:YES];
 		[self endPath:execution];
 	}
 }
@@ -665,6 +728,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		row.createdAt = [NSDate date];
 		row.priority = 50;
 		row.execution = execution;
+		[self taskStarted:row];
 		UDWorkItem *value = [UDWorkItem ud_workItemWithEntity:row];
 		UDProcessEngine *engine = self.engine;
 		[self afterCommit:^{
@@ -728,6 +792,9 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
  * holds; several flows are an implicit parallel split. */
 - (void)leave:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
+	/* The activity is done, even when an async continuation holds back
+	 * the flows out of it. */
+	[self activityEnded:execution.activityInstanceId canceled:NO];
 	if (node.isAsyncAfter && ![node isKindOfClass:[UDGateway class]]) {
 		/* The command stops here; a job takes the outgoing flows. */
 		[self job:UDJobTypeAsyncAfter execution:execution node:node due:[NSDate date]];
@@ -758,6 +825,8 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
        scope:(UDProcessDefinition *)scope
    execution:(UDExecutionEntity *)execution
 {
+	/* Gateways leave through here directly. */
+	[self activityEnded:execution.activityInstanceId canceled:NO];
 	if ([flows count] == 0) {
 		[self endPath:execution];
 		return;
@@ -1040,6 +1109,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	NSUInteger joined = 1;
 	for (UDExecutionEntity *other in waiting) {
 		if (other != execution && joined < incoming) {
+			[self activityEnded:other.activityInstanceId canceled:NO];
 			[self remove:other];
 			joined += 1;
 		}
@@ -1096,6 +1166,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	UDExecutionEntity *survivor = [waiting objectAtIndex:0];
 	for (UDExecutionEntity *other in waiting) {
 		if (other != survivor) {
+			[self activityEnded:other.activityInstanceId canceled:NO];
 			[self remove:other];
 		}
 	}
@@ -1128,6 +1199,160 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	}
 }
 
+#pragma mark - History
+
+- (BOOL)records:(UDHistoryLevel)level
+{
+	return self.engine.historyLevel >= level;
+}
+
+- (void)activityStarted:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
+	if (![self records:UDHistoryLevelActivity] || execution.activityInstanceId == nil) {
+		return;
+	}
+	UDHistoricActivityInstanceEntity *row = [self insert:UDHistoricActivityName];
+	row.activityInstanceId = execution.activityInstanceId;
+	row.activityId = node.elementId;
+	row.activityName = [node.name isEqualToString:node.elementId] ? nil : node.name;
+	row.activityType = UDActivityType(node);
+	row.processInstanceId = execution.processInstanceId;
+	row.startTime = [NSDate date];
+	row.sequence = [self.engine ud_nextSequence];
+	[_openActivities setObject:row forKey:row.activityInstanceId];
+}
+
+/* Ends the activity instance, if it is still open: several ways out of an
+ * activity pass here, and only the first counts. */
+- (void)activityEnded:(NSString *)activityInstanceId canceled:(BOOL)canceled
+{
+	if (![self records:UDHistoryLevelActivity] || activityInstanceId == nil) {
+		return;
+	}
+	UDHistoricActivityInstanceEntity *row = [_openActivities objectForKey:activityInstanceId];
+	if (row == nil) {
+		row = [[self fetch:UDHistoricActivityName
+		         predicate:[NSPredicate predicateWithFormat:
+		             @"activityInstanceId == %@ AND endTime == nil", activityInstanceId]
+		              sort:nil
+		             limit:1] lastObject];
+	}
+	if (row == nil || row.endTime != nil) {
+		return;
+	}
+	row.endTime = [NSDate date];
+	row.canceled = canceled;
+	[_openActivities removeObjectForKey:activityInstanceId];
+}
+
+- (UDHistoricTaskInstanceEntity *)historicTask:(NSString *)taskId
+{
+	return [[self fetch:UDHistoricTaskName
+	          predicate:[NSPredicate predicateWithFormat:@"taskId == %@", taskId]
+	               sort:nil
+	              limit:1] lastObject];
+}
+
+- (void)taskStarted:(UDTaskEntity *)task
+{
+	if (![self records:UDHistoryLevelActivity]) {
+		return;
+	}
+	UDHistoricTaskInstanceEntity *row = [self insert:UDHistoricTaskName];
+	row.taskId = task.taskId;
+	row.name = task.name;
+	row.taskDefinitionKey = task.taskDefinitionKey;
+	row.assignee = task.assignee;
+	row.processInstanceId = task.processInstanceId;
+	row.startTime = task.createdAt;
+}
+
+- (void)task:(NSString *)taskId endedBecause:(NSString *)reason
+{
+	if (![self records:UDHistoryLevelActivity]) {
+		return;
+	}
+	UDHistoricTaskInstanceEntity *row = [self historicTask:taskId];
+	if (row != nil && row.endTime == nil) {
+		row.endTime = [NSDate date];
+		row.deleteReason = reason;
+	}
+}
+
+- (void)historyTaskCompleted:(NSString *)taskId
+{
+	[self task:taskId endedBecause:UDTaskDeleteReasonCompleted];
+}
+
+- (void)historyJob:(UDJobEntity *)job state:(NSString *)state
+{
+	if (![self records:UDHistoryLevelFull]) {
+		return;
+	}
+	UDHistoricJobLogEntity *row = [self insert:UDHistoricJobLogName];
+	row.jobId = job.jobId;
+	row.jobType = job.jobType;
+	row.activityId = job.activityId;
+	row.processInstanceId = job.processInstanceId;
+	row.timestamp = [NSDate date];
+	row.state = state;
+	row.exceptionMessage = [state isEqualToString:UDJobLogStateFailed] ? job.exceptionMessage : nil;
+	row.retries = job.retries;
+	row.sequence = [self.engine ud_nextSequence];
+}
+
+- (void)incident:(NSString *)incidentId endedAs:(NSString *)state
+{
+	if (![self records:UDHistoryLevelFull]) {
+		return;
+	}
+	UDHistoricIncidentEntity *row = [[self fetch:UDHistoricIncidentName
+	                                   predicate:[NSPredicate predicateWithFormat:
+	                                       @"incidentId == %@", incidentId]
+	                                        sort:nil
+	                                       limit:1] lastObject];
+	if (row != nil && row.endTime == nil) {
+		row.endTime = [NSDate date];
+		row.state = state;
+	}
+}
+
+/* Everything in the subtree is about to be removed by an interruption:
+ * its activity instances are canceled, its tasks deleted, its incidents
+ * and jobs gone. */
+- (void)cancelSubtree:(UDExecutionEntity *)root
+{
+	NSMutableArray *pending = [NSMutableArray arrayWithObject:root];
+	while ([pending count] > 0) {
+		UDExecutionEntity *execution = [pending lastObject];
+		[pending removeLastObject];
+		[self activityEnded:execution.activityInstanceId canceled:YES];
+		/* What this command already removed (a timer that just fired, a
+		 * task just completed) stays in the sets until pending changes are
+		 * processed. */
+		for (UDTaskEntity *task in execution.tasks) {
+			if (![task isDeleted]) {
+				[self task:task.taskId endedBecause:UDTaskDeleteReasonDeleted];
+			}
+		}
+		for (UDIncidentEntity *incident in execution.incidents) {
+			if (![incident isDeleted]) {
+				[self incident:incident.incidentId endedAs:UDIncidentStateDeleted];
+			}
+		}
+		for (UDJobEntity *job in execution.jobs) {
+			if (![job isDeleted]) {
+				[self historyJob:job state:UDJobLogStateDeleted];
+			}
+		}
+		for (UDExecutionEntity *child in execution.children) {
+			if (![child isDeleted]) {
+				[pending addObject:child];
+			}
+		}
+	}
+}
+
 #pragma mark - Variables
 
 - (NSDictionary *)visibleVariables:(UDExecutionEntity *)execution
@@ -1146,6 +1371,18 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 
 - (void)recordHistoryOf:(UDVariableEntity *)variable
 {
+	if ([self records:UDHistoryLevelFull]) {
+		UDHistoricVariableUpdateEntity *update = [self insert:UDHistoricUpdateName];
+		update.variableId = variable.variableId;
+		update.name = variable.name;
+		update.processInstanceId = variable.processInstanceId;
+		update.time = [NSDate date];
+		update.sequence = [self.engine ud_nextSequence];
+		[update ud_setValue:[variable ud_value]];
+	}
+	if (![self records:UDHistoryLevelAudit]) {
+		return;
+	}
 	UDHistoricVariableEntity *history = [_historicVariables objectForKey:variable.variableId];
 	if (history == nil) {
 		history = [[self fetch:UDHistoricVariableName

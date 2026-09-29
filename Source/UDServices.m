@@ -6,6 +6,15 @@
 
 NSString * const UDProcessInstanceStateActive = @"ACTIVE";
 NSString * const UDProcessInstanceStateCompleted = @"COMPLETED";
+NSString * const UDTaskDeleteReasonCompleted = @"completed";
+NSString * const UDTaskDeleteReasonDeleted = @"deleted";
+NSString * const UDIncidentStateOpen = @"open";
+NSString * const UDIncidentStateResolved = @"resolved";
+NSString * const UDIncidentStateDeleted = @"deleted";
+NSString * const UDJobLogStateCreated = @"created";
+NSString * const UDJobLogStateSuccessful = @"successful";
+NSString * const UDJobLogStateFailed = @"failed";
+NSString * const UDJobLogStateDeleted = @"deleted";
 
 static NSError *
 UDServiceError(UDWorkflowErrorCode code, NSString *message)
@@ -37,6 +46,19 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 	instance.definitionId = root.definitionId;
 	instance.definitionKey = definition.processId;
 	instance.ended = ended;
+	return instance;
+}
+
++ (instancetype)ud_endedInstance:(NSString *)processInstanceId
+                     businessKey:(NSString *)businessKey
+                      definition:(UDProcessDefinition *)definition
+{
+	UDProcessInstance *instance = [[UDProcessInstance alloc] init];
+	instance.processInstanceId = processInstanceId;
+	instance.businessKey = businessKey;
+	instance.definitionId = definition.definitionId;
+	instance.definitionKey = definition.processId;
+	instance.ended = YES;
 	return instance;
 }
 
@@ -190,7 +212,10 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 		return running;
 	}
 	/* It ran to its end within the start command. */
-	return [self endedInstance:processInstanceId];
+	return [self endedInstance:processInstanceId]
+		?: [UDProcessInstance ud_endedInstance:processInstanceId
+		                           businessKey:businessKey
+		                            definition:definition];
 }
 
 - (UDProcessInstance *)endedInstance:(NSString *)processInstanceId
@@ -523,6 +548,7 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 		if (![command setVariables:variables from:execution]) {
 			return NO;
 		}
+		[command historyTaskCompleted:task.taskId];
 		[command.context deleteObject:task];
 		[command completeActivity:execution];
 		return YES;
@@ -532,6 +558,78 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 @end
 
 #pragma mark - History service
+
+@interface UDHistoricActivityInstance ()
+@property (nonatomic, readwrite, copy) NSString *activityInstanceId;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *activityName;
+@property (nonatomic, readwrite, copy) NSString *activityType;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSDate *startTime;
+@property (nonatomic, readwrite, copy) NSDate *endTime;
+@property (nonatomic, readwrite, getter=isCanceled) BOOL canceled;
+@end
+
+@implementation UDHistoricActivityInstance
+- (NSString *)description
+{
+	return [NSString stringWithFormat:@"<UDHistoricActivityInstance %@ %@%@>", self.activityType,
+		self.activityId, self.canceled ? @" canceled" : self.endTime ? @"" : @" running"];
+}
+@end
+
+@interface UDHistoricTaskInstance ()
+@property (nonatomic, readwrite, copy) NSString *taskId;
+@property (nonatomic, readwrite, copy) NSString *name;
+@property (nonatomic, readwrite, copy) NSString *taskDefinitionKey;
+@property (nonatomic, readwrite, copy) NSString *assignee;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSDate *startTime;
+@property (nonatomic, readwrite, copy) NSDate *endTime;
+@property (nonatomic, readwrite, copy) NSString *deleteReason;
+@end
+
+@implementation UDHistoricTaskInstance
+@end
+
+@interface UDHistoricVariableUpdate ()
+@property (nonatomic, readwrite, copy) NSString *name;
+@property (nonatomic, readwrite, strong) id value;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSDate *time;
+@end
+
+@implementation UDHistoricVariableUpdate
+@end
+
+@interface UDHistoricIncident ()
+@property (nonatomic, readwrite, copy) NSString *incidentId;
+@property (nonatomic, readwrite, copy) NSString *incidentType;
+@property (nonatomic, readwrite, copy) NSString *message;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSString *configuration;
+@property (nonatomic, readwrite, copy) NSDate *createdAt;
+@property (nonatomic, readwrite, copy) NSDate *endTime;
+@property (nonatomic, readwrite, copy) NSString *state;
+@end
+
+@implementation UDHistoricIncident
+@end
+
+@interface UDHistoricJobLog ()
+@property (nonatomic, readwrite, copy) NSString *jobId;
+@property (nonatomic, readwrite, copy) NSString *jobType;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSDate *timestamp;
+@property (nonatomic, readwrite, copy) NSString *state;
+@property (nonatomic, readwrite, copy) NSString *exceptionMessage;
+@property (nonatomic, readwrite) NSInteger retries;
+@end
+
+@implementation UDHistoricJobLog
+@end
 
 @implementation UDHistoryService
 {
@@ -547,46 +645,139 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 	return self;
 }
 
-- (UDHistoricProcessInstance *)historicProcessInstanceWithId:(NSString *)processInstanceId
+/* Rows of an entity for one instance, in order, each made into a value. */
+- (NSArray *)rows:(NSString *)entity
+       ofInstance:(NSString *)processInstanceId
+             sort:(NSArray *)sort
+            value:(id (^)(id row))value
 {
-	__block UDHistoricProcessInstance *instance = nil;
+	NSMutableArray *values = [NSMutableArray array];
 	[_engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **error) {
 		(void)error;
-		UDHistoricProcessInstanceEntity *entity =
-			[[command fetch:@"UDHistoricProcessInstance"
-			      predicate:[NSPredicate predicateWithFormat:@"processInstanceId == %@",
-			          processInstanceId]
-			           sort:nil
-			          limit:1] lastObject];
-		if (entity != nil) {
-			instance = [UDHistoricProcessInstance ud_instanceWithEntity:entity];
+		for (id row in [command fetch:entity
+		                    predicate:[NSPredicate predicateWithFormat:@"processInstanceId == %@",
+		                        processInstanceId ?: @""]
+		                         sort:sort
+		                        limit:0]) {
+			[values addObject:value(row)];
 		}
 		return YES;
 	} error:NULL];
-	return instance;
+	return values;
+}
+
+- (UDHistoricProcessInstance *)historicProcessInstanceWithId:(NSString *)processInstanceId
+{
+	return [[self rows:@"UDHistoricProcessInstance" ofInstance:processInstanceId sort:nil
+	             value:^id(UDHistoricProcessInstanceEntity *row) {
+		return [UDHistoricProcessInstance ud_instanceWithEntity:row];
+	}] lastObject];
+}
+
+- (NSArray<UDHistoricActivityInstance *> *)historicActivityInstancesForProcessInstance:(NSString *)processInstanceId
+{
+	return [self rows:@"UDHistoricActivityInstance" ofInstance:processInstanceId
+	             sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"sequence" ascending:YES] ]
+	            value:^id(UDHistoricActivityInstanceEntity *row) {
+		UDHistoricActivityInstance *value = [[UDHistoricActivityInstance alloc] init];
+		value.activityInstanceId = row.activityInstanceId;
+		value.activityId = row.activityId;
+		value.activityName = row.activityName;
+		value.activityType = row.activityType;
+		value.processInstanceId = row.processInstanceId;
+		value.startTime = row.startTime;
+		value.endTime = row.endTime;
+		value.canceled = row.canceled;
+		return value;
+	}];
+}
+
+- (NSArray<UDHistoricTaskInstance *> *)historicTaskInstancesForProcessInstance:(NSString *)processInstanceId
+{
+	return [self rows:@"UDHistoricTaskInstance" ofInstance:processInstanceId
+	             sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"startTime" ascending:YES] ]
+	            value:^id(UDHistoricTaskInstanceEntity *row) {
+		UDHistoricTaskInstance *value = [[UDHistoricTaskInstance alloc] init];
+		value.taskId = row.taskId;
+		value.name = row.name;
+		value.taskDefinitionKey = row.taskDefinitionKey;
+		value.assignee = row.assignee;
+		value.processInstanceId = row.processInstanceId;
+		value.startTime = row.startTime;
+		value.endTime = row.endTime;
+		value.deleteReason = row.deleteReason;
+		return value;
+	}];
 }
 
 - (NSDictionary *)historicVariablesForProcessInstance:(NSString *)processInstanceId
 {
 	NSMutableDictionary *variables = [NSMutableDictionary dictionary];
-	[_engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **error) {
-		(void)error;
-		NSArray *rows = [command fetch:@"UDHistoricVariable"
-		                     predicate:[NSPredicate predicateWithFormat:@"processInstanceId == %@",
-		                         processInstanceId]
-		                          sort:nil
-		                         limit:0];
-		/* Local variables first, so process instance ones overwrite them. */
-		for (int pass = 0; pass < 2; pass++) {
-			for (UDHistoricVariableEntity *row in rows) {
-				if (row.scopeIsProcessInstance == (pass == 1)) {
-					[variables setObject:[row ud_value] ?: [NSNull null] forKey:row.name];
-				}
+	NSArray *rows = [self rows:@"UDHistoricVariable" ofInstance:processInstanceId sort:nil
+	                     value:^id(UDHistoricVariableEntity *row) {
+		return @[ row.name, [row ud_value] ?: [NSNull null],
+			[NSNumber numberWithBool:row.scopeIsProcessInstance] ];
+	}];
+	/* Local variables first, so process instance ones overwrite them. */
+	for (int pass = 0; pass < 2; pass++) {
+		for (NSArray *row in rows) {
+			if ([[row objectAtIndex:2] boolValue] == (pass == 1)) {
+				[variables setObject:[row objectAtIndex:1] forKey:[row objectAtIndex:0]];
 			}
 		}
-		return YES;
-	} error:NULL];
+	}
 	return variables;
+}
+
+- (NSArray<UDHistoricVariableUpdate *> *)historicVariableUpdatesForProcessInstance:(NSString *)processInstanceId
+{
+	return [self rows:@"UDHistoricVariableUpdate" ofInstance:processInstanceId
+	             sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"sequence" ascending:YES] ]
+	            value:^id(UDHistoricVariableUpdateEntity *row) {
+		UDHistoricVariableUpdate *value = [[UDHistoricVariableUpdate alloc] init];
+		value.name = row.name;
+		value.value = [row ud_value];
+		value.processInstanceId = row.processInstanceId;
+		value.time = row.time;
+		return value;
+	}];
+}
+
+- (NSArray<UDHistoricIncident *> *)historicIncidentsForProcessInstance:(NSString *)processInstanceId
+{
+	return [self rows:@"UDHistoricIncident" ofInstance:processInstanceId
+	             sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"createdAt" ascending:YES] ]
+	            value:^id(UDHistoricIncidentEntity *row) {
+		UDHistoricIncident *value = [[UDHistoricIncident alloc] init];
+		value.incidentId = row.incidentId;
+		value.incidentType = row.incidentType;
+		value.message = row.message;
+		value.activityId = row.activityId;
+		value.processInstanceId = row.processInstanceId;
+		value.configuration = row.configuration;
+		value.createdAt = row.createdAt;
+		value.endTime = row.endTime;
+		value.state = row.state;
+		return value;
+	}];
+}
+
+- (NSArray<UDHistoricJobLog *> *)historicJobLogForProcessInstance:(NSString *)processInstanceId
+{
+	return [self rows:@"UDHistoricJobLog" ofInstance:processInstanceId
+	             sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"sequence" ascending:YES] ]
+	            value:^id(UDHistoricJobLogEntity *row) {
+		UDHistoricJobLog *value = [[UDHistoricJobLog alloc] init];
+		value.jobId = row.jobId;
+		value.jobType = row.jobType;
+		value.activityId = row.activityId;
+		value.processInstanceId = row.processInstanceId;
+		value.timestamp = row.timestamp;
+		value.state = row.state;
+		value.exceptionMessage = row.exceptionMessage;
+		value.retries = row.retries;
+		return value;
+	}];
 }
 
 @end

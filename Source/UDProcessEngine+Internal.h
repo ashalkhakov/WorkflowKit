@@ -29,6 +29,8 @@
  * record it. force ignores the due date, retries and other owners' locks. */
 - (BOOL)ud_runJob:(NSString *)jobId force:(BOOL)force error:(NSError **)error;
 - (void)ud_reschedule;
+/* Orders history written in the same instant. */
+- (int64_t)ud_nextSequence;
 /* The serial queue a process instance's work runs on. */
 - (dispatch_queue_t)ud_queueFor:(NSString *)key;
 @end
@@ -61,6 +63,11 @@
                               definition:(UDProcessDefinition *)definition
                                    ended:(BOOL)ended;
 + (instancetype)ud_instanceWithHistory:(UDHistoricProcessInstanceEntity *)history;
+/* An instance that ended within the command that started it, when there
+ * is no history to read it back from. */
++ (instancetype)ud_endedInstance:(NSString *)processInstanceId
+                     businessKey:(NSString *)businessKey
+                      definition:(UDProcessDefinition *)definition;
 @end
 
 @interface UDHistoricProcessInstance (UDInternal)

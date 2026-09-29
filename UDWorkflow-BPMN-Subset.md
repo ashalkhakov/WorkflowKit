@@ -125,6 +125,7 @@ Deploying stores the XML, and the engine runs the definition read back from it, 
 | Concurrency | A lost race fails with `UDWorkflowErrorConflict` and changes nothing; the engine retries its own commands. |
 | Worker and jobs | The in-process worker and the job executor run one instance's exclusive work on one serial queue at a time. A job is acquired, run and, on failure, recorded in three transactions. |
 | Public API | `UDProcessEngine` and its services; value objects out. Delegates and target-action. |
+| History | Written in the command's transaction at `historyLevel`: NONE, ACTIVITY (process, activity and task instances), AUDIT (and latest variables; the default), FULL (and variable updates, incidents, the job log). |
 | Persistence | `UDStore`: Core Data (`Model/UDWorkflow.xcdatamodeld`) over in-memory, SQLite or a FreeCoreData SQL backend. |
 
 Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/Height` and exported as BPMN DI.

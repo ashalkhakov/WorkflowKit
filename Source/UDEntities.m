@@ -202,3 +202,27 @@ UDIsIntegerNumber(NSNumber *number)
 @dynamic variableId, name, processInstanceId, scopeIsProcessInstance, type;
 @dynamic textValue, wholeNumber, realNumber, bytesValue, updatedAt;
 @end
+
+@implementation UDHistoricActivityInstanceEntity
+@dynamic activityInstanceId, activityId, activityName, activityType;
+@dynamic processInstanceId, startTime, endTime, canceled, sequence;
+@end
+
+@implementation UDHistoricTaskInstanceEntity
+@dynamic taskId, name, taskDefinitionKey, assignee, processInstanceId;
+@dynamic startTime, endTime, deleteReason;
+@end
+
+@implementation UDHistoricVariableUpdateEntity
+@dynamic variableId, name, processInstanceId, time, sequence;
+@end
+
+@implementation UDHistoricIncidentEntity
+@dynamic incidentId, incidentType, message, activityId, processInstanceId;
+@dynamic configuration, createdAt, endTime, state;
+@end
+
+@implementation UDHistoricJobLogEntity
+@dynamic jobId, jobType, activityId, processInstanceId, timestamp, state;
+@dynamic exceptionMessage, retries, sequence;
+@end

@@ -180,4 +180,59 @@ extern NSString * const UDHistoricStateCompleted;
 @property (nonatomic, copy) NSDate *updatedAt;
 @end
 
+@interface UDHistoricActivityInstanceEntity : NSManagedObject
+@property (nonatomic, copy) NSString *activityInstanceId;
+@property (nonatomic, copy) NSString *activityId;
+@property (nonatomic, copy) NSString *activityName;
+@property (nonatomic, copy) NSString *activityType;
+@property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, copy) NSDate *startTime;
+@property (nonatomic, copy) NSDate *endTime;
+@property (nonatomic) BOOL canceled;
+@property (nonatomic) int64_t sequence;
+@end
+
+@interface UDHistoricTaskInstanceEntity : NSManagedObject
+@property (nonatomic, copy) NSString *taskId;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, copy) NSString *taskDefinitionKey;
+@property (nonatomic, copy) NSString *assignee;
+@property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, copy) NSDate *startTime;
+@property (nonatomic, copy) NSDate *endTime;
+@property (nonatomic, copy) NSString *deleteReason;
+@end
+
+@interface UDHistoricVariableUpdateEntity : NSManagedObject
+@property (nonatomic, copy) NSString *variableId;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, copy) NSDate *time;
+@property (nonatomic) int64_t sequence;
+@end
+
+@interface UDHistoricIncidentEntity : NSManagedObject
+@property (nonatomic, copy) NSString *incidentId;
+@property (nonatomic, copy) NSString *incidentType;
+@property (nonatomic, copy) NSString *message;
+@property (nonatomic, copy) NSString *activityId;
+@property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, copy) NSString *configuration;
+@property (nonatomic, copy) NSDate *createdAt;
+@property (nonatomic, copy) NSDate *endTime;
+@property (nonatomic, copy) NSString *state;
+@end
+
+@interface UDHistoricJobLogEntity : NSManagedObject
+@property (nonatomic, copy) NSString *jobId;
+@property (nonatomic, copy) NSString *jobType;
+@property (nonatomic, copy) NSString *activityId;
+@property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, copy) NSDate *timestamp;
+@property (nonatomic, copy) NSString *state;
+@property (nonatomic, copy) NSString *exceptionMessage;
+@property (nonatomic) int32_t retries;
+@property (nonatomic) int64_t sequence;
+@end
+
 #endif /* UDEntities_h */

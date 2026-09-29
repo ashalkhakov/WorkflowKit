@@ -203,4 +203,83 @@
             <fetchIndexElement property="configuration" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
+    <entity name="UDHistoricActivityInstance" representedClassName="UDHistoricActivityInstanceEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="activityInstanceId" attributeType="String"/>
+        <attribute name="activityName" optional="YES" attributeType="String"/>
+        <attribute name="activityType" attributeType="String"/>
+        <attribute name="canceled" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byActivityInstance">
+            <fetchIndexElement property="activityInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDHistoricTaskInstance" representedClassName="UDHistoricTaskInstanceEntity" syncable="YES">
+        <attribute name="assignee" optional="YES" attributeType="String"/>
+        <attribute name="deleteReason" optional="YES" attributeType="String"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="taskDefinitionKey" attributeType="String"/>
+        <attribute name="taskId" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byTaskId">
+            <fetchIndexElement property="taskId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDHistoricVariableUpdate" representedClassName="UDHistoricVariableUpdateEntity" syncable="YES">
+        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="textValue" optional="YES" attributeType="String"/>
+        <attribute name="time" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="variableId" attributeType="String"/>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDHistoricIncident" representedClassName="UDHistoricIncidentEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="configuration" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="incidentId" attributeType="String"/>
+        <attribute name="incidentType" attributeType="String"/>
+        <attribute name="message" optional="YES" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="state" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byIncidentId">
+            <fetchIndexElement property="incidentId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDHistoricJobLog" representedClassName="UDHistoricJobLogEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="exceptionMessage" optional="YES" attributeType="String"/>
+        <attribute name="jobId" attributeType="String"/>
+        <attribute name="jobType" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="retries" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="state" attributeType="String"/>
+        <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
 </model>

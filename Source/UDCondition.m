@@ -46,6 +46,11 @@
 {
 	id left = [variables objectForKey:self.key];
 	id right = self.value;
+	/* A null variable is no value: as in FEEL, comparing it yields no
+	 * truth. */
+	if (left == [NSNull null]) {
+		left = nil;
+	}
 
 	if (self.op == UDComparisonOpEqual) {
 		if (left == nil) {

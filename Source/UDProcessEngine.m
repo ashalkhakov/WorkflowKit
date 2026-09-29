@@ -36,6 +36,7 @@ UDIsConflict(NSError *error)
 	BOOL _closed;
 	NSCondition *_settle;
 	NSMutableDictionary *_busy;
+	int64_t _sequence;
 }
 
 - (instancetype)initWithStore:(UDStore *)store
@@ -52,6 +53,7 @@ UDIsConflict(NSError *error)
 	_managementService = [[UDManagementService alloc] initWithProcessEngine:self];
 	_externalTaskService = [[UDExternalTaskService alloc] initWithProcessEngine:self];
 	_jobExecutorActive = YES;
+	_historyLevel = UDHistoryLevelAudit;
 	_identifier = [NSString stringWithFormat:@"udworkflow@%@",
 		[[NSProcessInfo processInfo] hostName]];
 	_lockDuration = 300;
@@ -360,6 +362,14 @@ UDIsConflict(NSError *error)
 	[self reschedule];
 }
 
+- (int64_t)ud_nextSequence
+{
+	@synchronized (_busy) {
+		_sequence += 1;
+		return _sequence;
+	}
+}
+
 #pragma mark - The job executor
 
 - (UDJobEntity *)job:(NSString *)jobId in:(UDCommandContext *)command
@@ -426,6 +436,7 @@ UDIsConflict(NSError *error)
 		job.exceptionMessage = [failure localizedDescription];
 		job.lockOwner = nil;
 		job.lockExpiration = nil;
+		[command historyJob:job state:UDJobLogStateFailed];
 		if (job.retries == 0) {
 			[command raiseIncident:UDIncidentTypeFailedJob
 			         configuration:job.jobId

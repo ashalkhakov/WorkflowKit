@@ -72,6 +72,10 @@
             execution:(UDExecutionEntity *)execution;
 - (void)resolveIncidentsFor:(NSString *)configuration;
 
+/* History, at the engine's level. */
+- (void)historyJob:(UDJobEntity *)job state:(NSString *)state;
+- (void)historyTaskCompleted:(NSString *)taskId;
+
 /* Variables visible from the execution: its scope chain, nearest first. */
 - (NSDictionary *)visibleVariables:(UDExecutionEntity *)execution;
 /* Each one where it exists in the scope chain, else on the process
