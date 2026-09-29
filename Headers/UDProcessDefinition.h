@@ -99,6 +99,16 @@
                 forElement:(NSString *)elementId;
 - (instancetype)addInput:(UDVariableMapping *)mapping forElement:(NSString *)elementId;
 - (instancetype)addOutput:(UDVariableMapping *)mapping forElement:(NSString *)elementId;
+/* An event subprocess: inner's start event is its trigger. It takes no
+ * sequence flows. */
+- (instancetype)addEventSubProcess:(NSString *)elementId
+                              name:(NSString *)name
+                             inner:(UDProcessDefinition *)inner;
+/* An event subprocess's start on a BPMN error with that code; nil (or
+ * "*") catches any. Always interrupting. */
+- (instancetype)addErrorStart:(NSString *)elementId errorRef:(NSString *)errorRef;
+/* An event subprocess's start event: whether it interrupts the scope. */
+- (instancetype)setInterrupting:(BOOL)interrupting forElement:(NSString *)elementId;
 - (instancetype)addBoundaryError:(NSString *)elementId
                           onTask:(NSString *)taskId
                         errorRef:(NSString *)errorRef

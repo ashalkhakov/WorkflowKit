@@ -52,7 +52,10 @@ UDActivityType(UDFlowNode *node)
 	if ([node isKindOfClass:[UDCallActivity class]]) {
 		return @"callActivity";
 	}
-	return [node isKindOfClass:[UDSubProcess class]] ? @"subProcess" : @"activity";
+	if ([node isKindOfClass:[UDSubProcess class]]) {
+		return [(UDSubProcess *)node isTriggeredByEvent] ? @"eventSubProcess" : @"subProcess";
+	}
+	return @"activity";
 }
 
 static NSError *
@@ -349,6 +352,7 @@ UDGone(NSManagedObject *object)
 	if (![self setVariables:variables from:root]) {
 		return nil;
 	}
+	[self armEventSubProcessesOf:definition on:root];
 	[self schedule:^{
 		if (!UDGone(root)) {
 			[self enter:start execution:root];
@@ -423,7 +427,9 @@ UDGone(NSManagedObject *object)
 	execution.isActive = NO;
 	[self armBoundaryEventsOf:node scope:scope on:inner];
 	if ([node isKindOfClass:[UDSubProcess class]]) {
-		UDEvent *start = [[(UDSubProcess *)node innerDefinition] startEvent];
+		UDProcessDefinition *innerDefinition = [(UDSubProcess *)node innerDefinition];
+		[self armEventSubProcessesOf:innerDefinition on:inner];
+		UDEvent *start = [innerDefinition startEvent];
 		[self schedule:^{
 			if (!UDGone(inner)) {
 				[self enter:start execution:inner];
@@ -700,6 +706,10 @@ UDGone(NSManagedObject *object)
   triggeredOn:(UDExecutionEntity *)execution
  subscription:(UDEventSubscriptionEntity *)subscription
 {
+	if (event.kind == UDEventKindStart) {
+		[self eventSubProcessStarted:event on:execution];
+		return;
+	}
 	if (event.kind == UDEventKindBoundary) {
 		[self boundary:event firedOn:execution subscription:subscription];
 		return;
@@ -708,13 +718,23 @@ UDGone(NSManagedObject *object)
 	if ([at isKindOfClass:[UDGateway class]]
 	    && [(UDGateway *)at kind] == UDGatewayKindEventBased) {
 		/* The first event behind an event-based gateway wins; the others
-		 * stop waiting. */
-		for (NSManagedObject *other in [execution.eventSubscriptions allObjects]) {
-			[self remove:other];
+		 * stop waiting. Only the gateway's: an event subprocess of the
+		 * scope may be waiting on the same execution. */
+		NSMutableSet *targets = [NSMutableSet set];
+		UDProcessDefinition *scope = [self scopeOf:at.elementId execution:execution];
+		for (UDSequenceFlow *flow in [scope outgoingFlowsFrom:at.elementId]) {
+			[targets addObject:flow.targetId];
+		}
+		for (UDEventSubscriptionEntity *other in [execution.eventSubscriptions allObjects]) {
+			if ([targets containsObject:other.activityId]) {
+				[self remove:other];
+			}
 		}
 		for (UDJobEntity *other in [execution.jobs allObjects]) {
-			[self historyJob:other state:UDJobLogStateDeleted];
-			[self remove:other];
+			if ([targets containsObject:other.activityId]) {
+				[self historyJob:other state:UDJobLogStateDeleted];
+				[self remove:other];
+			}
 		}
 		[self activityEnded:execution.activityInstanceId canceled:NO];
 		execution.activityId = event.elementId;
@@ -806,7 +826,22 @@ UDGone(NSManagedObject *object)
 	 * scopes around it -- and the nearest boundary that catches it wins. */
 	UDProcessDefinition *definition = [self definitionForExecution:execution];
 	UDExecutionEntity *scopeExecution = execution;
+	/* The execution the error came up through, just below this one. */
+	UDExecutionEntity *below = nil;
 	while (scopeExecution != nil) {
+		/* An error event subprocess of the scope catches it first, inside
+		 * the boundary events of the activity around the scope -- unless
+		 * the error comes out of one of the scope's event subprocesses. */
+		UDProcessDefinition *inner = scopeExecution.isScope ? [self definitionScopeOf:scopeExecution] : nil;
+		if (inner != nil && ![self isEventSubProcess:scopeExecution.activityId in:inner]
+		    && ![self isEventSubProcess:below.activityId in:inner]) {
+			UDSubProcess *handler = [self errorEventSubProcessIn:inner code:errorCode];
+			if (handler != nil) {
+				[self interruptScope:scopeExecution];
+				[self enterNow:handler execution:scopeExecution];
+				return;
+			}
+		}
 		if (scopeExecution.parent == nil) {
 			UDExecutionEntity *caller = scopeExecution.superExecution;
 			if (caller == nil) {
@@ -834,6 +869,7 @@ UDGone(NSManagedObject *object)
 				}
 				return;
 			}
+			below = nil;
 			scopeExecution = caller;
 			continue;
 		}
@@ -852,6 +888,7 @@ UDGone(NSManagedObject *object)
 				return;
 			}
 		}
+		below = scopeExecution;
 		scopeExecution = scopeExecution.parent;
 	}
 	definition = [self definitionForExecution:execution];
@@ -1085,7 +1122,9 @@ static NSString * const UDLoopCounter = @"loopCounter";
 	if ([node isKindOfClass:[UDSubProcess class]]) {
 		UDExecutionEntity *inner = [self newChildOf:instance concurrent:NO];
 		instance.isActive = NO;
-		UDEvent *start = [[(UDSubProcess *)node innerDefinition] startEvent];
+		UDProcessDefinition *innerDefinition = [(UDSubProcess *)node innerDefinition];
+		[self armEventSubProcessesOf:innerDefinition on:inner];
+		UDEvent *start = [innerDefinition startEvent];
 		[self schedule:^{
 			if (!UDGone(inner)) {
 				[self enter:start execution:inner];
@@ -1159,6 +1198,186 @@ static NSString * const UDLoopCounter = @"loopCounter";
 	path.isActive = YES;
 	[self activityEnded:path.activityInstanceId canceled:NO];
 	[self leaveNow:node execution:path];
+}
+
+#pragma mark - Event subprocesses
+
+/* The part of the definition whose flow runs directly in this scope
+ * execution: the process for an instance, a subprocess's inside for its
+ * scope; nil for an activity's own scope, which has no flow of its own. */
+- (UDProcessDefinition *)definitionScopeOf:(UDExecutionEntity *)execution
+{
+	if (execution.parent == nil) {
+		return [self definitionForExecution:execution];
+	}
+	if (!execution.isScope || execution.isMultiInstanceBody) {
+		return nil;
+	}
+	UDFlowNode *owner = [[self definitionForExecution:execution] flowNodeWithId:execution.parent.activityId];
+	return [owner isKindOfClass:[UDSubProcess class]] ? [(UDSubProcess *)owner innerDefinition] : nil;
+}
+
+- (NSArray<UDSubProcess *> *)eventSubProcessesIn:(UDProcessDefinition *)scope
+{
+	NSMutableArray *found = [NSMutableArray array];
+	for (UDFlowNode *node in [scope.nodes allValues]) {
+		if ([node isKindOfClass:[UDSubProcess class]] && [(UDSubProcess *)node isTriggeredByEvent]) {
+			[found addObject:node];
+		}
+	}
+	/* A stable order, for the error catch-all below. */
+	return [found sortedArrayUsingComparator:^NSComparisonResult(UDFlowNode *a, UDFlowNode *b) {
+		return [a.elementId compare:b.elementId];
+	}];
+}
+
+- (BOOL)isEventSubProcess:(NSString *)activityId in:(UDProcessDefinition *)scope
+{
+	UDFlowNode *node = activityId != nil ? [scope nodeWithId:activityId] : nil;
+	return [node isKindOfClass:[UDSubProcess class]] && [(UDSubProcess *)node isTriggeredByEvent];
+}
+
+/* The scope's event subprocess whose error start catches the code: one
+ * for that code, else a catch-all. */
+- (UDSubProcess *)errorEventSubProcessIn:(UDProcessDefinition *)scope code:(NSString *)errorCode
+{
+	UDSubProcess *catchAll = nil;
+	for (UDSubProcess *handler in [self eventSubProcessesIn:scope]) {
+		UDEvent *start = [handler.innerDefinition startEvent];
+		if (start.trigger != UDEventTriggerError) {
+			continue;
+		}
+		NSString *ref = start.errorRef;
+		if (ref == nil || [ref length] == 0 || [ref isEqualToString:@"*"]) {
+			catchAll = catchAll ?: handler;
+		} else if ([ref isEqualToString:errorCode]) {
+			return handler;
+		}
+	}
+	return catchAll;
+}
+
+/* A scope starts: its event subprocesses' message and signal starts
+ * subscribe, and their timers are set, on the scope execution, for as
+ * long as it lasts. Error starts are found when an error is thrown. */
+- (void)armEventSubProcessesOf:(UDProcessDefinition *)scope on:(UDExecutionEntity *)execution
+{
+	for (UDSubProcess *handler in [self eventSubProcessesIn:scope]) {
+		UDEvent *start = [handler.innerDefinition startEvent];
+		if (start.trigger == UDEventTriggerMessage) {
+			[self subscribe:execution message:start.messageName activity:start.elementId];
+		} else if (start.trigger == UDEventTriggerSignal) {
+			[self subscribe:execution type:UDEventTypeSignal name:start.signalName activity:start.elementId];
+		} else if (start.trigger == UDEventTriggerTimer) {
+			[self timer:execution activity:start.elementId duration:start.timerDuration];
+		}
+	}
+}
+
+/* An event subprocess's start event has fired on its scope execution. */
+- (void)eventSubProcessStarted:(UDEvent *)start on:(UDExecutionEntity *)scopeExecution
+{
+	UDProcessDefinition *scope = [self definitionScopeOf:scopeExecution];
+	UDSubProcess *handler = nil;
+	for (UDSubProcess *candidate in [self eventSubProcessesIn:scope]) {
+		if ([[candidate.innerDefinition startEvent].elementId isEqualToString:start.elementId]) {
+			handler = candidate;
+		}
+	}
+	if (handler == nil) {
+		[self fail:UDCommandError(UDWorkflowErrorUnknownElement, [NSString stringWithFormat:
+			@"%@ starts no event subprocess of its scope", start.elementId])];
+		return;
+	}
+	if (start.isInterrupting) {
+		/* Everything else in the scope stops; the scope goes on in the
+		 * event subprocess and ends with it. */
+		[self interruptScope:scopeExecution];
+		[self enterNow:handler execution:scopeExecution];
+		return;
+	}
+	/* Beside the scope's other paths; a message or signal start stays
+	 * armed for the next one. */
+	NSMutableSet *starts = [NSMutableSet set];
+	for (UDSubProcess *other in [self eventSubProcessesIn:scope]) {
+		[starts addObject:[other.innerDefinition startEvent].elementId];
+	}
+	UDExecutionEntity *path = [self pathBeside:scopeExecution keeping:starts];
+	[self enterNow:handler execution:path];
+}
+
+/* Cancels everything in the scope -- its paths, and what the scope
+ * execution itself was doing or waiting for -- leaving the scope
+ * execution to go on. */
+- (void)interruptScope:(UDExecutionEntity *)scopeExecution
+{
+	[self cancelSubtree:scopeExecution];
+	for (UDExecutionEntity *child in [scopeExecution.children allObjects]) {
+		if (![child isDeleted]) {
+			[self remove:child];
+		}
+	}
+	NSArray *rows = [[[[[scopeExecution.tasks allObjects]
+		arrayByAddingObjectsFromArray:[scopeExecution.externalTasks allObjects]]
+		arrayByAddingObjectsFromArray:[scopeExecution.jobs allObjects]]
+		arrayByAddingObjectsFromArray:[scopeExecution.eventSubscriptions allObjects]]
+		arrayByAddingObjectsFromArray:[scopeExecution.incidents allObjects]];
+	for (NSManagedObject *row in rows) {
+		if (![row isDeleted]) {
+			[self remove:row];
+		}
+	}
+	scopeExecution.activityId = nil;
+	scopeExecution.activityInstanceId = nil;
+	scopeExecution.isActive = YES;
+}
+
+/* A new concurrent path in the scope. When the scope execution is itself
+ * the scope's one path, what that path is doing moves into a concurrent
+ * child first -- everything but the scope's own waits, the event
+ * subprocesses' starts. */
+- (UDExecutionEntity *)pathBeside:(UDExecutionEntity *)scopeExecution keeping:(NSSet *)scopeWaits
+{
+	if ([[scopeExecution concurrentChildren] count] == 0
+	    && (scopeExecution.activityId != nil || [scopeExecution.children count] > 0)) {
+		NSArray *children = [scopeExecution.children allObjects];
+		UDExecutionEntity *moved = [self newChildOf:scopeExecution concurrent:YES];
+		moved.activityId = scopeExecution.activityId;
+		moved.activityInstanceId = scopeExecution.activityInstanceId;
+		moved.isActive = scopeExecution.isActive;
+		for (UDExecutionEntity *child in children) {
+			if (![child isDeleted]) {
+				child.parent = moved;
+			}
+		}
+		for (UDTaskEntity *task in [scopeExecution.tasks allObjects]) {
+			task.execution = moved;
+		}
+		for (UDExternalTaskEntity *externalTask in [scopeExecution.externalTasks allObjects]) {
+			externalTask.execution = moved;
+		}
+		for (UDIncidentEntity *incident in [scopeExecution.incidents allObjects]) {
+			incident.execution = moved;
+		}
+		for (UDJobEntity *job in [scopeExecution.jobs allObjects]) {
+			if (![scopeWaits containsObject:job.activityId]) {
+				job.execution = moved;
+			}
+		}
+		for (UDEventSubscriptionEntity *subscription in [scopeExecution.eventSubscriptions allObjects]) {
+			if (![scopeWaits containsObject:subscription.activityId]) {
+				subscription.execution = moved;
+			}
+		}
+		UDExecutionEntity *called = scopeExecution.subProcessInstance;
+		if (called != nil) {
+			called.superExecution = moved;
+		}
+		scopeExecution.activityId = nil;
+		scopeExecution.activityInstanceId = nil;
+		scopeExecution.isActive = NO;
+	}
+	return [self newChildOf:scopeExecution concurrent:YES];
 }
 
 #pragma mark - Signals and terminate
@@ -1430,6 +1649,9 @@ static NSString * const UDLoopCounter = @"loopCounter";
 	}
 	for (UDExternalTaskEntity *externalTask in [path.externalTasks allObjects]) {
 		externalTask.execution = level;
+	}
+	for (UDIncidentEntity *incident in [path.incidents allObjects]) {
+		incident.execution = level;
 	}
 	/* Before the path goes: removing it would take the called instance
 	 * with it. */

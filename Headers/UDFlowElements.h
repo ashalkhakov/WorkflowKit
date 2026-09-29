@@ -79,6 +79,8 @@
 @property (nonatomic, readonly) NSTimeInterval timerDuration;
 @property (nonatomic, readonly, copy) NSString *attachedToId;
 @property (nonatomic, readonly, copy) NSString *errorRef;
+/* A boundary event's cancelActivity, or an event subprocess's start
+ * event's isInterrupting. */
 @property (nonatomic, readonly, getter=isInterrupting) BOOL interrupting;
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name
@@ -124,6 +126,10 @@
 
 @interface UDSubProcess : UDFlowNode
 @property (nonatomic, readonly, strong) UDProcessDefinition *innerDefinition;
+/* An event subprocess (triggeredByEvent): no flows in or out; its start
+ * event -- message, timer, signal or error -- starts it while the scope
+ * around it is active, interrupting that scope or running beside it. */
+@property (nonatomic, readonly, getter=isTriggeredByEvent) BOOL triggeredByEvent;
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name
                  innerDefinition:(UDProcessDefinition *)innerDefinition NS_DESIGNATED_INITIALIZER;

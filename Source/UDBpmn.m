@@ -367,7 +367,12 @@ UDMappingAttrs(UDVariableMapping *mapping)
 	if ([node isKindOfClass:[UDEvent class]]) {
 		UDEvent *event = (UDEvent *)node;
 		switch (event.kind) {
-		case UDEventKindStart: tag = @"startEvent"; break;
+		case UDEventKindStart:
+			tag = @"startEvent";
+			if (!event.isInterrupting) {
+				[attrs appendString:@" isInterrupting=\"false\""];
+			}
+			break;
 		case UDEventKindEnd: tag = @"endEvent"; break;
 		case UDEventKindIntermediateCatch: tag = @"intermediateCatchEvent"; break;
 		case UDEventKindIntermediateThrow: tag = @"intermediateThrowEvent"; break;
@@ -417,6 +422,9 @@ UDMappingAttrs(UDVariableMapping *mapping)
 		}
 	} else if ([node isKindOfClass:[UDSubProcess class]]) {
 		tag = @"subProcess";
+		if ([(UDSubProcess *)node isTriggeredByEvent]) {
+			[attrs appendString:@" triggeredByEvent=\"true\""];
+		}
 		UDProcessDefinition *scope = [(UDSubProcess *)node innerDefinition];
 		if (![self appendScope:scope to:body indent:inner context:context error:error]) {
 			return NO;
@@ -588,6 +596,9 @@ UDIgnoredElements(void)
 @property (nonatomic, strong) NSDictionary<NSString *, NSXMLElement *> *shapes;
 @property (nonatomic, copy) NSString *expressionLanguage;
 @property (nonatomic, strong) NSError *error;
+/* Reading an event subprocess's own elements, whose start event may be an
+ * error start. */
+@property (nonatomic) BOOL inEventSubProcess;
 @end
 
 @implementation UDBpmnReadContext
@@ -1075,10 +1086,19 @@ UDIgnoredElements(void)
 		} else if (signal) {
 			[builder addSignalStart:elementId signal:signalName];
 		} else if (errorTrigger) {
-			[self fail:context error:UDBpmnError(
-				@"%@: error start events are not supported yet", elementId)];
+			if (!context.inEventSubProcess) {
+				[self fail:context error:UDBpmnError(
+					@"%@: an error start event can only start an event subprocess", elementId)];
+				return NO;
+			}
+			NSString *ref = [self attr:@"errorRef" of:definition];
+			[builder addErrorStart:elementId
+			              errorRef:ref == nil ? nil : ([context.errors objectForKey:ref] ?: ref)];
 		} else {
 			[builder addStart:elementId];
+		}
+		if ([[self attr:@"isInterrupting" of:element] isEqualToString:@"false"]) {
+			[builder setInterrupting:NO forElement:elementId];
 		}
 	} else if ([name isEqualToString:@"endEvent"]) {
 		if (message) {
@@ -1181,15 +1201,14 @@ UDIgnoredElements(void)
 	} else if ([name isEqualToString:@"callActivity"]) {
 		return [self readCall:element id:elementId into:builder context:context];
 	} else if ([name isEqualToString:@"subProcess"]) {
-		if ([[self attr:@"triggeredByEvent" of:element] isEqualToString:@"true"]) {
-			[self fail:context error:UDBpmnError(
-				@"%@: event subprocesses are not supported yet", elementId)];
-			return NO;
-		}
+		BOOL triggered = [[self attr:@"triggeredByEvent" of:element] isEqualToString:@"true"];
 		UDDefinitionBuilder *inner =
 			[UDDefinitionBuilder process:elementId
 			                        name:[self attr:@"name" of:element] ?: elementId];
+		BOOL outer = context.inEventSubProcess;
+		context.inEventSubProcess = triggered;
 		[self readScope:element into:inner context:context];
+		context.inEventSubProcess = outer;
 		if (context.error != nil) {
 			return NO;
 		}
@@ -1200,9 +1219,15 @@ UDIgnoredElements(void)
 				[buildError localizedDescription])];
 			return NO;
 		}
-		[builder addSubProcess:elementId
-		                  name:[self attr:@"name" of:element] ?: elementId
-		                 inner:scope];
+		if (triggered) {
+			[builder addEventSubProcess:elementId
+			                       name:[self attr:@"name" of:element] ?: elementId
+			                      inner:scope];
+		} else {
+			[builder addSubProcess:elementId
+			                  name:[self attr:@"name" of:element] ?: elementId
+			                 inner:scope];
+		}
 	} else {
 		[self fail:context error:UDBpmnError(@"%@: %@ is not supported yet",
 			elementId, name)];

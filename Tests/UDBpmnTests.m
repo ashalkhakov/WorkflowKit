@@ -23,6 +23,13 @@
 	[[[inner connect:@"review" to:@"or2"] connect:@"review2" to:@"or2"] connect:@"or2" to:@"me"];
 	[inner connect:@"remind" to:@"reminded"];
 	[inner setBoundsFor:@"review" x:40 y:30 width:100 height:80];
+	/* A non-interrupting message handler inside the subprocess. */
+	UDDefinitionBuilder *nudge = [UDDefinitionBuilder process:@"nudge" name:@"Nudge"];
+	[[[nudge addMessageStart:@"nudged" message:@"nudge"] addUserTask:@"reply" name:@"Reply" assignee:nil]
+		addEnd:@"replied"];
+	[[nudge connect:@"nudged" to:@"reply"] connect:@"reply" to:@"replied"];
+	[nudge setInterrupting:NO forElement:@"nudged"];
+	[inner addEventSubProcess:@"nudge" name:@"Nudge" inner:[nudge build:&error]];
 	UDProcessDefinition *manual = [inner build:&error];
 	XCTAssertNotNil(manual, @"%@", error);
 
@@ -37,6 +44,12 @@
 		addMessageEnd:@"done" message:@"closed"];
 	[[[b addTimerCatch:@"timeout" duration:7 * 86400] addEnd:@"late"] addEnd:@"badCredit"];
 	[[b addEnd:@"anyError"] addEnd:@"cancelled"];
+	/* An error handler for the whole process. */
+	UDDefinitionBuilder *rescue = [UDDefinitionBuilder process:@"rescue" name:@"Rescue"];
+	[[[rescue addErrorStart:@"failed" errorRef:@"FATAL"] addUserTask:@"triage" name:@"Triage" assignee:@"ops"]
+		addEnd:@"triaged"];
+	[[rescue connect:@"failed" to:@"triage"] connect:@"triage" to:@"triaged"];
+	[b addEventSubProcess:@"rescue" name:@"Rescue" inner:[rescue build:&error]];
 	[b addBoundaryError:@"onBad" onTask:@"check" errorRef:@"BAD_CREDIT" interrupting:YES];
 	[b addBoundaryError:@"onAny" onTask:@"audit" errorRef:nil interrupting:YES];
 	[b addBoundaryMessage:@"onCancel" onTask:@"fill" message:@"cancel" interrupting:YES];
@@ -99,6 +112,8 @@
 	XCTAssertTrue([xml rangeOfString:@"camunda:topic=\"credit.check\""].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:failedJobRetryTimeCycle>R5/PT5M</camunda:failedJobRetryTimeCycle>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmndi:BPMNShape"].location != NSNotFound);
+	XCTAssertTrue([xml rangeOfString:@"<bpmn:subProcess id=\"rescue\" name=\"Rescue\" triggeredByEvent=\"true\">"].location != NSNotFound, @"%@", xml);
+	XCTAssertTrue([xml rangeOfString:@"<bpmn:startEvent id=\"nudged\" isInterrupting=\"false\">"].location != NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"<bpmn:multiInstanceLoopCharacteristics isSequential=\"true\" camunda:collection=\"auditors\" camunda:elementVariable=\"auditor\">"].location != NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"calledElement=\"escalation\" camunda:calledElementBinding=\"version\" camunda:calledElementVersion=\"2\""].location != NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:in businessKey=\"#{execution.processBusinessKey}\"/>"].location != NSNotFound);

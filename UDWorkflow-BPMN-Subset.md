@@ -24,6 +24,7 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`, for workers using `externalTaskService` (fetch and lock by topic, complete, failure with retries and timeout, BPMN error). The engine's in-process worker is one: it hands tasks to the service handler with the activity's retry cycle (default three attempts). No retries left raises an incident. |
 | Script task | `scriptTask` | Same handler path as service, action key in `ud:action`. No script text. |
 | Embedded subprocess | `subProcess` | A scope execution of its own; it sees its parents' variables, and new variables land on the process instance. |
+| Event subprocess | `subProcess` `triggeredByEvent="true"` | Started by its message, timer, signal or error start event while the scope around it -- the process instance or a subprocess -- is active; no sequence flows. Interrupting (the default): everything else in the scope is canceled and the scope goes on in the event subprocess, ending with it. Non-interrupting (`isInterrupting="false"`, not for errors): runs beside the scope's paths, and a message or signal start stays armed for the next. An error event subprocess catches errors thrown in its scope before any error boundary on the activity around it; an error thrown inside one goes outward. |
 | Multi-instance | `multiInstanceLoopCharacteristics` on a task, subprocess or call activity | Parallel, or sequential with `isSequential="true"`. `loopCardinality`, or `camunda:collection` with `camunda:elementVariable`; `completionCondition`. The instances run under a body holding `nrOfInstances`, `nrOfActiveInstances` and `nrOfCompletedInstances`; each has its own `loopCounter` and element variable. When the completion condition holds, the other instances are canceled. Boundary events are on the body; the activity's `asyncBefore`/`asyncAfter` are each instance's. History records the body as `<id>#multiInstanceBody`. |
 | Call activity | `callActivity` `calledElement` | Starts an instance of the process with that key, in the same transaction, and waits for it to end. `camunda:calledElementBinding`: `latest` (default), `deployment`, or `version` with `camunda:calledElementVersion`. Variables pass only through `camunda:in` / `camunda:out`: `source` and `target`, or `variables="all"`; `camunda:in businessKey="#{execution.processBusinessKey}"` passes the business key. A missing source passes null. Outputs are set where the variable exists, else on the process instance. |
 
@@ -101,10 +102,9 @@ The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` (or `#{
 |---|---|
 | Collaboration | pool, lane, messageFlow, conversation, choreography |
 | Gateways | complex |
-| Activities | event subprocess, transaction, ad-hoc, standard loop, compensation |
+| Activities | transaction, ad-hoc, standard loop, compensation |
 | Tasks | manual, business rule, send, receive, receive-task as event stand-in |
 | Events | escalation, cancel, compensate, link, conditional, multiple, parallel multiple |
-| Event use | non-interrupting start in event subprocess |
 | Data | data object, data store, data association, properties as BPMN itemAware |
 | Multi-instance extras | `asyncBefore`/`asyncAfter` on the loop characteristics themselves, `loopDataInputRef`/`inputDataItem` and the output side, `complexBehaviorDefinition` |
 | Call activity extras | expressions in `calledElement`, `versionTag` binding, `sourceExpression`, `local="true"`, variable mapping delegates, tenants, CMMN cases |
@@ -146,4 +146,4 @@ Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/
 
 Tests: `Tests/` holds one XCTest case per area (gateways, events, subprocesses, call activities, external tasks, jobs, history, deployment, durability, BPMN), on a shared `UDWorkflowTestCase`. On GNUstep, `make test` builds the library and runs the bundle under tools-xctest; see `CLAUDE.md` for the patched stack it is built against.
 
-V3 candidates: error start in event subprocess, full BPMN DI edge waypoints.
+V3 candidates: escalation and compensation events, full BPMN DI edge waypoints.

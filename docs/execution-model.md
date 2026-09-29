@@ -88,6 +88,20 @@ condition holds or none is left, cancels what still runs and lets the path
 leave the activity. Instances finishing at once conflict on the body's
 counters rather than lose a count.
 
+An **event subprocess** waits on its scope execution: when a scope starts
+-- the process instance, a subprocess, one instance of a multi-instance
+subprocess -- its event subprocesses' message and signal starts subscribe
+and their timers are set on that execution, and they go when it does.
+Interrupting, the start cancels the scope's paths and whatever the scope
+execution was doing, and the scope execution runs the event subprocess;
+when that ends, so does the scope. Non-interrupting, a new concurrent path
+runs it; if the scope execution was itself the scope's one path, that path
+moves into a concurrent child first, taking its tasks, jobs, waits and
+called instance and leaving the scope's own waits behind. An error walks
+out through the scopes and, at each, tries the scope's error event
+subprocesses before the error boundaries of the activity around it; an
+error from inside an event subprocess skips its own scope's.
+
 A **call activity** starts another process instance, with a tree of its
 own. Its root points at the execution at the call activity (the super
 execution), which points back at it; both are Core Data relationships, and
@@ -399,5 +413,5 @@ reading (phase 2) and the remaining constructs (phase 5), each one following
 the reference's documented behaviour. Phase 5 so far: signal events and
 terminate end events; call activities (bindings, `camunda:in`/`out`,
 business key, errors out of the called instance, cancellation with the
-caller); FEEL (see above); multi-instance. Still to come: event
-subprocesses, and FEEL's temporal values.
+caller); FEEL (see above); multi-instance; event subprocesses. Still to
+come: FEEL's temporal values, escalation and compensation.

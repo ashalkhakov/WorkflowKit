@@ -15,6 +15,14 @@
 - (void)setMultiInstance:(UDMultiInstance *)multiInstance;
 @end
 
+@interface UDEvent (UDBuilderAccess)
+- (void)setInterrupting:(BOOL)interrupting;
+@end
+
+@interface UDSubProcess (UDBuilderAccess)
+- (void)setTriggeredByEvent:(BOOL)triggeredByEvent;
+@end
+
 @interface UDCallActivity (UDBuilderAccess)
 - (void)setBinding:(UDCalledElementBinding)binding;
 - (void)setCalledElementVersion:(NSInteger)version;
@@ -468,6 +476,32 @@
 	return self;
 }
 
+- (instancetype)addEventSubProcess:(NSString *)elementId
+                              name:(NSString *)name
+                             inner:(UDProcessDefinition *)inner
+{
+	UDSubProcess *node = [[UDSubProcess alloc] initWithElementId:elementId
+	                                                        name:name
+	                                            innerDefinition:inner];
+	[node setTriggeredByEvent:YES];
+	return [self addNode:node];
+}
+
+- (instancetype)addErrorStart:(NSString *)elementId errorRef:(NSString *)errorRef
+{
+	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerError
+	          messageName:errorRef timerDuration:0 attachedToId:nil errorRef:errorRef interrupting:YES];
+}
+
+- (instancetype)setInterrupting:(BOOL)interrupting forElement:(NSString *)elementId
+{
+	UDFlowNode *node = [self.nodes objectForKey:elementId];
+	if ([node isKindOfClass:[UDEvent class]]) {
+		[(UDEvent *)node setInterrupting:interrupting];
+	}
+	return self;
+}
+
 - (instancetype)addBoundaryError:(NSString *)elementId
                           onTask:(NSString *)taskId
                         errorRef:(NSString *)errorRef
@@ -693,6 +727,40 @@
 	return YES;
 }
 
+/* An embedded subprocess starts from a none start event; an event
+ * subprocess from a message, timer, signal or error start, and takes no
+ * sequence flows. */
+- (BOOL)validateSubProcess:(UDSubProcess *)node error:(NSError **)error
+{
+	UDEvent *start = [node.innerDefinition startEvent];
+	if (!node.isTriggeredByEvent) {
+		if (start.trigger != UDEventTriggerNone) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: an embedded subprocess starts from a none start event", node.elementId]];
+		}
+		return YES;
+	}
+	if ([node.incomingFlowIds count] > 0 || [node.outgoingFlowIds count] > 0) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: an event subprocess has no sequence flows in or out", node.elementId]];
+	}
+	if (node.multiInstance != nil) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: an event subprocess cannot be multi-instance", node.elementId]];
+	}
+	if (start.trigger != UDEventTriggerMessage && start.trigger != UDEventTriggerTimer
+	    && start.trigger != UDEventTriggerSignal && start.trigger != UDEventTriggerError) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: an event subprocess starts from a message, timer, signal or error start event",
+			node.elementId]];
+	}
+	if (start.trigger == UDEventTriggerError && !start.isInterrupting) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: an error start event always interrupts", node.elementId]];
+	}
+	return YES;
+}
+
 - (BOOL)validateMultiInstance:(UDFlowNode *)node error:(NSError **)error
 {
 	UDMultiInstance *loop = node.multiInstance;
@@ -771,6 +839,13 @@
 		}
 		if (node.multiInstance != nil && ![self validateMultiInstance:node error:error]) {
 			return NO;
+		}
+		if ([node isKindOfClass:[UDSubProcess class]] && ![self validateSubProcess:(UDSubProcess *)node error:error]) {
+			return NO;
+		}
+		if ([node isKindOfClass:[UDSubProcess class]] && [(UDSubProcess *)node isTriggeredByEvent]) {
+			/* Checked above; it has no flows to check. */
+			continue;
 		}
 
 		if (node.retryTimeCycle != nil) {

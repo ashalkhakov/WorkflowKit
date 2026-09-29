@@ -298,7 +298,7 @@ UDMappingStrings(NSArray<UDVariableMapping *> *mappings)
 		}
 		XCTAssertEqualWithAccuracy(x.timerDuration, y.timerDuration, 0.001, @"%@", a.elementId);
 		XCTAssertEqualObjects(x.attachedToId, y.attachedToId, @"%@", a.elementId);
-		if (x.kind == UDEventKindBoundary) {
+		if (x.kind == UDEventKindBoundary || x.kind == UDEventKindStart) {
 			XCTAssertEqual(x.isInterrupting, y.isInterrupting, @"%@", a.elementId);
 		}
 	} else if ([a isKindOfClass:[UDTask class]]) {
@@ -320,6 +320,8 @@ UDMappingStrings(NSArray<UDVariableMapping *> *mappings)
 		XCTAssertEqualObjects([(UDGateway *)a defaultFlowId], [(UDGateway *)b defaultFlowId],
 			@"%@", a.elementId);
 	} else if ([a isKindOfClass:[UDSubProcess class]]) {
+		XCTAssertEqual([(UDSubProcess *)a isTriggeredByEvent], [(UDSubProcess *)b isTriggeredByEvent],
+			@"%@", a.elementId);
 		[self assertDefinition:[(UDSubProcess *)a innerDefinition]
 		               matches:[(UDSubProcess *)b innerDefinition]];
 	}

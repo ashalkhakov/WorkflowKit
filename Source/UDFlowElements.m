@@ -93,6 +93,14 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 
 @end
 
+@interface UDEvent ()
+@property (nonatomic, readwrite, getter=isInterrupting) BOOL interrupting;
+@end
+
+@interface UDSubProcess ()
+@property (nonatomic, readwrite, getter=isTriggeredByEvent) BOOL triggeredByEvent;
+@end
+
 @implementation UDEvent
 
 - (NSString *)signalName

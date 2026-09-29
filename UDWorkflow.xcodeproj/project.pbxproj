@@ -27,6 +27,7 @@
 		5A06D6960496D6FCCF2DA7D2 /* UDStore.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = D08BB86D12CB87EDCB0913DD /* UDStore.m */; };
 		5B99CDCBA0D22C3A18A250B7 /* UDFlowElements.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 9FEDB40ABD24AF3F46C2C4B6 /* UDFlowElements.m */; };
 		5C692F27581691B5AF233BFC /* UDGatewayTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = CC06C30792DFD1C139623C04 /* UDGatewayTests.m */; };
+		5D633A6ACB818F6E53D2675A /* UDEventSubProcessTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = BA7F1E6CEFA2683479438F94 /* UDEventSubProcessTests.m */; };
 		5E8BAD08C546DDBD8AC2DC9F /* UDManagementService.h in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 6598F9EB508BB04E1C955575 /* UDManagementService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		61BA8CC333E98077D420B245 /* UDJobTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 8CD1A266AE9E24F04EDA40FC /* UDJobTests.m */; };
 		64C05A7487EC91DA0B4E8075 /* UDSubprocessTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 40923AAB7421C89526C49E0C /* UDSubprocessTests.m */; };
@@ -124,6 +125,7 @@
 		A9AECFEE6C67EBA8CDB6195F /* UDRepositoryService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UDRepositoryService.h; sourceTree = "<group>"; };
 		AB350016A18496531397D139 /* UDWorkflow.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UDWorkflow.h; sourceTree = "<group>"; };
 		B29454D488C4F49E273C15A0 /* Foundation.framework */ = { isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		BA7F1E6CEFA2683479438F94 /* UDEventSubProcessTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDEventSubProcessTests.m; sourceTree = "<group>"; };
 		C2AF78B1083514BB9E4435B9 /* UDProcessEngine.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UDProcessEngine.h; sourceTree = "<group>"; };
 		C3147E934598979FDDDAD36A /* UDWorkflowTestCase.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDWorkflowTestCase.m; sourceTree = "<group>"; };
 		CA9160935AF251679E8937AB /* UDFeelFunctions.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDFeelFunctions.m; sourceTree = "<group>"; };
@@ -228,6 +230,7 @@
 				055592E76BDBCDDF15D659E9 /* UDBpmnTests.m */,
 				1354321142B01B8896E5536E /* UDFeelTests.m */,
 				729D1C7A383C53EE00839F16 /* UDMultiInstanceTests.m */,
+				BA7F1E6CEFA2683479438F94 /* UDEventSubProcessTests.m */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -425,6 +428,7 @@
 				85A835DEB6E250FC7AF6D707 /* UDBpmnTests.m in UDWorkflowTests */,
 				6C50D5DAA627BEC636B8C1B2 /* UDFeelTests.m in UDWorkflowTests */,
 				2CF368A57C16C46BCF25C568 /* UDMultiInstanceTests.m in UDWorkflowTests */,
+				5D633A6ACB818F6E53D2675A /* UDEventSubProcessTests.m in UDWorkflowTests */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
