@@ -5,14 +5,24 @@ include $(GNUSTEP_MAKEFILES)/common.make
 
 BUNDLE_NAME = UDWorkflowTests
 
-UDWorkflowTests_OBJC_FILES = UDWorkflowTests.m
+UDWorkflowTests_OBJC_FILES = \
+	UDWorkflowTestCase.m \
+	UDGatewayTests.m \
+	UDEventTests.m \
+	UDSubprocessTests.m \
+	UDExternalTaskTests.m \
+	UDJobTests.m \
+	UDHistoryTests.m \
+	UDDeploymentTests.m \
+	UDDurabilityTests.m \
+	UDBpmnTests.m
 UDWorkflowTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 UDWorkflowTests_INCLUDE_DIRS = -I../Headers
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)
 UDWorkflowTests_BUNDLE_LIBS += -lUDWorkflow -lCoreData -lXCTest -ldispatch
 UDWorkflowTests_XCDATAMODELD_FILES = ../Model/UDWorkflow.xcdatamodeld
 UDWorkflowTests_NEEDS_GUI = no
-UDWorkflowTests_PRINCIPAL_CLASS = UDWorkflowTests
+UDWorkflowTests_PRINCIPAL_CLASS = UDWorkflowTestCase
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 include $(GNUSTEP_MAKEFILES)/bundle.make
