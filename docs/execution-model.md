@@ -283,11 +283,14 @@ Where an expression appears, the file says which language it is in:
 - an expression's own `language` attribute;
 - or the `=` prefix Camunda 8 files use.
 
-The engine implements a FEEL subset, grown as constructs need it:
-- literals, paths and comparisons;
-- `and`, `or`, `not()`;
-- ranges and `in`;
-- simple arithmetic and string functions.
+The engine implements FEEL's core the usual way: a lexer, a recursive
+descent parser with one method per precedence level, a tree whose nodes
+print themselves back as canonical FEEL, and an evaluator that walks it,
+with decimal numbers and FEEL's null semantics. `UDWorkflow-BPMN-Subset.md`
+lists what is in. A condition is a handful of nodes evaluated once per
+gateway pass, so the tree is walked directly; compiling it to bytecode for
+a small stack machine is the next step if measurement ever calls for it,
+and the tree is the seam for it.
 
 For Camunda 7 files there is also a **compatibility subset of the `${...}`
 syntax**: comparisons, `&&`, `||`, `!` and property paths, with no method
@@ -379,4 +382,5 @@ reading (phase 2) and the remaining constructs (phase 5), each one following
 the reference's documented behaviour. Phase 5 so far: signal events and
 terminate end events; call activities (bindings, `camunda:in`/`out`,
 business key, errors out of the called instance, cancellation with the
-caller). Still to come: fuller FEEL, multi-instance, event subprocesses.
+caller); FEEL (see above). Still to come: multi-instance, event
+subprocesses, and FEEL's temporal values.

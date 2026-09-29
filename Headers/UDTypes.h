@@ -55,15 +55,6 @@ typedef NS_ENUM(NSInteger, UDTokenState) {
 	UDTokenStateCompleted
 };
 
-typedef NS_ENUM(NSInteger, UDComparisonOp) {
-	UDComparisonOpEqual = 0,
-	UDComparisonOpNotEqual,
-	UDComparisonOpGreater,
-	UDComparisonOpGreaterOrEqual,
-	UDComparisonOpLess,
-	UDComparisonOpLessOrEqual
-};
-
 typedef NS_ENUM(NSInteger, UDWorkflowErrorCode) {
 	UDWorkflowErrorInvalidDefinition = 1,
 	UDWorkflowErrorUnknownElement,

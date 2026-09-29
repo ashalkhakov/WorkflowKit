@@ -37,7 +37,7 @@ jobs:
       GNUSTEP_PATCHES_REF: b154b9f351b6413337cf57cc02827e634c05580f
       # FreeCoreData, pinned to a commit like the stack: #53, optimistic
       # locking for the SQLite store, which the engine's joins rely on.
-      FREECOREDATA_REF: 07eaacc36a434811e706b002c44c1b7b63441c5f
+      FREECOREDATA_REF: 3c547abc4f402e6b871dbc44586f87fd416f08b4
     defaults:
       run:
         working-directory: ${{ github.workspace }}/source

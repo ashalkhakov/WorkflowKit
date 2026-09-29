@@ -15,7 +15,7 @@
 		addServiceTask:@"lo" action:@"lo"];
 	[b addEnd:@"end"];
 	[b connect:@"start" to:@"g"];
-	[b connect:@"g" to:@"hi" key:@"amount" op:UDComparisonOpGreater value:@1000];
+	[b connect:@"g" to:@"hi" when:@"amount > 1000"];
 	[b connect:@"g" to:@"lo" flowId:@"low"];
 	[[b connect:@"hi" to:@"end"] connect:@"lo" to:@"end"];
 	UDMapHandler *h = [[UDMapHandler alloc] init];
@@ -85,8 +85,8 @@
 		addServiceTask:@"audit" action:@"audit"] addServiceTask:@"ship" action:@"ship"];
 	[[b addInclusive:@"join" defaultFlow:nil] addEnd:@"end"];
 	[b connect:@"start" to:@"split"];
-	[b connect:@"split" to:@"audit" key:@"audit" op:UDComparisonOpEqual value:@YES];
-	[b connect:@"split" to:@"ship" key:@"ship" op:UDComparisonOpEqual value:@YES];
+	[b connect:@"split" to:@"audit" when:@"audit = true"];
+	[b connect:@"split" to:@"ship" when:@"ship = true"];
 	[b connect:@"split" to:@"ship" flowId:@"d"];
 	[[b connect:@"audit" to:@"join"] connect:@"ship" to:@"join"];
 	[b connect:@"join" to:@"end"];

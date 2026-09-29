@@ -1,5 +1,5 @@
 #import "UDFlowElements.h"
-#import "UDCondition.h"
+#import "UDFeel.h"
 
 @interface UDProcessDefinition : NSObject
 
@@ -132,11 +132,11 @@
                      to:(NSString *)targetId
                  flowId:(NSString *)flowId
               condition:(id<UDCondition>)condition;
+/* A flow taken when the FEEL condition holds: "amount > 1000". A
+ * condition that is not FEEL fails -build:. */
 - (instancetype)connect:(NSString *)sourceId
                      to:(NSString *)targetId
-                    key:(NSString *)key
-                     op:(UDComparisonOp)op
-                  value:(id)value;
+                   when:(NSString *)condition;
 
 - (UDProcessDefinition *)build:(NSError **)error;
 

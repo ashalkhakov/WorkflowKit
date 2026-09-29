@@ -12,7 +12,7 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 |---|---|---|
 | Executable process | `process` `isExecutable="true"` | `UDProcessDefinition` |
 | Sequence flow | `sequenceFlow` | `UDSequenceFlow` |
-| Conditional flow | `conditionExpression` | `UDComparisonCondition` |
+| Conditional flow | `conditionExpression` | `UDFeelExpression` |
 | Default flow | `exclusiveGateway/@default` | `UDGateway.defaultFlowId` |
 | Version | assigned on deployment | `definition.version`: 1 for a key's first deployment, the next for each changed one |
 
@@ -80,17 +80,19 @@ Service and script tasks are external tasks, created by the commit that reaches 
 
 ## 3. Conditions
 
-Conditions are FEEL, the expression language of DMN; the engine implements its comparison subset so far. No JavaScript, no XPath.
+Conditions are FEEL, the expression language of DMN, parsed once into a tree (`UDFeelExpression`) and evaluated over the variables visible at the gateway. No JavaScript, no XPath.
 
 ```
-amount > 1000
-approved = true
-name != "x"
+amount > 1000 and approved = true
+customer.tier in ["gold", "platinum"]
+count(lines[amount > 100]) >= 2
 ```
 
-Operators: `=` `!=` `>` `>=` `<` `<=` (`==` is accepted). Values: integers, floats, `true`/`false`, double-quoted strings.
+Implemented: null, boolean, decimal number, string, list, context and range values; names, paths and filters (`lines[amount > 100].sku`, `list[1]`, `list[-1]`); `+ - * / **`; `= != < <= > >=`, `between`, `in` with unary tests (`x in [1..10]`, `x in (< 5, > 10)`); `and` and `or` with FEEL's three-valued logic; `if/then/else`, `for/return`, `some`/`every ... satisfies`; the built-in functions for conversion (`not`, `string`, `number`), strings (`string length`, `substring`, `upper case`, `contains`, `starts with`, ...), lists (`count`, `sum`, `min`, `mean`, `all`, `any`, `list contains`, `index of`, `distinct values`, `flatten`, ...), numbers (`decimal`, `floor`, `ceiling`, `abs`, `modulo`, `odd`, `even`) and `now()`. Errors are null, as FEEL has it; a flow whose condition is null is not taken, and a condition whose value is not a boolean fails the command.
 
-The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` syntax with the same single comparison inside, so files from both run. See `docs/execution-model.md` for how the language is chosen.
+Not yet: temporal values and functions (`date`, `duration`, ...) beyond comparing dates held in variables, names with spaces, user-defined functions, `instance of`, named arguments.
+
+The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` (or `#{...}`) with a compatibility subset inside -- literals, names and paths, `== != < <= > >=` and `eq ne lt le gt ge`, `&& || !` and `and or not`, parentheses -- which becomes the same FEEL. See `docs/execution-model.md` for how the language is chosen.
 
 ## 4. Out of scope (V2 reject or ignore)
 

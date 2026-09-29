@@ -61,18 +61,10 @@ UDPurchaseRequestDefinition(NSError **error)
 		addServiceTask:@"reject" action:@"notify.rejected"];
 	[b addEnd:@"end"];
 	[[b connect:@"start" to:@"fill"] connect:@"fill" to:@"byAmount"];
-	[b connect:@"byAmount"
-	        to:@"approve"
-	       key:@"amount"
-	        op:UDComparisonOpGreater
-	     value:@1000];
+	[b connect:@"byAmount" to:@"approve" when:@"amount > 1000"];
 	[b connect:@"byAmount" to:@"procure" flowId:@"flow_auto"];
 	[b connect:@"approve" to:@"byDecision"];
-	[b connect:@"byDecision"
-	        to:@"procure"
-	       key:@"approved"
-	        op:UDComparisonOpEqual
-	     value:@YES];
+	[b connect:@"byDecision" to:@"procure" when:@"approved = true"];
 	[b connect:@"byDecision" to:@"reject" flowId:@"flow_reject"];
 	[[b connect:@"procure" to:@"end"] connect:@"reject" to:@"end"];
 	return [b build:error];

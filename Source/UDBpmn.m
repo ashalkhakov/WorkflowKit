@@ -480,7 +480,7 @@ UDMappingAttrs(UDVariableMapping *mapping)
 	id condition = flow.condition;
 	if (condition == nil) {
 		[out appendFormat:@"%@<bpmn:sequenceFlow%@/>\n", indent, attrs];
-	} else if ([condition isKindOfClass:[UDComparisonCondition class]]) {
+	} else if ([condition conformsToProtocol:@protocol(UDCondition)]) {
 		[out appendFormat:
 			@"%@<bpmn:sequenceFlow%@>\n"
 			 @"%@  <bpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:conditionExpression>\n"
@@ -1175,7 +1175,8 @@ UDIgnoredElements(void)
 }
 
 /*
- * A condition's language: `${...}` is the Camunda 7 expression syntax, a
+ * A condition's language: `${...}` (or `#{...}`) is the Camunda 7
+ * expression syntax, read as the subset UDFeelExpression takes, a
  * leading `=` marks FEEL as Camunda 8 writes it, and otherwise the
  * expression's own language attribute or the document's
  * expressionLanguage decides. A document that names none is read as FEEL:
@@ -1187,7 +1188,8 @@ UDIgnoredElements(void)
 {
 	NSString *text = [self trimmed:[expression stringValue]];
 	NSString *language = [self attr:@"language" of:expression] ?: context.expressionLanguage;
-	if ([text hasPrefix:@"${"] && [text hasSuffix:@"}"]) {
+	BOOL camunda7 = ([text hasPrefix:@"${"] || [text hasPrefix:@"#{"]) && [text hasSuffix:@"}"];
+	if (camunda7) {
 		text = [text substringWithRange:NSMakeRange(2, [text length] - 3)];
 	} else if ([text hasPrefix:@"="]) {
 		text = [text substringFromIndex:1];
@@ -1197,11 +1199,12 @@ UDIgnoredElements(void)
 		return nil;
 	}
 	NSError *parseError = nil;
-	UDComparisonCondition *condition =
-		[UDComparisonCondition conditionWithExpression:text error:&parseError];
+	UDFeelExpression *condition = camunda7
+		? [UDFeelExpression expressionWithCamunda7String:text error:&parseError]
+		: [UDFeelExpression expressionWithString:text error:&parseError];
 	if (condition == nil) {
-		[self fail:context error:UDBpmnError(@"%@: condition \"%@\": %@",
-			flowId, text, [parseError localizedDescription])];
+		[self fail:context error:UDBpmnError(@"%@: condition %@",
+			flowId, [parseError localizedDescription])];
 	}
 	return condition;
 }

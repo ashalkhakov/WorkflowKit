@@ -234,8 +234,8 @@
 	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"fragile"];
 	[[[[b addStart:@"start"] addExclusive:@"route" defaultFlow:nil] addEnd:@"big"] addEnd:@"small"];
 	[b connect:@"start" to:@"route"];
-	[b connect:@"route" to:@"big" key:@"amount" op:UDComparisonOpGreater value:@100];
-	[b connect:@"route" to:@"small" key:@"amount" op:UDComparisonOpLessOrEqual value:@100];
+	[b connect:@"route" to:@"big" when:@"amount > 100"];
+	[b connect:@"route" to:@"small" when:@"amount <= 100"];
 	[b setAsyncBefore:YES asyncAfter:NO exclusive:YES forElement:@"route"];
 	if (cycle != nil) {
 		[b setRetryTimeCycle:cycle forElement:@"route"];

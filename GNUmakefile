@@ -16,7 +16,11 @@ LIBRARY_NAME = UDWorkflow
 
 UDWorkflow_OBJC_FILES = \
 	Source/UDFlowElements.m \
-	Source/UDCondition.m \
+	Source/UDFeelLexer.m \
+	Source/UDFeelParser.m \
+	Source/UDFeelEvaluator.m \
+	Source/UDFeelFunctions.m \
+	Source/UDFeel.m \
 	Source/UDProcessDefinition.m \
 	Source/UDHandlers.m \
 	Source/UDStore.m \
@@ -34,6 +38,7 @@ UDWorkflow_HEADER_FILES_INSTALL_DIR = UDWorkflow
 UDWorkflow_HEADER_FILES = \
 	UDTypes.h \
 	UDCondition.h \
+	UDFeel.h \
 	UDFlowElements.h \
 	UDProcessDefinition.h \
 	UDHandlers.h \

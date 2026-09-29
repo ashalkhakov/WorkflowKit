@@ -177,6 +177,8 @@
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UDSequenceFlow *> *flows;
 @property (nonatomic, strong) NSMutableArray<NSString *> *flowOrder;
 @property (nonatomic) NSUInteger flowSerial;
+/* The first thing added wrongly, which -build: reports. */
+@property (nonatomic, strong) NSError *firstError;
 @end
 
 @implementation UDDefinitionBuilder
@@ -575,13 +577,15 @@
 
 - (instancetype)connect:(NSString *)sourceId
                      to:(NSString *)targetId
-                    key:(NSString *)key
-                     op:(UDComparisonOp)op
-                  value:(id)value
+                   when:(NSString *)condition
 {
-	UDComparisonCondition *condition =
-		[[UDComparisonCondition alloc] initWithKey:key op:op value:value];
-	return [self connect:sourceId to:targetId flowId:nil condition:condition];
+	NSError *error = nil;
+	UDFeelExpression *expression = [UDFeelExpression expressionWithString:condition error:&error];
+	if (expression == nil) {
+		self.firstError = self.firstError ?: error;
+		return self;
+	}
+	return [self connect:sourceId to:targetId flowId:nil condition:expression];
 }
 
 - (instancetype)connect:(NSString *)sourceId
@@ -760,6 +764,12 @@
 		[target addIncomingFlowId:flow.elementId];
 	}
 
+	if (self.firstError != nil) {
+		if (error != NULL) {
+			*error = self.firstError;
+		}
+		return nil;
+	}
 	if (![self validate:error]) {
 		return nil;
 	}

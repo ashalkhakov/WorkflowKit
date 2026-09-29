@@ -14,7 +14,7 @@
 	[[[[b addStart:@"start"] addExclusive:@"g" defaultFlow:@"low"] addUserTask:@"review" name:@"Review" assignee:@"ann"]
 		addEnd:@"end"];
 	[b connect:@"start" to:@"g"];
-	[b connect:@"g" to:@"review" key:@"amount" op:UDComparisonOpGreater value:@1000];
+	[b connect:@"g" to:@"review" when:@"amount > 1000"];
 	[b connect:@"g" to:@"end" flowId:@"low"];
 	[b connect:@"review" to:@"end"];
 	UDProcessDefinition *def = [b build:&error];

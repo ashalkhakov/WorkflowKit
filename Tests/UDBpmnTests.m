@@ -18,7 +18,7 @@
 	[inner addBoundaryTimer:@"remind" onTask:@"review" duration:90 interrupting:NO];
 	[inner connect:@"ms" to:@"or1"];
 	[inner connect:@"or1" to:@"review" flowId:@"f_or_a"
-	     condition:[UDComparisonCondition key:@"urgent" equals:@YES]];
+	     condition:[UDFeelExpression expressionWithString:@"urgent = true" error:NULL]];
 	[inner connect:@"or1" to:@"review2" flowId:@"f_or_b"];
 	[[[inner connect:@"review" to:@"or2"] connect:@"review2" to:@"or2"] connect:@"or2" to:@"me"];
 	[inner connect:@"remind" to:@"reminded"];
@@ -47,7 +47,7 @@
 	[[b connect:@"split" to:@"check"] connect:@"split" to:@"audit"];
 	[[b connect:@"check" to:@"join"] connect:@"audit" to:@"join"];
 	[b connect:@"join" to:@"choice"];
-	[b connect:@"choice" to:@"milestone" key:@"amount" op:UDComparisonOpLessOrEqual value:@1000];
+	[b connect:@"choice" to:@"milestone" when:@"amount <= 1000"];
 	[b connect:@"choice" to:@"manual" flowId:@"toManual"];
 	[[b connect:@"milestone" to:@"race"] connect:@"manual" to:@"race"];
 	[[b connect:@"race" to:@"paid"] connect:@"race" to:@"timeout"];
@@ -234,24 +234,6 @@ static NSString * const UDModelerInvoice =
 	XCTAssertTrue([engine waitUntilSettled:small timeout:10.0]);
 	XCTAssertEqualObjects([self active:small engine:engine], @[ @"Event_confirmed" ],
 		@"under 1000 skips approval");
-}
-
-- (void)testFeelComparisons
-{
-	NSError *error = nil;
-	UDComparisonCondition *c =
-		[UDComparisonCondition conditionWithExpression:@"amount > 10" error:&error];
-	XCTAssertNotNil(c, @"%@", error);
-	XCTAssertTrue([c evaluateWithVariables:@{ @"amount": @11 } error:NULL]);
-	XCTAssertFalse([c evaluateWithVariables:@{ @"amount": @3 } error:NULL]);
-	XCTAssertEqualObjects([c expressionString], @"amount > 10");
-
-	UDComparisonCondition *approved =
-		[UDComparisonCondition conditionWithExpression:@"approved = true" error:&error];
-	XCTAssertTrue([approved evaluateWithVariables:@{ @"approved": @YES } error:NULL]);
-	XCTAssertEqualObjects([approved expressionString], @"approved = true");
-	XCTAssertEqualObjects([[UDComparisonCondition key:@"name" equals:@"x"] expressionString],
-		@"name = \"x\"");
 }
 
 @end
