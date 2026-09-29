@@ -1,12 +1,16 @@
 #import <XCTest/XCTest.h>
+#import <CoreData/CoreData.h>
 #import "UDWorkflow.h"
 
 @interface UDMapHandler : NSObject <UDServiceTaskHandler>
 @property (nonatomic, strong) NSMutableDictionary *results;
-@property (nonatomic, strong) NSMutableSet *failures;
+/* Topic to the BPMN error code the task answers with. */
+@property (nonatomic, strong) NSMutableDictionary *bpmnErrors;
+/* Topic to the number of failures before the task succeeds. */
+@property (nonatomic, strong) NSMutableDictionary *failures;
 /* Invocations taken and never finished, as if the process died mid-call. */
 @property (nonatomic) BOOL drops;
-@property (nonatomic, strong) NSMutableArray *jobIds;
+@property (nonatomic, strong) NSMutableArray *taskIds;
 @end
 
 @implementation UDMapHandler
@@ -15,28 +19,75 @@
 	self = [super init];
 	if (self) {
 		_results = [NSMutableDictionary dictionary];
-		_failures = [NSMutableSet set];
-		_jobIds = [NSMutableArray array];
+		_bpmnErrors = [NSMutableDictionary dictionary];
+		_failures = [NSMutableDictionary dictionary];
+		_taskIds = [NSMutableArray array];
 	}
 	return self;
 }
 - (void)performInvocation:(UDServiceInvocation *)invocation
 {
+	NSInteger failuresLeft = 0;
 	@synchronized (self) {
-		[self.jobIds addObject:invocation.jobId];
+		[self.taskIds addObject:invocation.externalTaskId];
+		failuresLeft = [[self.failures objectForKey:invocation.topic] integerValue];
+		if (failuresLeft > 0) {
+			[self.failures setObject:[NSNumber numberWithInteger:failuresLeft - 1]
+			                  forKey:invocation.topic];
+		}
 	}
 	if (self.drops) {
 		return;
 	}
-	if ([self.failures containsObject:invocation.actionKey]) {
-		NSError *error = [NSError errorWithDomain:UDWorkflowErrorDomain
-		                                     code:UDWorkflowErrorHandler
-		                                 userInfo:@{ UDWorkflowErrorRefKey: invocation.actionKey }];
-		[invocation finishWithVariables:nil error:error];
+	NSString *code = [self.bpmnErrors objectForKey:invocation.topic];
+	if (code != nil) {
+		[invocation finishWithVariables:nil
+		                          error:[NSError errorWithDomain:UDWorkflowErrorDomain
+		                                                    code:UDWorkflowErrorHandler
+		                                                userInfo:@{ UDWorkflowErrorRefKey: code }]];
 		return;
 	}
-	NSDictionary *out = [self.results objectForKey:invocation.actionKey];
-	[invocation finishWithVariables:out error:nil];
+	if (failuresLeft != 0) {
+		[invocation finishWithVariables:nil
+		                          error:[NSError errorWithDomain:@"test"
+		                                                    code:1
+		                                                userInfo:@{ NSLocalizedDescriptionKey: @"down" }]];
+		return;
+	}
+	[invocation finishWithVariables:[self.results objectForKey:invocation.topic] error:nil];
+}
+- (NSUInteger)calls
+{
+	@synchronized (self) {
+		return [self.taskIds count];
+	}
+}
+@end
+
+@interface UDCompletingDelegate : NSObject <UDProcessEngineDelegate>
+@property (nonatomic, strong) NSMutableArray *ended;
+@end
+
+@implementation UDCompletingDelegate
+- (instancetype)init
+{
+	self = [super init];
+	if (self) {
+		_ended = [NSMutableArray array];
+	}
+	return self;
+}
+/* Completes every task from inside the callback. */
+- (void)processEngine:(UDProcessEngine *)engine taskCreated:(UDWorkItem *)task
+{
+	[engine.taskService completeTask:task.taskId variables:@{ @"byDelegate": @YES } error:NULL];
+}
+- (void)processEngine:(UDProcessEngine *)engine processInstanceEnded:(UDProcessInstance *)instance
+{
+	(void)engine;
+	@synchronized (self) {
+		[self.ended addObject:instance.processInstanceId];
+	}
 }
 @end
 
@@ -45,12 +96,12 @@
 
 @implementation UDWorkflowTests
 
-- (UDEngine *)engineWithHandler:(UDMapHandler *)handler
+- (UDProcessEngine *)engineWithHandler:(UDMapHandler *)handler
 {
 	NSError *error = nil;
 	UDStore *store = [UDStore inMemoryStore:&error];
 	XCTAssertNotNil(store, @"%@", error);
-	UDEngine *engine = [[UDEngine alloc] initWithStore:store];
+	UDProcessEngine *engine = [[UDProcessEngine alloc] initWithStore:store];
 	engine.serviceHandler = handler;
 	return engine;
 }
@@ -63,66 +114,123 @@
 		[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
 }
 
-- (UDEngine *)SQLiteEngineAtURL:(NSURL *)url handler:(UDMapHandler *)handler
+- (UDProcessEngine *)SQLiteEngineAtURL:(NSURL *)url handler:(UDMapHandler *)handler
 {
 	NSError *error = nil;
 	UDStore *store = [UDStore SQLiteStoreAtURL:url error:&error];
 	XCTAssertNotNil(store, @"%@", error);
-	UDEngine *engine = [[UDEngine alloc] initWithStore:store];
+	UDProcessEngine *engine = [[UDProcessEngine alloc] initWithStore:store];
 	engine.serviceHandler = handler;
 	return engine;
 }
 
-/* Starts the latest deployed version and waits for its service calls. */
-- (UDProcessInstance *)run:(UDProcessDefinition *)definition
-                    engine:(UDEngine *)engine
-                 variables:(NSDictionary *)variables
+- (void)deploy:(UDProcessDefinition *)definition engine:(UDProcessEngine *)engine
 {
 	NSError *error = nil;
-	XCTAssertTrue(([engine.repositoryService deployDefinition:definition error:&error] != nil), @"%@", error);
-	NSString *instanceId = [engine startProcess:definition.processId
-	                                  variables:variables
-	                                      error:&error];
-	XCTAssertNotNil(instanceId, @"%@", error);
-	if (instanceId == nil) {
-		return nil;
-	}
-	XCTAssertTrue([engine waitUntilSettled:instanceId timeout:10.0]);
-	UDProcessInstance *instance = [engine instanceWithId:instanceId error:&error];
+	XCTAssertNotNil(definition);
+	XCTAssertNotNil([engine.repositoryService deployDefinition:definition error:&error],
+		@"%@", error);
+}
+
+/* Deploys, starts, and waits for the engine's own work on the instance. */
+- (NSString *)run:(UDProcessDefinition *)definition
+           engine:(UDProcessEngine *)engine
+        variables:(NSDictionary *)variables
+{
+	NSError *error = nil;
+	[self deploy:definition engine:engine];
+	UDProcessInstance *instance =
+		[engine.runtimeService startProcessInstanceByKey:definition.processId
+		                                       variables:variables
+		                                           error:&error];
 	XCTAssertNotNil(instance, @"%@", error);
-	return instance;
+	XCTAssertTrue([engine waitUntilSettled:instance.processInstanceId timeout:10.0]);
+	return instance.processInstanceId;
 }
 
-/* Polls the store: timers are waits, not work, so there is nothing to
- * settle on. */
-- (UDProcessInstance *)instance:(NSString *)instanceId
-                         engine:(UDEngine *)engine
-             completesWithin:(NSTimeInterval)seconds
+- (BOOL)ended:(NSString *)processInstanceId engine:(UDProcessEngine *)engine
 {
-	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-	UDProcessInstance *instance = nil;
-	do {
-		[engine waitUntilSettled:instanceId timeout:1.0];
-		instance = [engine instanceWithId:instanceId error:NULL];
-		if (instance.isCompleted || instance.isFailed) {
-			break;
-		}
-		[NSThread sleepForTimeInterval:0.02];
-	} while ([deadline timeIntervalSinceNow] > 0);
-	return instance;
+	return [[engine.historyService historicProcessInstanceWithId:processInstanceId] endTime] != nil;
 }
 
-- (UDToken *)waitingUserToken:(UDProcessInstance *)instance
+- (NSDictionary *)variables:(NSString *)processInstanceId engine:(UDProcessEngine *)engine
 {
-	for (UDToken *token in instance.tokens) {
-		UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-		if (token.state == UDTokenStateWaiting
-		    && [node isKindOfClass:[UDTask class]]
-		    && [(UDTask *)node kind] == UDTaskKindUser) {
-			return token;
+	return [engine.historyService historicVariablesForProcessInstance:processInstanceId];
+}
+
+- (NSArray *)active:(NSString *)processInstanceId engine:(UDProcessEngine *)engine
+{
+	return [engine.runtimeService activeActivityIdsForProcessInstance:processInstanceId error:NULL];
+}
+
+- (UDWorkItem *)task:(NSString *)key of:(NSString *)processInstanceId engine:(UDProcessEngine *)engine
+{
+	for (UDWorkItem *task in [engine.taskService tasksForProcessInstance:processInstanceId]) {
+		if ([task.taskDefinitionKey isEqualToString:key]) {
+			return task;
 		}
 	}
 	return nil;
+}
+
+- (void)complete:(NSString *)key
+              of:(NSString *)processInstanceId
+          engine:(UDProcessEngine *)engine
+       variables:(NSDictionary *)variables
+{
+	NSError *error = nil;
+	UDWorkItem *task = [self task:key of:processInstanceId engine:engine];
+	XCTAssertNotNil(task, @"no task %@", key);
+	XCTAssertTrue([engine.taskService completeTask:task.taskId variables:variables error:&error],
+		@"%@", error);
+	XCTAssertTrue([engine waitUntilSettled:processInstanceId timeout:10.0]);
+}
+
+/* Timers are waits, not work: poll history until the instance ends. */
+- (BOOL)waitForEnd:(NSString *)processInstanceId
+            engine:(UDProcessEngine *)engine
+           seconds:(NSTimeInterval)seconds
+{
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+	while ([deadline timeIntervalSinceNow] > 0) {
+		[engine waitUntilSettled:processInstanceId timeout:1.0];
+		if ([self ended:processInstanceId engine:engine]) {
+			return YES;
+		}
+		[NSThread sleepForTimeInterval:0.02];
+	}
+	return NO;
+}
+
+- (BOOL)waitForActive:(NSString *)activityId
+                   in:(NSString *)processInstanceId
+               engine:(UDProcessEngine *)engine
+{
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
+	while ([deadline timeIntervalSinceNow] > 0) {
+		if ([[self active:processInstanceId engine:engine] containsObject:activityId]) {
+			return YES;
+		}
+		[NSThread sleepForTimeInterval:0.02];
+	}
+	return NO;
+}
+
+- (NSArray *)rows:(NSString *)entity engine:(UDProcessEngine *)engine
+{
+	__block NSArray *rows = nil;
+	NSManagedObjectContext *context = [engine.store newCommandContext];
+	[context performBlockAndWait:^{
+		NSArray *objects = [context executeFetchRequest:
+			[NSFetchRequest fetchRequestWithEntityName:entity] error:NULL];
+		NSMutableArray *values = [NSMutableArray array];
+		for (NSManagedObject *object in objects) {
+			[values addObject:[object dictionaryWithValuesForKeys:
+				[[[object entity] attributesByName] allKeys]]];
+		}
+		rows = values;
+	}];
+	return rows;
 }
 
 - (UDProcessDefinition *)approvalDefinition
@@ -138,7 +246,7 @@
 	return def;
 }
 
-#pragma mark - Gateways, tasks, events
+#pragma mark - Gateways
 
 - (void)testExclusiveAutoApprove
 {
@@ -151,17 +259,13 @@
 	[b connect:@"g" to:@"hi" key:@"amount" op:UDComparisonOpGreater value:@1000];
 	[b connect:@"g" to:@"lo" flowId:@"low"];
 	[[b connect:@"hi" to:@"end"] connect:@"lo" to:@"end"];
-	UDProcessDefinition *def = [b build:&error];
-	XCTAssertNotNil(def, @"%@", error);
-
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"path": @"lo" } forKey:@"lo"];
 	[h.results setObject:@{ @"path": @"hi" } forKey:@"hi"];
-	UDProcessInstance *inst = [self run:def
-	                             engine:[self engineWithHandler:h]
-	                          variables:@{ @"amount": @50 }];
-	XCTAssertTrue(inst.isCompleted);
-	XCTAssertEqualObjects([inst.variables objectForKey:@"path"], @"lo");
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:@{ @"amount": @50 }];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"path"], @"lo");
 }
 
 - (void)testParallelJoin
@@ -175,19 +279,46 @@
 	[[b connect:@"fork" to:@"a"] connect:@"fork" to:@"b"];
 	[[b connect:@"a" to:@"join"] connect:@"b" to:@"join"];
 	[b connect:@"join" to:@"end"];
-	UDProcessDefinition *def = [b build:&error];
-	XCTAssertNotNil(def, @"%@", error);
-
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"a": @YES } forKey:@"a"];
 	[h.results setObject:@{ @"b": @YES } forKey:@"b"];
-	UDProcessInstance *inst = [self run:def engine:[self engineWithHandler:h] variables:nil];
-	XCTAssertTrue(inst.isCompleted, @"%@", inst.error);
-	XCTAssertTrue([[inst.variables objectForKey:@"a"] boolValue]);
-	XCTAssertTrue([[inst.variables objectForKey:@"b"] boolValue]);
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	NSDictionary *vars = [self variables:pid engine:engine];
+	XCTAssertEqualObjects([vars objectForKey:@"a"], @YES);
+	XCTAssertEqualObjects([vars objectForKey:@"b"], @YES);
 }
 
-- (void)testInclusiveTwoBranches
+- (void)testParallelJoinWaitsForBothUserTasks
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"review"];
+	[[[[b addStart:@"start"] addParallel:@"fork"]
+		addUserTask:@"legal" name:@"Legal" assignee:@"ann"]
+		addUserTask:@"finance" name:@"Finance" assignee:@"bob"];
+	[[[b addParallel:@"join"] addUserTask:@"sign" name:@"Sign" assignee:@"cat"] addEnd:@"end"];
+	[b connect:@"start" to:@"fork"];
+	[[b connect:@"fork" to:@"legal"] connect:@"fork" to:@"finance"];
+	[[b connect:@"legal" to:@"join"] connect:@"finance" to:@"join"];
+	[[b connect:@"join" to:@"sign"] connect:@"sign" to:@"end"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], (@[ @"finance", @"legal" ]));
+	XCTAssertEqual([[engine.taskService tasksForAssignee:@"ann"] count], (NSUInteger)1);
+	[self complete:@"legal" of:pid engine:engine variables:nil];
+	/* Waiting at the join is not active. */
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"finance" ]);
+	[self complete:@"finance" of:pid engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"sign" ]);
+	/* One path again: the tree is back to the process instance alone. */
+	XCTAssertEqual([[self rows:@"UDExecution" engine:engine] count], (NSUInteger)1);
+	[self complete:@"sign" of:pid engine:engine variables:nil];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqual([[self rows:@"UDExecution" engine:engine] count], (NSUInteger)0);
+}
+
+- (UDProcessDefinition *)inclusiveDefinition
 {
 	NSError *error = nil;
 	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"or"];
@@ -202,38 +333,58 @@
 	[b connect:@"join" to:@"end"];
 	UDProcessDefinition *def = [b build:&error];
 	XCTAssertNotNil(def, @"%@", error);
+	return def;
+}
 
+- (void)testInclusiveTwoBranches
+{
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"audited": @YES } forKey:@"audit"];
 	[h.results setObject:@{ @"shipped": @YES } forKey:@"ship"];
-	UDProcessInstance *inst = [self run:def
-	                             engine:[self engineWithHandler:h]
-	                          variables:@{ @"audit": @YES, @"ship": @YES }];
-	XCTAssertTrue(inst.isCompleted, @"%@", inst.error);
-	XCTAssertTrue([[inst.variables objectForKey:@"audited"] boolValue]);
-	XCTAssertTrue([[inst.variables objectForKey:@"shipped"] boolValue]);
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[self inclusiveDefinition] engine:engine
+	                variables:@{ @"audit": @YES, @"ship": @YES }];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	NSDictionary *vars = [self variables:pid engine:engine];
+	XCTAssertEqualObjects([vars objectForKey:@"audited"], @YES);
+	XCTAssertEqualObjects([vars objectForKey:@"shipped"], @YES);
 }
 
-- (void)testMessageAndTimer
+- (void)testInclusiveJoinWithOneBranchTaken
+{
+	UDMapHandler *h = [[UDMapHandler alloc] init];
+	[h.results setObject:@{ @"audited": @YES } forKey:@"audit"];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[self inclusiveDefinition] engine:engine
+	                variables:@{ @"audit": @YES, @"ship": @NO }];
+	/* Nothing else can reach the join, so it does not wait for "ship". */
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertNil([[self variables:pid engine:engine] objectForKey:@"shipped"]);
+}
+
+#pragma mark - Events
+
+- (void)testTimerAndMessageCatch
 {
 	NSError *error = nil;
-	UDEngine *engine = [self engineWithHandler:nil];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
 	UDDefinitionBuilder *tb = [UDDefinitionBuilder process:@"t"];
 	[[[tb addStart:@"start"] addTimerCatch:@"wait" duration:0] addEnd:@"end"];
 	[[tb connect:@"start" to:@"wait"] connect:@"wait" to:@"end"];
-	UDProcessInstance *timed = [self run:[tb build:&error] engine:engine variables:nil];
-	XCTAssertTrue(timed.isCompleted, @"%@", timed.error);
+	NSString *timed = [self run:[tb build:&error] engine:engine variables:nil];
+	XCTAssertTrue([self waitForEnd:timed engine:engine seconds:5.0]);
 
 	UDDefinitionBuilder *mb = [UDDefinitionBuilder process:@"m"];
 	[[[mb addStart:@"start"] addMessageCatch:@"go" message:@"go"] addEnd:@"end"];
 	[[mb connect:@"start" to:@"go"] connect:@"go" to:@"end"];
-	UDProcessInstance *waiting = [self run:[mb build:&error] engine:engine variables:nil];
-	XCTAssertFalse(waiting.isCompleted);
-	XCTAssertTrue([engine deliverMessage:@"go" payload:@{ @"ok": @YES }
-	                          instanceId:waiting.instanceId error:&error], @"%@", error);
-	UDProcessInstance *done = [engine instanceWithId:waiting.instanceId error:&error];
-	XCTAssertTrue(done.isCompleted);
-	XCTAssertEqualObjects([done.variables objectForKey:@"ok"], @YES);
+	NSString *waiting = [self run:[mb build:&error] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:waiting engine:engine], @[ @"go" ]);
+	XCTAssertTrue([engine.runtimeService correlateMessage:@"go"
+	                                    processInstanceId:waiting
+	                                            variables:@{ @"ok": @YES }
+	                                                error:&error], @"%@", error);
+	XCTAssertTrue([self ended:waiting engine:engine]);
+	XCTAssertEqualObjects([[self variables:waiting engine:engine] objectForKey:@"ok"], @YES);
 }
 
 - (UDProcessDefinition *)raceDefinition:(NSTimeInterval)timeout
@@ -255,70 +406,136 @@
 - (void)testEventBasedGatewayMessageWins
 {
 	NSError *error = nil;
-	UDEngine *engine = [self engineWithHandler:nil];
-	UDProcessInstance *inst = [self run:[self raceDefinition:30] engine:engine variables:nil];
-	XCTAssertFalse(inst.isCompleted);
-	XCTAssertTrue([engine deliverMessage:@"arrive" payload:nil
-	                          instanceId:inst.instanceId error:&error], @"%@", error);
-	UDProcessInstance *done = [engine instanceWithId:inst.instanceId error:&error];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
-	/* The losing timer's job went with the token. */
-	XCTAssertEqual([[engine.store jobsOfKind:UDJobKindTimer dueBefore:nil limit:0] count],
-		(NSUInteger)0);
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self raceDefinition:30] engine:engine variables:nil];
+	/* The path waits at the gateway itself. */
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"choice" ]);
+	XCTAssertTrue([engine.runtimeService correlateMessage:@"arrive" processInstanceId:pid
+	                                            variables:nil error:&error], @"%@", error);
+	XCTAssertTrue([self ended:pid engine:engine]);
+	/* The losing timer went with the path. */
+	XCTAssertEqual([[self rows:@"UDJob" engine:engine] count], (NSUInteger)0);
 }
 
 - (void)testEventBasedGatewayTimerWins
 {
 	NSError *error = nil;
-	UDEngine *engine = [self engineWithHandler:nil];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
 	XCTAssertTrue([engine openWithError:&error], @"%@", error);
-	UDProcessInstance *inst = [self run:[self raceDefinition:0.2] engine:engine variables:nil];
-	XCTAssertFalse(inst.isCompleted);
-	UDProcessInstance *done = [self instance:inst.instanceId
-	                                  engine:engine
-	                         completesWithin:5.0];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
-	XCTAssertFalse([engine deliverMessage:@"arrive" payload:nil
-	                           instanceId:inst.instanceId error:&error]);
+	NSString *pid = [self run:[self raceDefinition:0.2] engine:engine variables:nil];
+	XCTAssertFalse([self ended:pid engine:engine]);
+	XCTAssertTrue([self waitForEnd:pid engine:engine seconds:5.0]);
+	XCTAssertFalse([engine.runtimeService correlateMessage:@"arrive" processInstanceId:pid
+	                                             variables:nil error:&error]);
+	XCTAssertEqual([[self rows:@"UDEventSubscription" engine:engine] count], (NSUInteger)0);
 }
 
-- (void)testErrorBoundary
+- (void)testInterruptingTimerBoundary
 {
 	NSError *error = nil;
-	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"err"];
-	[[[[b addStart:@"start"] addServiceTask:@"work" action:@"boom"]
-		addBoundaryError:@"onerr" onTask:@"work" errorRef:@"boom" interrupting:YES]
-		addEnd:@"ok"];
-	[b addEnd:@"failed"];
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"escalate"];
+	[[[[b addStart:@"start"] addUserTask:@"work" name:@"Work" assignee:@"ann"]
+		addUserTask:@"escalated" name:@"Escalated" assignee:@"boss"] addEnd:@"end"];
+	[b addBoundaryTimer:@"late" onTask:@"work" duration:0.2 interrupting:YES];
+	[[b connect:@"start" to:@"work"] connect:@"work" to:@"end"];
+	[[b connect:@"late" to:@"escalated"] connect:@"escalated" to:@"end"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	XCTAssertTrue([engine openWithError:&error], @"%@", error);
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"work" ]);
+	XCTAssertTrue([self waitForActive:@"escalated" in:pid engine:engine]);
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"escalated" ]);
+	XCTAssertNil([self task:@"work" of:pid engine:engine], @"the interrupted task is gone");
+}
+
+- (void)testNonInterruptingMessageBoundaryStaysArmed
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"nudge"];
+	[[[[b addStart:@"start"] addUserTask:@"work" name:@"Work" assignee:@"ann"]
+		addUserTask:@"answer" name:@"Answer" assignee:@"ann"] addEnd:@"end"];
+	[b addEnd:@"answered"];
+	[b addBoundaryMessage:@"asked" onTask:@"work" message:@"question" interrupting:NO];
+	[[b connect:@"start" to:@"work"] connect:@"work" to:@"end"];
+	[[b connect:@"asked" to:@"answer"] connect:@"answer" to:@"answered"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	for (int round = 0; round < 2; round++) {
+		XCTAssertTrue([engine.runtimeService correlateMessage:@"question" processInstanceId:pid
+		                                            variables:nil error:&error], @"%@", error);
+		XCTAssertEqualObjects([self active:pid engine:engine], (@[ @"answer", @"work" ]));
+		[self complete:@"answer" of:pid engine:engine variables:nil];
+		XCTAssertEqualObjects([self active:pid engine:engine], @[ @"work" ]);
+	}
+	[self complete:@"work" of:pid engine:engine variables:nil];
+	XCTAssertTrue([self ended:pid engine:engine]);
+}
+
+#pragma mark - Service tasks
+
+- (UDProcessDefinition *)failingDefinition:(BOOL)withBoundary
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:withBoundary ? @"err" : @"plain"];
+	[[[b addStart:@"start"] addServiceTask:@"work" action:@"boom"] addEnd:@"ok"];
 	[b connect:@"start" to:@"work"];
 	[b connect:@"work" to:@"ok"];
-	[b connect:@"onerr" to:@"failed"];
+	if (withBoundary) {
+		[[b addBoundaryError:@"onerr" onTask:@"work" errorRef:@"BOOM" interrupting:YES]
+			addUserTask:@"handle" name:@"Handle" assignee:@"ops"];
+		[b addEnd:@"handled"];
+		[[b connect:@"onerr" to:@"handle"] connect:@"handle" to:@"handled"];
+	}
 	UDProcessDefinition *def = [b build:&error];
 	XCTAssertNotNil(def, @"%@", error);
-
-	UDMapHandler *h = [[UDMapHandler alloc] init];
-	[h.failures addObject:@"boom"];
-	UDProcessInstance *inst = [self run:def engine:[self engineWithHandler:h] variables:nil];
-	XCTAssertTrue(inst.isCompleted, @"%@", inst.error);
-	XCTAssertFalse(inst.isFailed);
-	XCTAssertEqualObjects([inst.variables objectForKey:@"errorRef"], @"boom");
+	return def;
 }
 
-- (void)testUnhandledServiceErrorFailsInstance
+- (void)testBpmnErrorTakesTheBoundary
 {
-	NSError *error = nil;
-	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"unhandled"];
-	[[[b addStart:@"start"] addServiceTask:@"work" action:@"boom"] addEnd:@"end"];
-	[[b connect:@"start" to:@"work"] connect:@"work" to:@"end"];
 	UDMapHandler *h = [[UDMapHandler alloc] init];
-	[h.failures addObject:@"boom"];
-	UDEngine *engine = [self engineWithHandler:h];
-	UDProcessInstance *inst = [self run:[b build:&error] engine:engine variables:nil];
-	XCTAssertTrue(inst.isFailed);
-	XCTAssertEqualObjects([[inst.error userInfo] objectForKey:UDWorkflowErrorRefKey], @"boom");
-	XCTAssertEqualObjects([engine.store instanceIdsWithStatus:UDInstanceStatusFailed],
-		@[ inst.instanceId ]);
+	[h.bpmnErrors setObject:@"BOOM" forKey:@"boom"];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[self failingDefinition:YES] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"handle" ]);
 }
+
+- (void)testUncaughtBpmnErrorEndsThePath
+{
+	UDMapHandler *h = [[UDMapHandler alloc] init];
+	[h.bpmnErrors setObject:@"BOOM" forKey:@"boom"];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[self failingDefinition:NO] engine:engine variables:nil];
+	XCTAssertTrue([self ended:pid engine:engine]);
+}
+
+- (void)testFailedServiceIsRetried
+{
+	UDMapHandler *h = [[UDMapHandler alloc] init];
+	[h.failures setObject:@2 forKey:@"boom"];
+	[h.results setObject:@{ @"done": @YES } forKey:@"boom"];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[self failingDefinition:NO] engine:engine variables:nil];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqual([h calls], (NSUInteger)3);
+	/* The same external task each time. */
+	XCTAssertEqual([[NSSet setWithArray:h.taskIds] count], (NSUInteger)1);
+}
+
+- (void)testServiceFailuresRunOutOfRetries
+{
+	UDMapHandler *h = [[UDMapHandler alloc] init];
+	[h.failures setObject:@-1 forKey:@"boom"];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[self failingDefinition:NO] engine:engine variables:nil];
+	XCTAssertEqual([h calls], (NSUInteger)3);
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"work" ]);
+	NSDictionary *task = [[self rows:@"UDExternalTask" engine:engine] lastObject];
+	XCTAssertEqualObjects([task objectForKey:@"retries"], @0);
+	XCTAssertEqualObjects([task objectForKey:@"errorMessage"], @"down");
+}
+
+#pragma mark - Subprocesses and variables
 
 - (void)testSubProcess
 {
@@ -327,96 +544,140 @@
 	[[inner addStart:@"s"] addServiceTask:@"step" action:@"step"];
 	[inner addEnd:@"e"];
 	[[inner connect:@"s" to:@"step"] connect:@"step" to:@"e"];
-	UDProcessDefinition *innerDef = [inner build:&error];
-	XCTAssertNotNil(innerDef, @"%@", error);
-
 	UDDefinitionBuilder *outer = [UDDefinitionBuilder process:@"outer"];
-	[[[outer addStart:@"s"] addSubProcess:@"sub" name:@"sub" inner:innerDef] addEnd:@"e"];
-	[[outer connect:@"s" to:@"sub"] connect:@"sub" to:@"e"];
-	UDProcessDefinition *outerDef = [outer build:&error];
-	XCTAssertNotNil(outerDef, @"%@", error);
-
+	[[[outer addStart:@"s0"] addSubProcess:@"sub" name:@"sub" inner:[inner build:&error]] addEnd:@"e0"];
+	[[outer connect:@"s0" to:@"sub"] connect:@"sub" to:@"e0"];
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"inner": @YES } forKey:@"step"];
-	UDProcessInstance *inst = [self run:outerDef engine:[self engineWithHandler:h] variables:nil];
-	XCTAssertTrue(inst.isCompleted, @"%@", inst.error);
-	XCTAssertTrue([[inst.variables objectForKey:@"inner"] boolValue]);
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[outer build:&error] engine:engine variables:@{ @"seen": @1 }];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"inner"], @YES);
 }
 
-- (void)testSubProcessUserTaskAddressedFromOutside
+- (void)testUserTaskInsideSubProcess
 {
 	NSError *error = nil;
-	UDDefinitionBuilder *inner = [UDDefinitionBuilder process:@"review"];
+	UDDefinitionBuilder *inner = [UDDefinitionBuilder process:@"checks"];
 	[[[inner addStart:@"s"] addUserTask:@"check" name:@"Check" assignee:@"qa"] addEnd:@"e"];
 	[[inner connect:@"s" to:@"check"] connect:@"check" to:@"e"];
 	UDDefinitionBuilder *outer = [UDDefinitionBuilder process:@"release"];
-	[[[outer addStart:@"s"] addSubProcess:@"sub" name:@"sub" inner:[inner build:&error]]
-		addEnd:@"e"];
-	[[outer connect:@"s" to:@"sub"] connect:@"sub" to:@"e"];
-	UDEngine *engine = [self engineWithHandler:nil];
-	UDProcessInstance *inst = [self run:[outer build:&error] engine:engine variables:nil];
-	XCTAssertFalse(inst.isCompleted);
-	UDProcessInstance *child = [[inst.children allValues] lastObject];
-	UDToken *check = [self waitingUserToken:child];
-	XCTAssertNotNil(check);
-	XCTAssertTrue([engine completeUserTask:check.tokenId
-	                            instanceId:inst.instanceId
-	                             variables:@{ @"checked": @YES }
-	                                 error:&error], @"%@", error);
-	UDProcessInstance *done = [engine instanceWithId:inst.instanceId error:&error];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
-	XCTAssertEqualObjects([done.variables objectForKey:@"checked"], @YES);
+	[[[outer addStart:@"s0"] addSubProcess:@"sub" name:@"sub" inner:[inner build:&error]]
+		addEnd:@"e0"];
+	[[outer connect:@"s0" to:@"sub"] connect:@"sub" to:@"e0"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[outer build:&error] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"check" ]);
+	[self complete:@"check" of:pid engine:engine variables:@{ @"checked": @YES }];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"checked"], @YES);
 }
 
-- (void)testCorrelationKey
+- (void)testVariableTypes
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	[self deploy:[self approvalDefinition] engine:engine];
+	NSDate *when = [NSDate dateWithTimeIntervalSince1970:1700000000.5];
+	NSDictionary *values = @{
+		@"text": @"x", @"yes": @YES, @"count": @42, @"ratio": @2.5, @"when": when,
+		@"blob": [@"b" dataUsingEncoding:NSUTF8StringEncoding], @"none": [NSNull null],
+		@"list": @[ @1, @"two" ], @"map": @{ @"k": @"v" }
+	};
+	UDProcessInstance *instance = [engine.runtimeService startProcessInstanceByKey:@"approval"
+	                                                                     variables:values
+	                                                                         error:&error];
+	NSDictionary *stored = [engine.runtimeService
+		variablesForProcessInstance:instance.processInstanceId error:&error];
+	XCTAssertEqualObjects(stored, values);
+	XCTAssertNil([engine.runtimeService startProcessInstanceByKey:@"approval"
+	                                                    variables:@{ @"who": [NSObject new] }
+	                                                        error:&error]);
+	XCTAssertEqual([error code], (NSInteger)UDWorkflowErrorInvalidState);
+}
+
+#pragma mark - Messages and correlation
+
+- (UDProcessDefinition *)paymentDefinition
 {
 	NSError *error = nil;
 	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"corr"];
 	[[[b addStart:@"start"] addMessageCatch:@"pay" message:@"paid"] addEnd:@"end"];
 	[[b connect:@"start" to:@"pay"] connect:@"pay" to:@"end"];
-	UDEngine *engine = [self engineWithHandler:nil];
-	XCTAssertTrue(([engine.repositoryService deployDefinition:[b build:&error] error:&error] != nil), @"%@", error);
-	NSString *other = [engine startProcess:@"corr" variables:nil
-	                        correlationKeys:@{ @"orderId": @"SO-8" } error:&error];
-	NSString *mine = [engine startProcess:@"corr" variables:nil
-	                       correlationKeys:@{ @"orderId": @"SO-9" } error:&error];
-	XCTAssertNotNil(mine, @"%@", error);
-	XCTAssertTrue([engine deliverMessage:@"paid"
-	                             payload:@{ @"paid": @YES }
-	                      correlationKey:@"orderId"
-	                               value:@"SO-9"
-	                               error:&error], @"%@", error);
-	XCTAssertTrue([engine instanceWithId:mine error:&error].isCompleted);
-	XCTAssertFalse([engine instanceWithId:other error:&error].isCompleted);
-	/* A finished instance no longer correlates. */
-	XCTAssertEqual([[engine.store instanceIdsForCorrelationKey:@"orderId" value:@"SO-9"] count],
-		(NSUInteger)0);
+	return [b build:&error];
 }
 
-- (void)testVariablesMustBePropertyLists
+- (void)testCorrelationByBusinessKeyAndVariables
 {
 	NSError *error = nil;
-	UDEngine *engine = [self engineWithHandler:nil];
-	XCTAssertTrue(([engine.repositoryService deployDefinition:[self approvalDefinition] error:&error] != nil));
-	XCTAssertNil([engine startProcess:@"approval"
-	                        variables:@{ @"who": [NSObject new] }
-	                            error:&error]);
-	XCTAssertEqual([error code], (NSInteger)UDWorkflowErrorInvalidState);
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	[self deploy:[self paymentDefinition] engine:engine];
+	UDRuntimeService *runtime = engine.runtimeService;
+	NSString *eight = [runtime startProcessInstanceByKey:@"corr" businessKey:@"SO-8"
+	                                           variables:@{ @"region": @"eu" } error:&error].processInstanceId;
+	NSString *nine = [runtime startProcessInstanceByKey:@"corr" businessKey:@"SO-9"
+	                                          variables:@{ @"region": @"us" } error:&error].processInstanceId;
+	/* Two recipients: correlating to exactly one fails and changes nothing. */
+	XCTAssertFalse([runtime correlateMessage:@"paid" businessKey:nil correlationKeys:nil
+	                               variables:nil error:&error]);
+	XCTAssertTrue([runtime correlateMessage:@"paid" businessKey:@"SO-9" correlationKeys:nil
+	                              variables:@{ @"paid": @YES } error:&error], @"%@", error);
+	XCTAssertTrue([self ended:nine engine:engine]);
+	XCTAssertFalse([self ended:eight engine:engine]);
+	XCTAssertTrue([runtime correlateMessage:@"paid" businessKey:nil
+	                        correlationKeys:@{ @"region": @"eu" }
+	                              variables:nil error:&error], @"%@", error);
+	XCTAssertTrue([self ended:eight engine:engine]);
 }
+
+- (void)testCorrelateToAll
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	[self deploy:[self paymentDefinition] engine:engine];
+	for (int i = 0; i < 3; i++) {
+		[engine.runtimeService startProcessInstanceByKey:@"corr" variables:nil error:&error];
+	}
+	NSArray *reached = [engine.runtimeService correlateMessageToAll:@"paid" businessKey:nil
+	                                                correlationKeys:nil variables:nil
+	                                                          error:&error];
+	XCTAssertEqual([reached count], (NSUInteger)3, @"%@", error);
+	XCTAssertEqual([[self rows:@"UDExecution" engine:engine] count], (NSUInteger)0);
+}
+
+- (void)testMessageStartEvent
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"onOrder"];
+	[[[b addMessageStart:@"received" message:@"order"] addUserTask:@"pack" name:@"Pack" assignee:@"joe"]
+		addEnd:@"end"];
+	[[b connect:@"received" to:@"pack"] connect:@"pack" to:@"end"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	[self deploy:[b build:&error] engine:engine];
+	XCTAssertTrue([engine.runtimeService correlateMessage:@"order" businessKey:@"SO-1"
+	                                      correlationKeys:nil variables:@{ @"qty": @2 }
+	                                                error:&error], @"%@", error);
+	UDWorkItem *pack = [[engine.taskService tasksForAssignee:@"joe"] lastObject];
+	XCTAssertNotNil(pack);
+	XCTAssertEqualObjects([[engine.runtimeService processInstanceWithId:pack.processInstanceId
+	                                                             error:&error] businessKey], @"SO-1");
+	XCTAssertEqualObjects([[engine.runtimeService variablesForProcessInstance:pack.processInstanceId
+	                                                                    error:&error] objectForKey:@"qty"], @2);
+}
+
+#pragma mark - Deployment
 
 - (void)testDeploymentsAreVersioned
 {
 	NSError *error = nil;
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"booked": @YES } forKey:@"book"];
-	UDEngine *engine = [self engineWithHandler:h];
+	UDProcessEngine *engine = [self engineWithHandler:h];
 	UDRepositoryService *repository = engine.repositoryService;
 	UDDeployment *first = [repository deployDefinition:[self approvalDefinition] error:&error];
-	XCTAssertNotNil(first, @"%@", error);
 	XCTAssertEqual([[first.definitions lastObject] version], (NSInteger)1);
-	NSString *running = [engine startProcess:@"approval" variables:nil error:&error];
-
-	/* The same content again is not a new version. */
+	NSString *running = [engine.runtimeService startProcessInstanceByKey:@"approval"
+	                                                           variables:nil error:&error].processInstanceId;
 	UDDeployment *again = [repository deployDefinition:[self approvalDefinition] error:&error];
 	XCTAssertEqualObjects(again.deploymentId, first.deploymentId);
 
@@ -425,25 +686,20 @@
 	[[b connect:@"start" to:@"approve"] connect:@"approve" to:@"end"];
 	UDDeployment *second = [repository deployDefinition:[b build:&error] error:&error];
 	XCTAssertEqual([[second.definitions lastObject] version], (NSInteger)2);
-	XCTAssertEqual([[repository latestDefinitionForKey:@"approval" error:&error] version],
-		(NSInteger)2);
 
 	/* The instance started on version 1 finishes on version 1: it still
 	 * reaches the booking service, which version 2 no longer has. */
-	UDToken *approve = [self waitingUserToken:[engine instanceWithId:running error:&error]];
-	XCTAssertTrue([engine completeUserTask:approve.tokenId instanceId:running
-	                             variables:nil error:&error], @"%@", error);
-	XCTAssertTrue([engine waitUntilSettled:running timeout:10.0]);
-	UDProcessInstance *done = [engine instanceWithId:running error:&error];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
-	XCTAssertEqual(done.definition.version, (NSInteger)1);
-	XCTAssertEqualObjects([done.variables objectForKey:@"booked"], @YES);
+	[self complete:@"approve" of:running engine:engine variables:nil];
+	XCTAssertTrue([self ended:running engine:engine]);
+	XCTAssertEqualObjects([[self variables:running engine:engine] objectForKey:@"booked"], @YES);
+	XCTAssertEqualObjects([[engine.historyService historicProcessInstanceWithId:running] definitionId],
+		[[first.definitions lastObject] definitionId]);
 }
 
 - (void)testBrokenDeploymentStoresNothing
 {
 	NSError *error = nil;
-	UDEngine *engine = [self engineWithHandler:nil];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
 	NSString *xml =
 		@"<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"d\">"
 		 @"<process id=\"calls\" isExecutable=\"true\">"
@@ -467,73 +723,60 @@
 {
 	NSError *error = nil;
 	NSURL *url = [self temporarySQLiteURL];
-	NSString *instanceId = nil;
+	NSString *pid = nil;
 	@autoreleasepool {
-		UDEngine *first = [self SQLiteEngineAtURL:url handler:nil];
-		XCTAssertTrue(([first.repositoryService deployDefinition:[self approvalDefinition] error:&error] != nil));
-		instanceId = [first startProcess:@"approval" variables:@{ @"amount": @2500 } error:&error];
-		XCTAssertNotNil(instanceId, @"%@", error);
+		UDProcessEngine *first = [self SQLiteEngineAtURL:url handler:nil];
+		[self deploy:[self approvalDefinition] engine:first];
+		pid = [first.runtimeService startProcessInstanceByKey:@"approval"
+		                                            variables:@{ @"amount": @2500 }
+		                                                error:&error].processInstanceId;
+		XCTAssertNotNil(pid, @"%@", error);
 		[first close];
 	}
-
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"booked": @YES } forKey:@"book"];
-	UDEngine *second = [self SQLiteEngineAtURL:url handler:h];
 	/* Nothing deployed: the definition comes back from the store. */
+	UDProcessEngine *second = [self SQLiteEngineAtURL:url handler:h];
 	XCTAssertTrue([second openWithError:&error], @"%@", error);
-	UDProcessInstance *restored = [second instanceWithId:instanceId error:&error];
-	XCTAssertEqualObjects([restored.variables objectForKey:@"amount"], @2500);
-	UDToken *approve = [self waitingUserToken:restored];
-	XCTAssertEqualObjects(approve.nodeId, @"approve");
-	XCTAssertTrue([second completeUserTask:approve.tokenId
-	                            instanceId:instanceId
-	                             variables:@{ @"approved": @YES }
-	                                 error:&error], @"%@", error);
-	XCTAssertTrue([second waitUntilSettled:instanceId timeout:10.0]);
-	UDProcessInstance *done = [second instanceWithId:instanceId error:&error];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
-	XCTAssertEqualObjects([done.variables objectForKey:@"booked"], @YES);
+	XCTAssertEqualObjects([[second.runtimeService variablesForProcessInstance:pid error:&error]
+		objectForKey:@"amount"], @2500);
+	[self complete:@"approve" of:pid engine:second variables:@{ @"approved": @YES }];
+	XCTAssertTrue([self ended:pid engine:second]);
+	XCTAssertEqualObjects([[self variables:pid engine:second] objectForKey:@"booked"], @YES);
 	[second close];
 }
 
-- (void)testServiceJobIsResentAfterRestart
+- (void)testExternalTaskIsOfferedAgainAfterRestart
 {
 	NSError *error = nil;
 	NSURL *url = [self temporarySQLiteURL];
-	UDProcessDefinition *def = [self approvalDefinition];
-	NSString *instanceId = nil;
-	NSString *jobId = nil;
+	NSString *pid = nil;
+	NSString *taskId = nil;
 	@autoreleasepool {
 		UDMapHandler *dropping = [[UDMapHandler alloc] init];
 		dropping.drops = YES;
-		UDEngine *first = [self SQLiteEngineAtURL:url handler:dropping];
-		XCTAssertTrue(([first.repositoryService deployDefinition:def error:&error] != nil));
-		instanceId = [first startProcess:@"approval" variables:nil error:&error];
-		UDToken *approve = [self waitingUserToken:[first instanceWithId:instanceId error:&error]];
-		XCTAssertTrue([first completeUserTask:approve.tokenId
-		                           instanceId:instanceId
-		                            variables:nil
-		                                error:&error], @"%@", error);
+		UDProcessEngine *first = [self SQLiteEngineAtURL:url handler:dropping];
+		[self deploy:[self approvalDefinition] engine:first];
+		pid = [first.runtimeService startProcessInstanceByKey:@"approval"
+		                                            variables:nil error:&error].processInstanceId;
+		UDWorkItem *approve = [self task:@"approve" of:pid engine:first];
+		XCTAssertTrue([first.taskService completeTask:approve.taskId variables:nil error:&error]);
 		/* The call went out, and the process "died" before answering. */
-		XCTAssertFalse([first waitUntilSettled:instanceId timeout:0.2]);
+		XCTAssertFalse([first waitUntilSettled:pid timeout:0.2]);
 		@synchronized (dropping) {
-			jobId = [dropping.jobIds lastObject];
+			taskId = [dropping.taskIds lastObject];
 		}
-		XCTAssertNotNil(jobId);
+		XCTAssertNotNil(taskId);
 		[first close];
 	}
-
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"booked": @YES } forKey:@"book"];
-	UDEngine *second = [self SQLiteEngineAtURL:url handler:h];
+	UDProcessEngine *second = [self SQLiteEngineAtURL:url handler:h];
+	/* Same identifier on the same host: the engine takes its lock back. */
 	XCTAssertTrue([second openWithError:&error], @"%@", error);
-	XCTAssertTrue([second waitUntilSettled:instanceId timeout:10.0]);
-	UDProcessInstance *done = [second instanceWithId:instanceId error:&error];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
-	/* The same job, so the handler can tell it is a repeat. */
-	XCTAssertEqualObjects(h.jobIds, @[ jobId ]);
-	XCTAssertEqual([[second.store jobsOfKind:UDJobKindService dueBefore:nil limit:0] count],
-		(NSUInteger)0);
+	XCTAssertTrue([second waitUntilSettled:pid timeout:10.0]);
+	XCTAssertTrue([self ended:pid engine:second]);
+	XCTAssertEqualObjects(h.taskIds, @[ taskId ]);
 	[second close];
 }
 
@@ -545,51 +788,47 @@
 	[[[b addStart:@"start"] addTimerCatch:@"nap" duration:1.0] addEnd:@"end"];
 	[[b connect:@"start" to:@"nap"] connect:@"nap" to:@"end"];
 	UDProcessDefinition *def = [b build:&error];
-	NSString *instanceId = nil;
+	NSString *pid = nil;
 	NSDate *due = nil;
 	@autoreleasepool {
-		UDEngine *first = [self SQLiteEngineAtURL:url handler:nil];
-		XCTAssertTrue(([first.repositoryService deployDefinition:def error:&error] != nil));
-		instanceId = [first startProcess:@"sleepy" variables:nil error:&error];
-		due = [first.store earliestTimerDue];
+		UDProcessEngine *first = [self SQLiteEngineAtURL:url handler:nil];
+		[self deploy:def engine:first];
+		pid = [first.runtimeService startProcessInstanceByKey:@"sleepy"
+		                                            variables:nil error:&error].processInstanceId;
+		due = [[[self rows:@"UDJob" engine:first] lastObject] objectForKey:@"dueDate"];
 		XCTAssertNotNil(due);
 		[first close];
 	}
 	[NSThread sleepForTimeInterval:0.5];
-
-	UDEngine *second = [self SQLiteEngineAtURL:url handler:nil];
-	XCTAssertEqualWithAccuracy([[second.store earliestTimerDue] timeIntervalSince1970],
-		[due timeIntervalSince1970], 0.01);
+	UDProcessEngine *second = [self SQLiteEngineAtURL:url handler:nil];
 	XCTAssertTrue([second openWithError:&error], @"%@", error);
-	UDProcessInstance *done = [self instance:instanceId engine:second completesWithin:5.0];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
+	XCTAssertTrue([self waitForEnd:pid engine:second seconds:5.0]);
 	/* Fired at the stored due time, not a full duration after the restart. */
 	XCTAssertLessThan([[NSDate date] timeIntervalSinceDate:due], 0.9);
 	[second close];
 }
 
-- (void)testCallbacksMayCallBackIntoTheEngine
+- (void)testDelegateMayCallBackIntoTheEngine
 {
 	NSError *error = nil;
-	UDEngine *engine = [self engineWithHandler:nil];
-	XCTAssertTrue(([engine.repositoryService deployDefinition:[self approvalDefinition] error:&error] != nil));
-	NSString *instanceId = [engine startProcess:@"approval" variables:nil error:&error];
-	/* On a callback queue, as a delegate would be: no deadlock. */
-	dispatch_semaphore_t done = dispatch_semaphore_create(0);
-	__block BOOL completed = NO;
-	dispatch_async(engine.callbackQueue, ^{
-		UDProcessInstance *inst = [engine instanceWithId:instanceId error:NULL];
-		UDToken *approve = [self waitingUserToken:inst];
-		completed = [engine completeUserTask:approve.tokenId
-		                          instanceId:instanceId
-		                           variables:nil
-		                               error:NULL];
-		dispatch_semaphore_signal(done);
-	});
-	XCTAssertEqual(dispatch_semaphore_wait(done,
-		dispatch_time(DISPATCH_TIME_NOW, 5 * (int64_t)NSEC_PER_SEC)), 0L);
-	UDDispatchRelease(done);
-	XCTAssertTrue(completed);
+	UDMapHandler *h = [[UDMapHandler alloc] init];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	UDCompletingDelegate *delegate = [[UDCompletingDelegate alloc] init];
+	engine.delegate = delegate;
+	[self deploy:[self approvalDefinition] engine:engine];
+	NSString *pid = [engine.runtimeService startProcessInstanceByKey:@"approval"
+	                                                        variables:nil error:&error].processInstanceId;
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
+	while ([deadline timeIntervalSinceNow] > 0) {
+		@synchronized (delegate) {
+			if ([delegate.ended containsObject:pid]) {
+				break;
+			}
+		}
+		[NSThread sleepForTimeInterval:0.02];
+	}
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"byDelegate"], @YES);
 }
 
 #pragma mark - BPMN
@@ -826,7 +1065,7 @@ static NSString * const UDModelerInvoice =
 	NSError *error = nil;
 	UDMapHandler *h = [[UDMapHandler alloc] init];
 	[h.results setObject:@{ @"paid": @YES } forKey:@"payments.pay"];
-	UDEngine *engine = [self engineWithHandler:h];
+	UDProcessEngine *engine = [self engineWithHandler:h];
 	UDDeployment *deployment = [engine.repositoryService
 		deployResources:@{ @"invoice.bpmn": [UDModelerInvoice dataUsingEncoding:NSUTF8StringEncoding] }
 		           name:@"invoice"
@@ -845,20 +1084,27 @@ static NSString * const UDModelerInvoice =
 	XCTAssertEqualWithAccuracy([(UDEvent *)[definition nodeWithId:@"Event_reminder"] timerDuration],
 		300.0, 0.001);
 
-	NSString *big = [engine startProcess:@"invoice" variables:@{ @"amount": @5000 } error:&error];
-	UDToken *approve = [self waitingUserToken:[engine instanceWithId:big error:&error]];
-	XCTAssertEqualObjects(approve.nodeId, @"Task_approve");
-	XCTAssertTrue([engine completeUserTask:approve.tokenId instanceId:big
-	                             variables:nil error:&error], @"%@", error);
-	XCTAssertTrue([engine waitUntilSettled:big timeout:10.0]);
-	XCTAssertTrue([engine deliverMessage:@"PaymentConfirmed" payload:nil
-	                          instanceId:big error:&error], @"%@", error);
-	UDProcessInstance *done = [engine instanceWithId:big error:&error];
-	XCTAssertTrue(done.isCompleted, @"%@", done.error);
-	XCTAssertEqualObjects([done.variables objectForKey:@"paid"], @YES);
+	UDProcessInstance *big = [engine.runtimeService startProcessInstanceByKey:@"invoice"
+	                                                               businessKey:@"INV-7"
+	                                                                 variables:@{ @"amount": @5000 }
+	                                                                     error:&error];
+	NSString *pid = big.processInstanceId;
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"Task_approve" ]);
+	XCTAssertEqualObjects([[engine.taskService tasksForAssignee:@"demo"] valueForKey:@"taskDefinitionKey"],
+		@[ @"Task_approve" ]);
+	[self complete:@"Task_approve" of:pid engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"Event_confirmed" ]);
+	XCTAssertTrue([engine.runtimeService correlateMessage:@"PaymentConfirmed" businessKey:@"INV-7"
+	                                      correlationKeys:nil variables:nil error:&error], @"%@", error);
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"paid"], @YES);
 
-	UDProcessInstance *small = [self run:definition engine:engine variables:@{ @"amount": @200 }];
-	XCTAssertNil([self waitingUserToken:small], @"under 1000 skips approval");
+	NSString *small = [engine.runtimeService startProcessInstanceByKey:@"invoice"
+	                                                          variables:@{ @"amount": @200 }
+	                                                              error:&error].processInstanceId;
+	XCTAssertTrue([engine waitUntilSettled:small timeout:10.0]);
+	XCTAssertEqualObjects([self active:small engine:engine], @[ @"Event_confirmed" ],
+		@"under 1000 skips approval");
 }
 
 - (void)testFeelComparisons

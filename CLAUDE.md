@@ -72,6 +72,11 @@ xcodebuild -workspace UDWorkflow.xcworkspace -scheme UDWorkflow \
   arguments: write `10.0`, not `10`.
 - gnustep-base's `NSPredicate` parser takes only object arguments: pass
   numbers as `%@` with an `NSNumber`, never `%ld` or `%d`.
+- gnustep-base's `+predicateWithFormat:` raises on a nil argument; check
+  ids before building a predicate from them.
+- Core Data attribute names must not be selectors `NSNumber` or `NSString`
+  already has (`doubleValue`, `longValue`, ...): a message sent to `id`
+  then has two signatures and the compiler refuses it.
 - gnustep-base answers NO from
   `+[NSPropertyListSerialization propertyList:isValidForFormat:]` for valid
   dictionaries; the engine checks property-list values itself.

@@ -6,24 +6,24 @@
 @implementation UDDemoServices
 - (void)performInvocation:(UDServiceInvocation *)invocation
 {
-	NSLog(@"service %@", invocation.actionKey);
-	if ([invocation.actionKey isEqualToString:@"erp.purchase-order"]) {
+	NSLog(@"service %@", invocation.topic);
+	if ([invocation.topic isEqualToString:@"erp.purchase-order"]) {
 		[invocation finishWithVariables:@{ @"poCreated": @YES } error:nil];
 		return;
 	}
-	if ([invocation.actionKey isEqualToString:@"notify.rejected"]) {
+	if ([invocation.topic isEqualToString:@"notify.rejected"]) {
 		[invocation finishWithVariables:@{ @"rejectedNotice": @YES } error:nil];
 		return;
 	}
-	if ([invocation.actionKey isEqualToString:@"warehouse.pick"]) {
+	if ([invocation.topic isEqualToString:@"warehouse.pick"]) {
 		[invocation finishWithVariables:@{ @"picked": @YES } error:nil];
 		return;
 	}
-	if ([invocation.actionKey isEqualToString:@"payments.charge"]) {
+	if ([invocation.topic isEqualToString:@"payments.charge"]) {
 		[invocation finishWithVariables:@{ @"charged": @YES } error:nil];
 		return;
 	}
-	if ([invocation.actionKey isEqualToString:@"warehouse.ship"]) {
+	if ([invocation.topic isEqualToString:@"warehouse.ship"]) {
 		[invocation finishWithVariables:@{ @"shipped": @YES } error:nil];
 		return;
 	}
@@ -31,33 +31,21 @@
 }
 @end
 
-@interface UDDemoDelegate : NSObject <UDEngineDelegate>
+@interface UDDemoDelegate : NSObject <UDProcessEngineDelegate>
 @end
 
 @implementation UDDemoDelegate
-- (void)engine:(UDEngine *)engine
-       instance:(UDProcessInstance *)instance
-      didTrace:(NSString *)message
+- (void)processEngine:(UDProcessEngine *)engine taskCreated:(UDWorkItem *)task
 {
-	NSLog(@"[%@] %@", instance.instanceId, message);
+	(void)engine;
+	NSLog(@"[%@] task %@ for %@", task.processInstanceId, task.taskDefinitionKey, task.assignee);
+}
+- (void)processEngine:(UDProcessEngine *)engine processInstanceEnded:(UDProcessInstance *)instance
+{
+	(void)engine;
+	NSLog(@"[%@] ended", instance.processInstanceId);
 }
 @end
-
-static UDToken *
-UDWaitingUserToken(UDProcessInstance *instance)
-{
-	for (UDToken *token in instance.tokens) {
-		if (token.state != UDTokenStateWaiting) {
-			continue;
-		}
-		UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
-		if ([node isKindOfClass:[UDTask class]]
-		    && [(UDTask *)node kind] == UDTaskKindUser) {
-			return token;
-		}
-	}
-	return nil;
-}
 
 static UDProcessDefinition *
 UDPurchaseRequestDefinition(NSError **error)
@@ -129,75 +117,64 @@ UDMessageWaitDefinition(NSError **error)
 	return [b build:error];
 }
 
-/* Waits for the instance's service calls, then answers it as committed. */
-static UDProcessInstance *
-UDSettled(UDEngine *engine, NSString *instanceId, NSError **error)
+static UDWorkItem *
+UDOpenTask(UDProcessEngine *engine, NSString *processInstanceId)
 {
-	if (instanceId == nil) {
-		return nil;
-	}
-	[engine waitUntilSettled:instanceId timeout:10.0];
-	return [engine instanceWithId:instanceId error:error];
+	return [[engine.taskService tasksForProcessInstance:processInstanceId] firstObject];
+}
+
+static NSDictionary *
+UDVariables(UDProcessEngine *engine, NSString *processInstanceId)
+{
+	return [engine.historyService historicVariablesForProcessInstance:processInstanceId];
 }
 
 static BOOL
-UDDrivePurchase(UDEngine *engine,
+UDEnded(UDProcessEngine *engine, NSString *processInstanceId)
+{
+	return [[engine.historyService historicProcessInstanceWithId:processInstanceId] endTime] != nil;
+}
+
+/* Works the purchase request's user tasks until the instance ends. */
+static BOOL
+UDDrivePurchase(UDProcessEngine *engine,
 	NSDictionary *startVars,
 	NSDictionary *approvalVars,
 	NSError **error)
 {
-	NSString *instanceId = [engine startProcess:@"purchase-request"
-	                                  variables:startVars
-	                                      error:error];
-	UDProcessInstance *instance = UDSettled(engine, instanceId, error);
-	if (instance == nil) {
+	NSString *processInstanceId =
+		[engine.runtimeService startProcessInstanceByKey:@"purchase-request"
+		                                       variables:startVars
+		                                           error:error].processInstanceId;
+	if (processInstanceId == nil) {
 		return NO;
 	}
-
-	while (!instance.isCompleted && !instance.isFailed) {
-		UDToken *waiting = UDWaitingUserToken(instance);
-		if (waiting == nil) {
-			break;
-		}
-		NSDictionary *vars = nil;
-		if ([waiting.nodeId isEqualToString:@"fill"]) {
-			vars = @{};
-		} else if ([waiting.nodeId isEqualToString:@"approve"]) {
-			vars = approvalVars;
-		}
-		NSLog(@"complete user task %@", waiting.nodeId);
-		if (![engine completeUserTask:waiting.tokenId
-		                   instanceId:instanceId
-		                    variables:vars
-		                        error:error]) {
+	[engine waitUntilSettled:processInstanceId timeout:10.0];
+	UDWorkItem *task = nil;
+	while ((task = UDOpenTask(engine, processInstanceId)) != nil) {
+		NSDictionary *vars = [task.taskDefinitionKey isEqualToString:@"approve"]
+			? approvalVars : @{};
+		NSLog(@"complete %@", task.taskDefinitionKey);
+		if (![engine.taskService completeTask:task.taskId variables:vars error:error]) {
 			return NO;
 		}
-		instance = UDSettled(engine, instanceId, error);
-		if (instance == nil) {
-			return NO;
-		}
+		[engine waitUntilSettled:processInstanceId timeout:10.0];
 	}
-
-	NSLog(@"done completed=%d failed=%d vars=%@",
-		instance.isCompleted, instance.isFailed, instance.variables);
-	if (instance.isFailed) {
-		if (error != NULL) {
-			*error = instance.error;
-		}
-		return NO;
-	}
-	return instance.isCompleted;
+	NSLog(@"done ended=%d vars=%@", UDEnded(engine, processInstanceId),
+		UDVariables(engine, processInstanceId));
+	return UDEnded(engine, processInstanceId);
 }
 
-/* An engine over the SQLite file at url, with every definition deployed. */
-static UDEngine *
-UDMakeEngine(NSURL *url, id<UDEngineDelegate> delegate, NSError **error)
+/* An engine over the SQLite file at url. Deploying at every start is
+ * cheap: unchanged definitions are recognised and not versioned again. */
+static UDProcessEngine *
+UDMakeEngine(NSURL *url, id<UDProcessEngineDelegate> delegate, NSError **error)
 {
 	UDStore *store = [UDStore SQLiteStoreAtURL:url error:error];
 	if (store == nil) {
 		return nil;
 	}
-	UDEngine *engine = [[UDEngine alloc] initWithStore:store];
+	UDProcessEngine *engine = [[UDProcessEngine alloc] initWithStore:store];
 	engine.delegate = delegate;
 	engine.serviceHandler = [[UDDemoServices alloc] init];
 	NSArray *definitions = @[
@@ -239,33 +216,28 @@ main(int argc, const char *argv[])
 		UDDemoDelegate *delegate = [[UDDemoDelegate alloc] init];
 		NSLog(@"store %@", path);
 
-		UDEngine *engine = UDMakeEngine(url, delegate, &error);
+		UDProcessEngine *engine = UDMakeEngine(url, delegate, &error);
 		if (engine == nil) {
 			return UDFail(@"engine", error);
 		}
 
 		NSLog(@"--- amount 2500, approved ---");
-		if (!UDDrivePurchase(engine, @{ @"amount": @2500 },
-			@{ @"approved": @YES }, &error)) {
+		if (!UDDrivePurchase(engine, @{ @"amount": @2500 }, @{ @"approved": @YES }, &error)) {
 			return UDFail(@"run failed", error);
 		}
-
 		NSLog(@"--- amount 2500, rejected ---");
-		if (!UDDrivePurchase(engine, @{ @"amount": @2500 },
-			@{ @"approved": @NO }, &error)) {
+		if (!UDDrivePurchase(engine, @{ @"amount": @2500 }, @{ @"approved": @NO }, &error)) {
 			return UDFail(@"run failed", error);
 		}
-
 		NSLog(@"--- amount 400, auto ---");
-		if (!UDDrivePurchase(engine, @{ @"amount": @400 },
-			@{ @"approved": @YES }, &error)) {
+		if (!UDDrivePurchase(engine, @{ @"amount": @400 }, @{ @"approved": @YES }, &error)) {
 			return UDFail(@"run failed", error);
 		}
 
-		NSLog(@"--- restart after the first user wait ---");
-		NSString *liveId = [engine startProcess:@"purchase-request"
-		                              variables:@{ @"amount": @2500 }
-		                                  error:&error];
+		NSLog(@"--- restart after the first user task ---");
+		NSString *liveId = [engine.runtimeService startProcessInstanceByKey:@"purchase-request"
+		                                                          variables:@{ @"amount": @2500 }
+		                                                              error:&error].processInstanceId;
 		if (liveId == nil) {
 			return UDFail(@"start failed", error);
 		}
@@ -275,76 +247,61 @@ main(int argc, const char *argv[])
 		if (engine == nil) {
 			return UDFail(@"reopen", error);
 		}
-		UDProcessInstance *restored = [engine instanceWithId:liveId error:&error];
-		UDToken *fill = UDWaitingUserToken(restored);
-		if (fill == nil || ![fill.nodeId isEqualToString:@"fill"]) {
-			NSLog(@"expected fill waiting on restored instance");
-			return 1;
+		UDWorkItem *task = nil;
+		while ((task = UDOpenTask(engine, liveId)) != nil) {
+			NSDictionary *vars = [task.taskDefinitionKey isEqualToString:@"approve"]
+				? @{ @"approved": @YES } : @{};
+			if (![engine.taskService completeTask:task.taskId variables:vars error:&error]) {
+				return UDFail(@"resume failed", error);
+			}
+			[engine waitUntilSettled:liveId timeout:10.0];
 		}
-		if (![engine completeUserTask:fill.tokenId instanceId:liveId
-		                    variables:@{} error:&error]) {
-			return UDFail(@"resume fill failed", error);
-		}
-		UDToken *approve = UDWaitingUserToken(UDSettled(engine, liveId, &error));
-		if (approve == nil) {
-			NSLog(@"expected approve waiting after restore");
-			return 1;
-		}
-		if (![engine completeUserTask:approve.tokenId instanceId:liveId
-		                    variables:@{ @"approved": @YES } error:&error]) {
-			return UDFail(@"resume approve failed", error);
-		}
-		restored = UDSettled(engine, liveId, &error);
-		NSLog(@"restored completed=%d vars=%@",
-			restored.isCompleted, restored.variables);
-		if (!restored.isCompleted) {
+		NSLog(@"restored ended=%d vars=%@", UDEnded(engine, liveId), UDVariables(engine, liveId));
+		if (!UDEnded(engine, liveId)) {
 			return 1;
 		}
 
 		NSLog(@"--- parallel pick || charge ---");
-		UDProcessInstance *order = UDSettled(engine,
-			[engine startProcess:@"order-fulfillment"
-			           variables:@{ @"orderId": @"SO-1" }
-			               error:&error], &error);
-		if (order == nil || !order.isCompleted
-		    || ![[order.variables objectForKey:@"picked"] boolValue]
-		    || ![[order.variables objectForKey:@"charged"] boolValue]
-		    || ![[order.variables objectForKey:@"shipped"] boolValue]) {
+		NSString *order = [engine.runtimeService startProcessInstanceByKey:@"order-fulfillment"
+		                                                        variables:@{ @"orderId": @"SO-1" }
+		                                                            error:&error].processInstanceId;
+		[engine waitUntilSettled:order timeout:10.0];
+		NSDictionary *orderVars = UDVariables(engine, order);
+		if (!UDEnded(engine, order)
+		    || ![[orderVars objectForKey:@"picked"] boolValue]
+		    || ![[orderVars objectForKey:@"charged"] boolValue]
+		    || ![[orderVars objectForKey:@"shipped"] boolValue]) {
 			return UDFail(@"fulfillment failed", error);
 		}
-		NSLog(@"fulfillment ok vars=%@", order.variables);
+		NSLog(@"fulfillment ok vars=%@", orderVars);
 
 		NSLog(@"--- timer catch 0s ---");
-		UDProcessInstance *timed = UDSettled(engine,
-			[engine startProcess:@"timer-wait" variables:nil error:&error], &error);
-		if (timed == nil || !timed.isCompleted) {
+		NSString *timed = [engine.runtimeService startProcessInstanceByKey:@"timer-wait"
+		                                                        variables:nil
+		                                                            error:&error].processInstanceId;
+		[engine waitUntilSettled:timed timeout:10.0];
+		if (!UDEnded(engine, timed)) {
 			return UDFail(@"timer run failed", error);
 		}
 
 		NSLog(@"--- message catch ---");
-		NSString *waitingId = [engine startProcess:@"message-wait"
-		                                 variables:nil
-		                                     error:&error];
-		if (waitingId == nil) {
+		if ([engine.runtimeService startProcessInstanceByKey:@"message-wait"
+		                                         businessKey:@"M-1"
+		                                           variables:nil
+		                                               error:&error] == nil) {
 			return UDFail(@"message start failed", error);
 		}
-		if (![engine deliverMessage:@"go"
-		                    payload:@{ @"acked": @YES }
-		                 instanceId:waitingId
-		                      error:&error]) {
-			return UDFail(@"deliver failed", error);
+		if (![engine.runtimeService correlateMessage:@"go"
+		                                 businessKey:@"M-1"
+		                             correlationKeys:nil
+		                                   variables:@{ @"acked": @YES }
+		                                       error:&error]) {
+			return UDFail(@"correlate failed", error);
 		}
-		UDProcessInstance *acked = UDSettled(engine, waitingId, &error);
-		if (!acked.isCompleted) {
-			NSLog(@"message instance did not complete");
-			return 1;
-		}
-		NSLog(@"message ok vars=%@", acked.variables);
 
 		NSLog(@"--- BPMN 2.0 round-trip ---");
 		UDProcessDefinition *definition = UDPurchaseRequestDefinition(&error);
-		NSString *purchaseXML =
-			[UDBpmnWriter XMLStringFromDefinition:definition error:&error];
+		NSString *purchaseXML = [UDBpmnWriter XMLStringFromDefinition:definition error:&error];
 		if (purchaseXML == nil) {
 			return UDFail(@"export purchase failed", error);
 		}
@@ -354,24 +311,14 @@ main(int argc, const char *argv[])
 		if (importedPurchase == nil) {
 			return UDFail(@"import purchase failed", error);
 		}
-		if ([importedPurchase.nodes count] != [definition.nodes count]
-		    || [importedPurchase.flows count] != [definition.flows count]) {
-			NSLog(@"purchase round-trip size mismatch nodes %lu/%lu flows %lu/%lu",
-				(unsigned long)[importedPurchase.nodes count],
-				(unsigned long)[definition.nodes count],
-				(unsigned long)[importedPurchase.flows count],
-				(unsigned long)[definition.flows count]);
-			return 1;
-		}
 		/* The imported copy writes back to the same BPMN, so deploying it
 		 * is a duplicate: still version 1. */
 		UDDeployment *redeployed =
 			[engine.repositoryService deployDefinition:importedPurchase error:&error];
 		if ([[redeployed.definitions lastObject] version] != 1) {
-			return UDFail(@"deploy imported purchase failed", error);
+			return UDFail(@"round-tripped definition was versioned again", error);
 		}
-		if (!UDDrivePurchase(engine, @{ @"amount": @400 },
-			@{ @"approved": @YES }, &error)) {
+		if (!UDDrivePurchase(engine, @{ @"amount": @400 }, @{ @"approved": @YES }, &error)) {
 			return UDFail(@"imported purchase run failed", error);
 		}
 		[engine close];

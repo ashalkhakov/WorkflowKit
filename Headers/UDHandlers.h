@@ -1,54 +1,56 @@
 #ifndef UDHandlers_h
 #define UDHandlers_h
 
-#import "UDRuntimeState.h"
+#import "UDTypes.h"
 
-@class UDTask;
-@class UDToken;
-@class UDProcessInstance;
 @class UDServiceInvocation;
 
 @interface UDServiceResult : NSObject
-@property (nonatomic, copy) NSString *actionKey;
+@property (nonatomic, copy) NSString *topic;
 @property (nonatomic, copy) NSDictionary *variables;
 @property (nonatomic, strong) NSError *error;
 @end
 
 /*
- * One call of a service or script task. It is sent only after the state
- * that asked for it is committed, and sent again if the engine restarts
- * before the result is committed, so a handler sees each job at least
- * once: jobId stays the same across repeats and is the idempotency key.
+ * One external task, fetched and locked by the engine's in-process worker
+ * for the service handler. The task was created by a committed command,
+ * and it is offered again if its lock runs out or the engine restarts
+ * before the result is committed, so a handler sees each task at least
+ * once: externalTaskId is the same across repeats and is the idempotency
+ * key.
  */
 @interface UDServiceInvocation : NSObject
 
-@property (nonatomic, readonly, copy) NSString *jobId;
-@property (nonatomic, readonly, copy) NSString *actionKey;
+@property (nonatomic, readonly, copy) NSString *externalTaskId;
+@property (nonatomic, readonly, copy) NSString *topic;
 @property (nonatomic, readonly, copy) NSDictionary *variables;
-@property (nonatomic, readonly, copy) NSString *instanceId;
-@property (nonatomic, readonly, copy) NSString *tokenId;
+@property (nonatomic, readonly, copy) NSString *processInstanceId;
+@property (nonatomic, readonly, copy) NSString *activityId;
 @property (nonatomic, weak) id target;
 @property (nonatomic) SEL action;
 
-- (instancetype)initWithJobId:(NSString *)jobId
-                    actionKey:(NSString *)actionKey
-                    variables:(NSDictionary *)variables
-                   instanceId:(NSString *)instanceId
-                      tokenId:(NSString *)tokenId;
+- (instancetype)initWithExternalTaskId:(NSString *)externalTaskId
+                                 topic:(NSString *)topic
+                             variables:(NSDictionary *)variables
+                     processInstanceId:(NSString *)processInstanceId
+                            activityId:(NSString *)activityId;
 
-/* Variables must be property-list values; anything else fails the task. */
+/*
+ * Completes the task. The variables are set on the process (existing ones
+ * where they are, new ones on the process instance) and must be values the
+ * engine stores: strings, numbers, dates, data, null, or arrays and
+ * dictionaries of JSON values.
+ *
+ * An error whose userInfo carries UDWorkflowErrorRefKey is a BPMN error
+ * with that code, for an error boundary event to catch. Any other error is
+ * a failure: the task is retried, three attempts in all.
+ */
 - (void)finishWithVariables:(NSDictionary *)outVars error:(NSError *)error;
 
 @end
 
 @protocol UDServiceTaskHandler <NSObject>
 - (void)performInvocation:(UDServiceInvocation *)invocation;
-@end
-
-@protocol UDUserTaskPort <NSObject>
-- (void)publishWorkItemForToken:(UDToken *)token
-                       instance:(UDProcessInstance *)instance
-                           task:(UDTask *)task;
 @end
 
 #endif /* UDHandlers_h */

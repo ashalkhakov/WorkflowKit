@@ -18,12 +18,14 @@ UDWorkflow_OBJC_FILES = \
 	Source/UDFlowElements.m \
 	Source/UDCondition.m \
 	Source/UDProcessDefinition.m \
-	Source/UDRuntimeState.m \
 	Source/UDHandlers.m \
 	Source/UDStore.m \
 	Source/UDRepositoryService.m \
 	Source/UDBpmn.m \
-	Source/UDEngine.m
+	Source/UDEntities.m \
+	Source/UDCommandContext.m \
+	Source/UDServices.m \
+	Source/UDProcessEngine.m
 
 UDWorkflow_HEADER_FILES_DIR = Headers
 UDWorkflow_HEADER_FILES_INSTALL_DIR = UDWorkflow
@@ -32,11 +34,13 @@ UDWorkflow_HEADER_FILES = \
 	UDCondition.h \
 	UDFlowElements.h \
 	UDProcessDefinition.h \
-	UDRuntimeState.h \
 	UDHandlers.h \
 	UDStore.h \
 	UDRepositoryService.h \
-	UDEngine.h \
+	UDRuntimeService.h \
+	UDTaskService.h \
+	UDHistoryService.h \
+	UDProcessEngine.h \
 	UDBpmn.h \
 	UDWorkflow.h
 

@@ -26,6 +26,11 @@
 - (NSArray<UDSequenceFlow *> *)outgoingFlowsFrom:(NSString *)nodeId;
 - (NSArray<UDSequenceFlow *> *)incomingFlowsTo:(NSString *)nodeId;
 - (NSArray *)boundaryEventsAttachedTo:(NSString *)taskId;
+/* Any node in the process, embedded subprocesses included: BPMN ids are
+ * unique across the whole document. */
+- (UDFlowNode *)flowNodeWithId:(NSString *)elementId;
+/* The definition, this one or a subprocess's, whose nodes include it. */
+- (UDProcessDefinition *)scopeOfFlowNode:(NSString *)elementId;
 
 @end
 

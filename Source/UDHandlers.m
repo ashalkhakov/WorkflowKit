@@ -5,19 +5,19 @@
 
 @implementation UDServiceInvocation
 
-- (instancetype)initWithJobId:(NSString *)jobId
-                    actionKey:(NSString *)actionKey
-                    variables:(NSDictionary *)variables
-                   instanceId:(NSString *)instanceId
-                      tokenId:(NSString *)tokenId
+- (instancetype)initWithExternalTaskId:(NSString *)externalTaskId
+                                 topic:(NSString *)topic
+                             variables:(NSDictionary *)variables
+                     processInstanceId:(NSString *)processInstanceId
+                            activityId:(NSString *)activityId
 {
 	self = [super init];
 	if (self) {
-		_jobId = [jobId copy];
-		_actionKey = [actionKey copy];
+		_externalTaskId = [externalTaskId copy];
+		_topic = [topic copy];
 		_variables = [variables copy];
-		_instanceId = [instanceId copy];
-		_tokenId = [tokenId copy];
+		_processInstanceId = [processInstanceId copy];
+		_activityId = [activityId copy];
 	}
 	return self;
 }
@@ -33,7 +33,7 @@
 	}
 
 	UDServiceResult *result = [[UDServiceResult alloc] init];
-	result.actionKey = self.actionKey;
+	result.topic = self.topic;
 	result.variables = outVars;
 	result.error = error;
 

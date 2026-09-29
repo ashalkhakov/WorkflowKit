@@ -1,8 +1,8 @@
 # Durable execution on Core Data — design
 
 > **Superseded** by [execution-model.md](execution-model.md): UDWorkflow now
-> follows Camunda 7's execution model. This page describes the token-marking
-> engine as currently implemented, until the new core replaces it.
+> follows Camunda 7's execution model, and the token-marking engine this page
+> describes was removed with step 2 of that design. Kept for the record.
 
 Status: steps 1–3 implemented (see "Build order"); retries and incidents are
 next. Scope: phase 1 of the roadmap, an embeddable single-node engine whose

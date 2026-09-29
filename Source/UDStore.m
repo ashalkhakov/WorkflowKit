@@ -1,12 +1,11 @@
 #import "UDStore.h"
+#import "UDEntities.h"
 #import <CoreData/CoreData.h>
 
 static NSString * const UDDeploymentEntity = @"UDDeployment";
 static NSString * const UDResourceEntity = @"UDResource";
 static NSString * const UDDefinitionEntity = @"UDDefinitionRecord";
-static NSString * const UDInstanceEntity = @"UDInstance";
-static NSString * const UDJobEntity = @"UDJob";
-static NSString * const UDCorrelationEntity = @"UDCorrelation";
+static NSString * const UDSubscriptionEntity = @"UDEventSubscription";
 
 @implementation UDDeploymentRecord
 @end
@@ -14,31 +13,6 @@ static NSString * const UDCorrelationEntity = @"UDCorrelation";
 @implementation UDDefinitionRecord
 @end
 
-@implementation UDInstanceRecord
-@end
-
-@implementation UDJobRecord
-@end
-
-/* Correlation values are stored as text, tagged with their type so that a
- * string and a number that print alike do not match. */
-static NSString *
-UDCorrelationText(id value)
-{
-	if ([value isKindOfClass:[NSString class]]) {
-		return [@"s:" stringByAppendingString:value];
-	}
-	if ([value isKindOfClass:[NSNumber class]]) {
-		return [@"n:" stringByAppendingString:[value stringValue]];
-	}
-	return nil;
-}
-
-static NSString *
-UDJobMatchKey(NSInteger kind, NSString *tokenId)
-{
-	return [NSString stringWithFormat:@"%ld:%@", (long)kind, tokenId];
-}
 
 @implementation UDStore
 {
@@ -126,6 +100,15 @@ UDJobMatchKey(NSInteger kind, NSString *tokenId)
 	[_context setPersistentStoreCoordinator:_coordinator];
 	[_context setUndoManager:nil];
 	return self;
+}
+
+- (NSManagedObjectContext *)newCommandContext
+{
+	NSManagedObjectContext *context = [[NSManagedObjectContext alloc]
+		initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+	[context setPersistentStoreCoordinator:_coordinator];
+	[context setUndoManager:nil];
+	return context;
 }
 
 /* Runs on the context's queue. A fetch that fails answers an empty array:
@@ -220,6 +203,24 @@ UDJobMatchKey(NSInteger kind, NSString *tokenId)
 		 * other, not both from the stored latest. */
 		NSMutableDictionary *next = [NSMutableDictionary dictionary];
 		for (UDDefinitionRecord *definition in definitions) {
+			if (definition.messageStartName != nil) {
+				for (UDEventSubscriptionEntity *start in [self fetch:UDSubscriptionEntity
+				         predicate:[NSPredicate predicateWithFormat:
+				             @"execution == nil AND eventType == %@ AND eventName == %@",
+				             UDEventTypeMessage, definition.messageStartName]
+				              sort:nil
+				             limit:0]) {
+					if (![start.activityId isEqualToString:definition.key]
+					    && localError == nil) {
+						localError = [NSError errorWithDomain:UDWorkflowErrorDomain
+						                                 code:UDWorkflowErrorInvalidDefinition
+						                             userInfo:@{ NSLocalizedDescriptionKey:
+							[NSString stringWithFormat:
+								@"message %@ already starts process %@",
+								definition.messageStartName, start.activityId] }];
+					}
+				}
+			}
 			NSNumber *version = [next objectForKey:definition.key];
 			if (version == nil) {
 				NSManagedObject *latest = [[self fetch:UDDefinitionEntity
@@ -251,6 +252,31 @@ UDJobMatchKey(NSInteger kind, NSString *tokenId)
 			[definitionRow setValue:record.resourceName forKey:@"resourceName"];
 			[definitionRow setValue:row forKey:@"deployment"];
 			[stored addObject:record];
+			/* The latest version starts on the message; earlier ones stop. */
+			for (UDEventSubscriptionEntity *old in [self fetch:UDSubscriptionEntity
+			         predicate:[NSPredicate predicateWithFormat:
+			             @"execution == nil AND activityId == %@", definition.key]
+			              sort:nil
+			             limit:0]) {
+				[self->_context deleteObject:old];
+			}
+			if (definition.messageStartName != nil) {
+				UDEventSubscriptionEntity *start = [NSEntityDescription
+					insertNewObjectForEntityForName:UDSubscriptionEntity
+					         inManagedObjectContext:self->_context];
+				start.subscriptionId = [[NSUUID UUID] UUIDString];
+				start.eventType = UDEventTypeMessage;
+				start.eventName = definition.messageStartName;
+				/* A start subscription names the process key it starts. */
+				start.activityId = definition.key;
+				start.definitionId = record.definitionId;
+				start.createdAt = deployment.deployedAt;
+			}
+		}
+		if (localError != nil) {
+			[self->_context rollback];
+			[self->_context reset];
+			return;
 		}
 		ok = [self saveAndReset:&localError];
 	}];
@@ -343,258 +369,6 @@ UDJobMatchKey(NSInteger kind, NSString *tokenId)
 		[self->_context reset];
 	}];
 	return record;
-}
-
-- (UDInstanceRecord *)instanceRecord:(NSString *)instanceId error:(NSError **)error
-{
-	__block UDInstanceRecord *record = nil;
-	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:UDInstanceEntity
-		                  predicate:[NSPredicate predicateWithFormat:
-		                      @"instanceId == %@", instanceId]
-		                       sort:nil
-		                      limit:1];
-		NSManagedObject *row = [rows lastObject];
-		if (row != nil) {
-			record = [[UDInstanceRecord alloc] init];
-			record.instanceId = [row valueForKey:@"instanceId"];
-			record.processId = [row valueForKey:@"processId"];
-			record.version = [[row valueForKey:@"version"] integerValue];
-			record.status = [[row valueForKey:@"status"] integerValue];
-			record.state = [row valueForKey:@"state"];
-		}
-		[self->_context reset];
-	}];
-	if (record == nil && error != NULL) {
-		*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-		                             code:UDWorkflowErrorUnknownElement
-		                         userInfo:@{ NSLocalizedDescriptionKey:
-			[NSString stringWithFormat:@"no instance %@ in the store", instanceId] }];
-	}
-	return record;
-}
-
-- (NSArray<NSString *> *)instanceIdsWithStatus:(UDInstanceStatus)status
-{
-	__block NSArray *ids = nil;
-	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:UDInstanceEntity
-		                  predicate:[NSPredicate predicateWithFormat:
-		                      @"status == %@",
-		                      [NSNumber numberWithInteger:status]]
-		                       sort:nil
-		                      limit:0];
-		ids = [rows valueForKey:@"instanceId"];
-		[self->_context reset];
-	}];
-	return ids;
-}
-
-- (NSArray<NSString *> *)instanceIdsForCorrelationKey:(NSString *)key
-                                                value:(id)value
-{
-	NSString *text = UDCorrelationText(value);
-	if (key == nil || text == nil) {
-		return @[];
-	}
-	__block NSArray *ids = nil;
-	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:UDCorrelationEntity
-		                  predicate:[NSPredicate predicateWithFormat:
-		                      @"key == %@ AND value == %@", key, text]
-		                       sort:nil
-		                      limit:0];
-		ids = [rows valueForKey:@"instanceId"];
-		[self->_context reset];
-	}];
-	return ids;
-}
-
-- (void)reconcileJobs:(NSArray<UDJobRecord *> *)jobs
-          forInstance:(NSString *)instanceId
-             inserted:(NSMutableArray *)inserted
-{
-	NSArray *rows = [self fetch:UDJobEntity
-	                  predicate:[NSPredicate predicateWithFormat:
-	                      @"instanceId == %@", instanceId]
-	                       sort:nil
-	                      limit:0];
-	NSMutableDictionary *stored = [NSMutableDictionary dictionary];
-	for (NSManagedObject *row in rows) {
-		NSString *key = UDJobMatchKey([[row valueForKey:@"kind"] integerValue],
-			[row valueForKey:@"tokenId"]);
-		[stored setObject:row forKey:key];
-	}
-	NSMutableSet *wanted = [NSMutableSet set];
-	for (UDJobRecord *job in jobs) {
-		NSString *key = UDJobMatchKey(job.kind, job.tokenId);
-		[wanted addObject:key];
-		NSManagedObject *row = [stored objectForKey:key];
-		if (row != nil) {
-			if (job.dueAt != nil && ![job.dueAt isEqual:[row valueForKey:@"dueAt"]]) {
-				[row setValue:job.dueAt forKey:@"dueAt"];
-			}
-			continue;
-		}
-		row = [NSEntityDescription insertNewObjectForEntityForName:UDJobEntity
-		                                    inManagedObjectContext:_context];
-		UDJobRecord *fresh = [[UDJobRecord alloc] init];
-		fresh.jobId = [[NSUUID UUID] UUIDString];
-		fresh.instanceId = instanceId;
-		fresh.tokenId = job.tokenId;
-		fresh.kind = job.kind;
-		fresh.actionKey = job.actionKey;
-		fresh.dueAt = job.dueAt;
-		[row setValue:fresh.jobId forKey:@"jobId"];
-		[row setValue:instanceId forKey:@"instanceId"];
-		[row setValue:fresh.tokenId forKey:@"tokenId"];
-		[row setValue:[NSNumber numberWithInteger:fresh.kind] forKey:@"kind"];
-		[row setValue:fresh.actionKey forKey:@"actionKey"];
-		[row setValue:fresh.dueAt forKey:@"dueAt"];
-		[inserted addObject:fresh];
-	}
-	for (NSString *key in stored) {
-		if (![wanted containsObject:key]) {
-			[_context deleteObject:[stored objectForKey:key]];
-		}
-	}
-}
-
-- (void)reconcileCorrelationKeys:(NSDictionary *)keys
-                     forInstance:(NSString *)instanceId
-{
-	NSArray *rows = [self fetch:UDCorrelationEntity
-	                  predicate:[NSPredicate predicateWithFormat:
-	                      @"instanceId == %@", instanceId]
-	                       sort:nil
-	                      limit:0];
-	NSMutableDictionary *wanted = [NSMutableDictionary dictionary];
-	for (NSString *key in keys) {
-		NSString *text = UDCorrelationText([keys objectForKey:key]);
-		if (text != nil) {
-			[wanted setObject:text forKey:key];
-		}
-	}
-	for (NSManagedObject *row in rows) {
-		NSString *key = [row valueForKey:@"key"];
-		if ([[wanted objectForKey:key] isEqualToString:[row valueForKey:@"value"]]) {
-			[wanted removeObjectForKey:key];
-		} else {
-			[_context deleteObject:row];
-		}
-	}
-	for (NSString *key in wanted) {
-		NSManagedObject *row = [NSEntityDescription
-			insertNewObjectForEntityForName:UDCorrelationEntity
-			         inManagedObjectContext:_context];
-		[row setValue:instanceId forKey:@"instanceId"];
-		[row setValue:key forKey:@"key"];
-		[row setValue:[wanted objectForKey:key] forKey:@"value"];
-	}
-}
-
-- (NSArray<UDJobRecord *> *)commitInstance:(UDInstanceRecord *)record
-                                      jobs:(NSArray<UDJobRecord *> *)jobs
-                           correlationKeys:(NSDictionary *)correlationKeys
-                                     error:(NSError **)error
-{
-	__block BOOL ok = NO;
-	__block NSError *localError = nil;
-	NSMutableArray *inserted = [NSMutableArray array];
-	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:UDInstanceEntity
-		                  predicate:[NSPredicate predicateWithFormat:
-		                      @"instanceId == %@", record.instanceId]
-		                       sort:nil
-		                      limit:1];
-		NSManagedObject *row = [rows lastObject];
-		NSDate *now = [NSDate date];
-		if (row == nil) {
-			row = [NSEntityDescription insertNewObjectForEntityForName:UDInstanceEntity
-			                                    inManagedObjectContext:self->_context];
-			[row setValue:record.instanceId forKey:@"instanceId"];
-			[row setValue:record.processId forKey:@"processId"];
-			[row setValue:[NSNumber numberWithInteger:record.version] forKey:@"version"];
-			[row setValue:now forKey:@"createdAt"];
-		}
-		[row setValue:[NSNumber numberWithInteger:record.status] forKey:@"status"];
-		[row setValue:record.state forKey:@"state"];
-		[row setValue:now forKey:@"updatedAt"];
-		[self reconcileJobs:jobs forInstance:record.instanceId inserted:inserted];
-		[self reconcileCorrelationKeys:correlationKeys forInstance:record.instanceId];
-		ok = [self saveAndReset:&localError];
-	}];
-	if (!ok) {
-		if (error != NULL) {
-			*error = localError;
-		}
-		return nil;
-	}
-	return inserted;
-}
-
-- (UDJobRecord *)jobRecordFromRow:(NSManagedObject *)row
-{
-	UDJobRecord *job = [[UDJobRecord alloc] init];
-	job.jobId = [row valueForKey:@"jobId"];
-	job.instanceId = [row valueForKey:@"instanceId"];
-	job.tokenId = [row valueForKey:@"tokenId"];
-	job.kind = [[row valueForKey:@"kind"] integerValue];
-	job.actionKey = [row valueForKey:@"actionKey"];
-	job.dueAt = [row valueForKey:@"dueAt"];
-	job.attempts = [[row valueForKey:@"attempts"] integerValue];
-	return job;
-}
-
-- (NSArray<UDJobRecord *> *)jobsOfKind:(UDJobKind)kind
-                             dueBefore:(NSDate *)date
-                                 limit:(NSUInteger)limit
-{
-	/* %@ with an NSNumber, not %ld: gnustep-base's predicate parser
-	 * takes only object arguments. */
-	NSNumber *kindNumber = [NSNumber numberWithInteger:kind];
-	NSPredicate *predicate = date == nil
-		? [NSPredicate predicateWithFormat:@"kind == %@", kindNumber]
-		: [NSPredicate predicateWithFormat:@"kind == %@ AND dueAt <= %@",
-			kindNumber, date];
-	NSMutableArray *jobs = [NSMutableArray array];
-	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:UDJobEntity
-		                  predicate:predicate
-		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"dueAt"
-		                                                             ascending:YES] ]
-		                      limit:limit];
-		for (NSManagedObject *row in rows) {
-			[jobs addObject:[self jobRecordFromRow:row]];
-		}
-		[self->_context reset];
-	}];
-	return jobs;
-}
-
-- (NSDate *)earliestTimerDue
-{
-	return [[[self jobsOfKind:UDJobKindTimer dueBefore:nil limit:1] lastObject] dueAt];
-}
-
-- (BOOL)deleteJob:(NSString *)jobId error:(NSError **)error
-{
-	__block BOOL ok = YES;
-	__block NSError *localError = nil;
-	[_context performBlockAndWait:^{
-		for (NSManagedObject *row in [self fetch:UDJobEntity
-		                               predicate:[NSPredicate predicateWithFormat:
-		                                   @"jobId == %@", jobId]
-		                                    sort:nil
-		                                   limit:0]) {
-			[self->_context deleteObject:row];
-		}
-		ok = [self saveAndReset:&localError];
-	}];
-	if (!ok && error != NULL) {
-		*error = localError;
-	}
-	return ok;
 }
 
 @end

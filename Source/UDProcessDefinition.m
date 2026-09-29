@@ -13,6 +13,8 @@
 @property (nonatomic, readwrite, copy) NSString *definitionId;
 @property (nonatomic, readwrite, copy) NSString *deploymentId;
 @property (nonatomic, readwrite, copy) NSString *resourceName;
+/* Node id to @[node, scope definition], for the whole tree. */
+@property (nonatomic, strong) NSDictionary *nodeIndex;
 - (instancetype)initWithProcessId:(NSString *)processId
                              name:(NSString *)name
                           version:(NSInteger)version
@@ -38,8 +40,31 @@
 		_nodes = [nodes copy];
 		_flows = [flows copy];
 		_flowOrder = [flowOrder copy];
+		NSMutableDictionary *index = [NSMutableDictionary dictionary];
+		for (UDFlowNode *node in [_nodes allValues]) {
+			/* The scope is held unretained: this definition owns the index,
+			 * and each subprocess node owns its inner definition. */
+			[index setObject:@[ node, [NSValue valueWithNonretainedObject:self] ]
+			          forKey:node.elementId];
+			if ([node isKindOfClass:[UDSubProcess class]]) {
+				[index addEntriesFromDictionary:
+					[[(UDSubProcess *)node innerDefinition] nodeIndex]];
+			}
+		}
+		_nodeIndex = index;
 	}
 	return self;
+}
+
+- (UDFlowNode *)flowNodeWithId:(NSString *)elementId
+{
+	return elementId == nil ? nil : [[self.nodeIndex objectForKey:elementId] objectAtIndex:0];
+}
+
+- (UDProcessDefinition *)scopeOfFlowNode:(NSString *)elementId
+{
+	return elementId == nil ? nil
+		: [[[self.nodeIndex objectForKey:elementId] objectAtIndex:1] nonretainedObjectValue];
 }
 
 - (UDProcessDefinition *)ud_deployedCopyWithVersion:(NSInteger)version

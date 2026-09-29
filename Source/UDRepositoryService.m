@@ -2,6 +2,7 @@
 #import "UDProcessDefinition+Repository.h"
 #import "UDStore.h"
 #import "UDBpmn.h"
+#import "UDFlowElements.h"
 
 static NSError *
 UDRepositoryError(UDWorkflowErrorCode code, NSString *message)
@@ -198,6 +199,10 @@ UDIsBpmnResource(NSString *name)
 		record.key = definition.processId;
 		record.name = definition.name;
 		record.resourceName = [pair objectAtIndex:1];
+		UDEvent *start = [definition startEvent];
+		if (start.trigger == UDEventTriggerMessage) {
+			record.messageStartName = start.messageName;
+		}
 		[records addObject:record];
 	}
 	NSArray *stored = [_store insertDeployment:deploymentRecord

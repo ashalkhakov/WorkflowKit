@@ -70,7 +70,10 @@ typedef NS_ENUM(NSInteger, UDWorkflowErrorCode) {
 	UDWorkflowErrorCondition,
 	UDWorkflowErrorHandler,
 	UDWorkflowErrorInvalidState,
-	UDWorkflowErrorInvalidBpmn
+	UDWorkflowErrorInvalidBpmn,
+	/* Another command changed the same instance first; nothing was
+	 * committed, and the call can be retried. */
+	UDWorkflowErrorConflict
 };
 
 extern NSString * const UDWorkflowErrorDomain;

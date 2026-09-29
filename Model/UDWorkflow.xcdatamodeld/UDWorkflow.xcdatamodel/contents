@@ -38,68 +38,154 @@
             <fetchIndexElement property="deployedAt" type="Binary" order="descending"/>
         </fetchIndex>
     </entity>
-    <entity name="UDInstance" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="errorCode" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="errorDomain" optional="YES" attributeType="String"/>
-        <attribute name="errorMessage" optional="YES" attributeType="String"/>
-        <attribute name="instanceId" attributeType="String"/>
-        <attribute name="processId" attributeType="String"/>
-        <attribute name="state" attributeType="Binary"/>
-        <attribute name="status" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="version" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
-        <uniquenessConstraints>
-            <uniquenessConstraint>
-                <constraint value="instanceId"/>
-            </uniquenessConstraint>
-        </uniquenessConstraints>
-        <fetchIndex name="byInstanceId">
-            <fetchIndexElement property="instanceId" type="Binary" order="ascending"/>
-        </fetchIndex>
-        <fetchIndex name="byStatus">
-            <fetchIndexElement property="status" type="Binary" order="ascending"/>
-        </fetchIndex>
-    </entity>
-    <entity name="UDJob" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="actionKey" optional="YES" attributeType="String"/>
-        <attribute name="attempts" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="dueAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="instanceId" attributeType="String"/>
-        <attribute name="jobId" attributeType="String"/>
-        <attribute name="kind" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="lastError" optional="YES" attributeType="String"/>
-        <attribute name="lockedUntil" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="owner" optional="YES" attributeType="String"/>
-        <attribute name="tokenId" attributeType="String"/>
-        <uniquenessConstraints>
-            <uniquenessConstraint>
-                <constraint value="jobId"/>
-            </uniquenessConstraint>
-        </uniquenessConstraints>
-        <fetchIndex name="byInstance">
-            <fetchIndexElement property="instanceId" type="Binary" order="ascending"/>
-        </fetchIndex>
-        <fetchIndex name="byDue">
-            <fetchIndexElement property="kind" type="Binary" order="ascending"/>
-            <fetchIndexElement property="dueAt" type="Binary" order="ascending"/>
-        </fetchIndex>
-    </entity>
-    <entity name="UDCorrelation" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="instanceId" attributeType="String"/>
-        <attribute name="key" attributeType="String"/>
-        <attribute name="value" attributeType="String"/>
-        <fetchIndex name="byKeyValue">
-            <fetchIndexElement property="key" type="Binary" order="ascending"/>
-            <fetchIndexElement property="value" type="Binary" order="ascending"/>
-        </fetchIndex>
-        <fetchIndex name="byInstance">
-            <fetchIndexElement property="instanceId" type="Binary" order="ascending"/>
-        </fetchIndex>
-    </entity>
     <entity name="UDResource" representedClassName="NSManagedObject" syncable="YES">
         <attribute name="bytes" attributeType="Binary"/>
         <attribute name="name" attributeType="String"/>
         <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDDeployment" inverseName="resources" inverseEntity="UDDeployment"/>
+    </entity>
+    <entity name="UDExecution" representedClassName="UDExecutionEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="businessKey" optional="YES" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="executionId" attributeType="String"/>
+        <attribute name="isActive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="isConcurrent" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isScope" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lockRevision" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDExecution" inverseName="parent" inverseEntity="UDExecution"/>
+        <relationship name="eventSubscriptions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDEventSubscription" inverseName="execution" inverseEntity="UDEventSubscription"/>
+        <relationship name="externalTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDExternalTask" inverseName="execution" inverseEntity="UDExternalTask"/>
+        <relationship name="jobs" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDJob" inverseName="execution" inverseEntity="UDJob"/>
+        <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="children" inverseEntity="UDExecution"/>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDTask" inverseName="execution" inverseEntity="UDTask"/>
+        <relationship name="variables" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDVariable" inverseName="execution" inverseEntity="UDVariable"/>
+        <fetchIndex name="byExecutionId">
+            <fetchIndexElement property="executionId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byBusinessKey">
+            <fetchIndexElement property="businessKey" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDVariable" representedClassName="UDVariableEntity" syncable="YES">
+        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="textValue" optional="YES" attributeType="String"/>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="variableId" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="variables" inverseEntity="UDExecution"/>
+        <fetchIndex name="byNameText">
+            <fetchIndexElement property="name" type="Binary" order="ascending"/>
+            <fetchIndexElement property="textValue" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDTask" representedClassName="UDTaskEntity" syncable="YES">
+        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="assignee" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="priority" attributeType="Integer 32" defaultValueString="50" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="taskDefinitionKey" attributeType="String"/>
+        <attribute name="taskId" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="tasks" inverseEntity="UDExecution"/>
+        <fetchIndex name="byTaskId">
+            <fetchIndexElement property="taskId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byAssignee">
+            <fetchIndexElement property="assignee" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDEventSubscription" representedClassName="UDEventSubscriptionEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="definitionId" optional="YES" attributeType="String"/>
+        <attribute name="eventName" attributeType="String"/>
+        <attribute name="eventType" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="subscriptionId" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="eventSubscriptions" inverseEntity="UDExecution"/>
+        <fetchIndex name="byEvent">
+            <fetchIndexElement property="eventType" type="Binary" order="ascending"/>
+            <fetchIndexElement property="eventName" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDJob" representedClassName="UDJobEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="exceptionMessage" optional="YES" attributeType="String"/>
+        <attribute name="exclusive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="jobId" attributeType="String"/>
+        <attribute name="jobType" attributeType="String"/>
+        <attribute name="lockExpiration" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lockOwner" optional="YES" attributeType="String"/>
+        <attribute name="priority" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="retries" attributeType="Integer 32" defaultValueString="3" usesScalarValueType="YES"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="jobs" inverseEntity="UDExecution"/>
+        <fetchIndex name="byDue">
+            <fetchIndexElement property="dueDate" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDExternalTask" representedClassName="UDExternalTaskEntity" syncable="YES">
+        <attribute name="activityId" attributeType="String"/>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="errorMessage" optional="YES" attributeType="String"/>
+        <attribute name="externalTaskId" attributeType="String"/>
+        <attribute name="lockExpiration" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="priority" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="retries" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
+        <attribute name="topic" attributeType="String"/>
+        <attribute name="workerId" optional="YES" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="externalTasks" inverseEntity="UDExecution"/>
+        <fetchIndex name="byTopic">
+            <fetchIndexElement property="topic" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDHistoricProcessInstance" representedClassName="UDHistoricProcessInstanceEntity" syncable="YES">
+        <attribute name="businessKey" optional="YES" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="definitionKey" attributeType="String"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="state" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDHistoricVariable" representedClassName="UDHistoricVariableEntity" syncable="YES">
+        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="scopeIsProcessInstance" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="textValue" optional="YES" attributeType="String"/>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="variableId" attributeType="String"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byVariableId">
+            <fetchIndexElement property="variableId" type="Binary" order="ascending"/>
+        </fetchIndex>
     </entity>
 </model>

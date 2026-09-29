@@ -1,6 +1,6 @@
 # Execution model
 
-Status: adopted; step 1 (repository) implemented. Replaces the token-marking model of
+Status: adopted; steps 1 (repository) and 2 (core) implemented. Replaces the token-marking model of
 `persistence-design.md`, which describes the code as it stands today.
 
 ## Reference, and the clean-room rule
@@ -309,10 +309,17 @@ macOS:
    engine-assigned versions and duplicate filtering, and definitions loaded
    back from stored BPMN.~~ Done, with standard BPMN reading and writing for
    the current subset.
-2. **Core.** Executions, the agenda and behaviours for today's subset,
+2. ~~**Core.** Executions, the agenda and behaviours for today's subset,
    commands with one context and one save, optimistic locking, scoped
    variables, tasks, event subscriptions, business-key and variable
-   correlation.
+   correlation.~~ Done. So that nothing the token engine did was lost, it
+   also brought forward what the existing scenarios needed from later
+   steps: timer jobs with a basic executor (acquire, then execute), external
+   tasks with the in-process worker and three attempts, message start
+   events, and history of process instances and latest variable values.
+   Still to come in those steps: retry cycles and incidents, async
+   continuations, the external task service, timer start events, and the
+   rest of history.
 3. **Jobs.** Timers, async continuations, exclusive execution, retries,
    retry cycles and incidents.
 4. **External tasks.** Fetch-and-lock, the in-process worker behind
