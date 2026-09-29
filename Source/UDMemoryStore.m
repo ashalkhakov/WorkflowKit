@@ -55,6 +55,11 @@
 	return self;
 }
 
+- (void)dealloc
+{
+	UDDispatchRelease(_queue);
+}
+
 - (NSString *)keyForProcess:(NSString *)processId version:(NSInteger)version
 {
 	return [NSString stringWithFormat:@"%@:%ld", processId, (long)version];
@@ -171,10 +176,14 @@
 	instance.error = snap.error;
 	instance.tokenSerial = snap.tokenSerial;
 	instance.pendingServices = 0;
-	instance.queue = dispatch_queue_create(
+	{
+		dispatch_queue_t q = dispatch_queue_create(
 		[[NSString stringWithFormat:@"ud.workflow.%@", instance.instanceId]
 			UTF8String],
 		DISPATCH_QUEUE_SERIAL);
+		instance.queue = q;
+		UDDispatchRelease(q);
+	}
 
 	for (UDToken *saved in snap.tokens) {
 		UDToken *token = [saved ud_snapshot];

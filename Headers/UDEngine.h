@@ -30,7 +30,7 @@ didThrowMessage:(NSString *)messageName
 @property (nonatomic, strong) id<UDServiceTaskHandler> serviceHandler;
 @property (nonatomic, strong) id<UDUserTaskPort> userTaskPort;
 @property (nonatomic, strong) id<UDInstanceStore> store;
-@property (nonatomic, strong) dispatch_queue_t workerQueue;
+@property (nonatomic, UD_DISPATCH_PROPERTY) dispatch_queue_t workerQueue;
 
 - (UDProcessInstance *)enqueueProcess:(UDProcessDefinition *)definition
                             variables:(NSDictionary *)variables

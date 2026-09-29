@@ -11,18 +11,61 @@
                 didFinish:(UDServiceResult *)result;
 @end
 
+/*
+ * Holds a timer source for the engine's timer table. A dispatch source is
+ * not an object ARC manages on GNUstep, so it cannot go into a collection
+ * directly.
+ */
+@interface UDTimerHandle : NSObject
+{
+@public
+	dispatch_source_t _source;
+}
+@end
+
+@implementation UDTimerHandle
+- (void)dealloc
+{
+	if (_source != NULL) {
+		dispatch_source_cancel(_source);
+		UDDispatchRelease(_source);
+	}
+}
+@end
+
 @implementation UDEngine
 
 - (instancetype)init
 {
 	self = [super init];
 	if (self) {
-		_workerQueue = dispatch_get_global_queue(
+		self.workerQueue = dispatch_get_global_queue(
 			DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
 		_inflight = [NSMutableSet set];
 		_timers = [NSMutableDictionary dictionary];
 	}
 	return self;
+}
+
+- (void)dealloc
+{
+	if (_workerQueue != NULL) {
+		UDDispatchRelease(_workerQueue);
+	}
+}
+
+- (void)setWorkerQueue:(dispatch_queue_t)workerQueue
+{
+	if (workerQueue == _workerQueue) {
+		return;
+	}
+	if (workerQueue != NULL) {
+		UDDispatchRetain(workerQueue);
+	}
+	if (_workerQueue != NULL) {
+		UDDispatchRelease(_workerQueue);
+	}
+	_workerQueue = workerQueue;
 }
 
 - (void)logInstance:(UDProcessInstance *)instance format:(NSString *)format, ...
@@ -105,9 +148,10 @@
 
 - (void)signalQuiesce:(UDProcessInstance *)instance
 {
+	/* An armed timer is a wait, like a message catch: a caller waiting for
+	 * the instance to settle does not wait for it to fire. */
 	if (instance.isCompleted || instance.isFailed
 	    || (instance.pendingServices == 0
-	        && instance.pendingTimers == 0
 	        && [instance nextReadyToken] == nil)) {
 		dispatch_semaphore_signal(instance.quiesce);
 	}
@@ -279,7 +323,7 @@
 			gateway.elementId,
 			(unsigned long)[arrived count],
 			(unsigned long)[needed count]];
-		return NO;
+		return YES;
 	}
 
 	for (UDToken *member in cohort) {
@@ -549,9 +593,8 @@
 
 - (void)cancelTimerForToken:(NSString *)tokenId instance:(UDProcessInstance *)instance
 {
-	dispatch_source_t source = [self.timers objectForKey:tokenId];
-	if (source != nil) {
-		dispatch_source_cancel(source);
+	UDTimerHandle *handle = [self.timers objectForKey:tokenId];
+	if (handle != nil) {
 		[self.timers removeObjectForKey:tokenId];
 		if (instance.pendingTimers > 0) {
 			instance.pendingTimers -= 1;
@@ -656,7 +699,9 @@
 		[self cancelTimerForToken:tokenId instance:instance];
 		[self timerFiredForToken:tokenId instance:instance];
 	});
-	[self.timers setObject:source forKey:token.tokenId];
+	UDTimerHandle *handle = [[UDTimerHandle alloc] init];
+	handle->_source = source;
+	[self.timers setObject:handle forKey:token.tokenId];
 	dispatch_resume(source);
 	[self logInstance:instance format:@"timer %@ in %.3fs",
 		event.elementId, duration];
@@ -700,6 +745,13 @@
 	if (event.trigger == UDEventTriggerTimer
 	    && (event.kind == UDEventKindStart
 	        || event.kind == UDEventKindIntermediateCatch)) {
+		/* A timer that is already due fires in this step rather than
+		 * after a trip through a dispatch source. */
+		if (event.timerDuration <= 0) {
+			[self logInstance:instance format:@"timer %@ due", event.elementId];
+			[self leaveEvent:event token:token instance:instance payload:nil];
+			return YES;
+		}
 		[self scheduleTimer:event token:token instance:instance];
 		return YES;
 	}
@@ -916,6 +968,7 @@
 		return;
 	}
 	dispatch_async(parent.queue, ^{
+		[parent.children removeObjectForKey:child.hostTokenId];
 		if (parent.pendingServices > 0) {
 			parent.pendingServices -= 1;
 		}
@@ -960,7 +1013,7 @@
 	token.state = UDTokenStateWaiting;
 	instance.pendingServices += 1;
 	NSError *childError = nil;
-	UDProcessInstance *child = [self prepareInstance:node.innerDefinition]
+	UDProcessInstance *child = [self prepareInstance:node.innerDefinition
 	                                       variables:instance.variables
 	                                           error:&childError];
 	if (child == nil) {
@@ -971,6 +1024,7 @@
 	}
 	child.parent = instance;
 	child.hostTokenId = token.tokenId;
+	[instance.children setObject:child forKey:token.tokenId];
 	child.queue = instance.queue;
 	[self logInstance:instance format:@"enter subprocess %@", node.elementId];
 	[self drainInstance:child];
@@ -1045,7 +1099,6 @@
 	[self checkCompletion:instance];
 	if (!instance.isCompleted && !instance.isFailed
 	    && instance.pendingServices == 0
-	    && instance.pendingTimers == 0
 	    && [instance nextReadyToken] == nil) {
 		[self notifyPaused:instance];
 	}
@@ -1072,10 +1125,14 @@
 	if (variables != nil) {
 		[instance.variables addEntriesFromDictionary:variables];
 	}
-	instance.queue = dispatch_queue_create(
+	{
+		dispatch_queue_t q = dispatch_queue_create(
 		[[NSString stringWithFormat:@"ud.workflow.%@", instance.instanceId]
 			UTF8String],
 		DISPATCH_QUEUE_SERIAL);
+		instance.queue = q;
+		UDDispatchRelease(q);
+	}
 	[instance makeTokenOnNode:start.elementId arrivedViaFlow:nil parent:nil];
 	[self logInstance:instance format:@"start %@ v%ld",
 		definition.processId, (long)definition.version];
@@ -1107,7 +1164,6 @@
 			break;
 		}
 		if (instance.pendingServices == 0
-		    && instance.pendingTimers == 0
 		    && [instance nextReadyToken] == nil) {
 			break;
 		}
@@ -1143,13 +1199,21 @@
 		return NO;
 	}
 	if (instance.queue == nil) {
-		instance.queue = dispatch_queue_create(
+		{
+			dispatch_queue_t q = dispatch_queue_create(
 			[[NSString stringWithFormat:@"ud.workflow.%@", instance.instanceId]
 				UTF8String],
 			DISPATCH_QUEUE_SERIAL);
+			instance.queue = q;
+			UDDispatchRelease(q);
+		}
 	}
 	if (instance.quiesce == nil) {
-		instance.quiesce = dispatch_semaphore_create(0);
+		{
+			dispatch_semaphore_t s = dispatch_semaphore_create(0);
+			instance.quiesce = s;
+			UDDispatchRelease(s);
+		}
 	}
 	[self logInstance:instance format:@"resume %@", instance.instanceId];
 	dispatch_async(instance.queue, ^{
@@ -1183,15 +1247,13 @@
 {
 	__block BOOL ok = NO;
 	__block NSError *localError = nil;
-	dispatch_semaphore_t done = dispatch_semaphore_create(0);
-	dispatch_async(instance.queue, ^{
+	dispatch_sync(instance.queue, ^{
 		UDToken *token = [instance tokenWithId:tokenId];
 		if (token == nil || token.state != UDTokenStateWaiting) {
 			localError = [NSError errorWithDomain:UDWorkflowErrorDomain
 			                                 code:UDWorkflowErrorInvalidState
 			                             userInfo:@{ NSLocalizedDescriptionKey:
 					@"token is not a waiting user task" }];
-			dispatch_semaphore_signal(done);
 			return;
 		}
 		UDFlowNode *node = [instance.definition nodeWithId:token.nodeId];
@@ -1201,7 +1263,6 @@
 			                                 code:UDWorkflowErrorInvalidState
 			                             userInfo:@{ NSLocalizedDescriptionKey:
 					@"token is not parked on a user task" }];
-			dispatch_semaphore_signal(done);
 			return;
 		}
 		if (variables != nil) {
@@ -1221,9 +1282,14 @@
 		[self drainInstance:instance];
 		ok = !instance.isFailed;
 		localError = instance.error;
-		dispatch_semaphore_signal(done);
 	});
-	dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+	/* Like -startProcess:, return once the instance has settled: the next
+	 * service task, if any, has run and its successors have fired. */
+	if (ok) {
+		[self waitUntilQuiet:instance];
+		ok = !instance.isFailed;
+		localError = instance.error;
+	}
 	if (!ok && error != NULL) {
 		*error = localError;
 	}
@@ -1237,8 +1303,7 @@
 {
 	__block BOOL delivered = NO;
 	__block NSError *localError = nil;
-	dispatch_semaphore_t done = dispatch_semaphore_create(0);
-	dispatch_async(instance.queue, ^{
+	dispatch_sync(instance.queue, ^{
 		NSMutableArray *targets = [NSMutableArray array];
 		for (UDToken *token in instance.tokens) {
 			if (token.state != UDTokenStateWaiting) {
@@ -1263,7 +1328,6 @@
 			                             userInfo:@{ NSLocalizedDescriptionKey:
 					[NSString stringWithFormat:@"no catch for message %@",
 						messageName] }];
-			dispatch_semaphore_signal(done);
 			return;
 		}
 		for (UDToken *token in targets) {
@@ -1281,9 +1345,10 @@
 		}
 		[self persist:instance];
 		[self drainInstance:instance];
-		dispatch_semaphore_signal(done);
 	});
-	dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+	if (delivered) {
+		[self waitUntilQuiet:instance];
+	}
 	if (!delivered && error != NULL) {
 		*error = localError;
 	}
@@ -1336,8 +1401,7 @@
 {
 	__block BOOL taken = NO;
 	__block NSError *localError = nil;
-	dispatch_semaphore_t done = dispatch_semaphore_create(0);
-	dispatch_async(instance.queue, ^{
+	dispatch_sync(instance.queue, ^{
 		for (UDToken *token in [instance.tokens copy]) {
 			if (token.state != UDTokenStateWaiting) {
 				continue;
@@ -1365,9 +1429,7 @@
 			[self persist:instance];
 			[self drainInstance:instance];
 		}
-		dispatch_semaphore_signal(done);
 	});
-	dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
 	if (!taken && error != NULL) {
 		*error = localError;
 	}

@@ -1,0 +1,9 @@
+obj/
+*.bundle/
+*.app/
+derived_src/
+.DS_Store
+._*
+xcuserdata/
+*.xcuserstate
+DerivedData/

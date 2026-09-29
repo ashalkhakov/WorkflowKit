@@ -113,6 +113,6 @@ Import of unknown elements is ignored; missing required V1 structure fails `buil
 
 Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/Height` and exported as `ud:x` `ud:y` `ud:w` `ud:h`.
 
-Tests: `Tests/UDWorkflowTests.m` is an XCTest case (`#import <XCTest/XCTest.h>`). On GNUstep build the bundle with `make -C Tests` and run `xctest Tests/obj/UDWorkflowTests.bundle` (tools-xctest).
+Tests: `Tests/UDWorkflowTests.m` is an XCTest case (`#import <XCTest/XCTest.h>`). On GNUstep, `make test` builds the library and runs the bundle under tools-xctest; see `CLAUDE.md` for the patched stack it is built against.
 
 V3 candidates: call activity, error start in event subprocess, signal events, multi-instance, full BPMN DI edge waypoints.

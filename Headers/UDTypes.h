@@ -2,6 +2,23 @@
 #define UDTypes_h
 
 #import <Foundation/Foundation.h>
+#import <dispatch/dispatch.h>
+
+/*
+ * Dispatch objects are Objective-C objects only where libdispatch was built
+ * with OS object support (Apple). On GNUstep they are plain C pointers that
+ * ARC does not manage, so properties holding them are `assign` with setters
+ * that retain, and whoever owns one releases it.
+ */
+#if OS_OBJECT_USE_OBJC
+#define UD_DISPATCH_PROPERTY strong
+#define UDDispatchRetain(object) ((void)(object))
+#define UDDispatchRelease(object) do { } while (0)
+#else
+#define UD_DISPATCH_PROPERTY assign
+#define UDDispatchRetain(object) dispatch_retain(object)
+#define UDDispatchRelease(object) dispatch_release(object)
+#endif
 
 typedef NS_ENUM(NSInteger, UDEventKind) {
 	UDEventKindStart = 0,

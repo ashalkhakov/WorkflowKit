@@ -1,6 +1,18 @@
+# UDWorkflow on GNUstep.
+#
+#   make                 the library, obj/libUDWorkflow.so
+#   make examples        the demo tools in Examples/
+#   make test            the library, then the XCTest suite (tools-xctest)
+#
+# Built against the patched stack from ../gnustep-patches, never a distro
+# GNUstep: see CLAUDE.md for the docker box and CI for the pinned recipe.
+#
+# A library rather than a framework, like RDLKit: on GNUstep a framework puts
+# its binary under UDWorkflow.framework/Versions/<v>/<target>/, which every
+# tool and test bundle in the tree then has to name to link against it.
 include $(GNUSTEP_MAKEFILES)/common.make
 
-FRAMEWORK_NAME = UDWorkflow
+LIBRARY_NAME = UDWorkflow
 
 UDWorkflow_OBJC_FILES = \
 	Source/UDFlowElements.m \
@@ -12,6 +24,8 @@ UDWorkflow_OBJC_FILES = \
 	Source/UDBpmn.m \
 	Source/UDEngine.m
 
+UDWorkflow_HEADER_FILES_DIR = Headers
+UDWorkflow_HEADER_FILES_INSTALL_DIR = UDWorkflow
 UDWorkflow_HEADER_FILES = \
 	UDTypes.h \
 	UDCondition.h \
@@ -24,24 +38,15 @@ UDWorkflow_HEADER_FILES = \
 	UDBpmn.h \
 	UDWorkflow.h
 
-UDWorkflow_HEADER_FILES_DIR = Headers
-UDWorkflow_HEADER_FILES_INSTALL_DIR = UDWorkflow
-
 UDWorkflow_INCLUDE_DIRS = -IHeaders
-UDWorkflow_OBJCFLAGS += -fobjc-arc -fblocks -Wall
-UDWorkflow_LDFLAGS += -ldispatch
+UDWorkflow_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
+UDWorkflow_LIBRARIES_DEPEND_UPON += -ldispatch $(FND_LIBS) $(OBJC_LIBS)
 
-TOOL_NAME = PurchaseRequestDemo
+include $(GNUSTEP_MAKEFILES)/library.make
 
-PurchaseRequestDemo_OBJC_FILES = Examples/PurchaseRequestDemo.m
-PurchaseRequestDemo_OBJCFLAGS += -fobjc-arc -fblocks -Wall
-PurchaseRequestDemo_INCLUDE_DIRS = -IHeaders
-PurchaseRequestDemo_TOOL_LIBS += -lUDWorkflow -ldispatch
-PurchaseRequestDemo_LIB_DIRS += -L$(GNUSTEP_OBJ_DIR)
+.PHONY: examples test
+examples: all
+	$(MAKE) -C Examples
 
-include $(GNUSTEP_MAKEFILES)/framework.make
-include $(GNUSTEP_MAKEFILES)/tool.make
-
-# XCTest bundle (tools-xctest):
-#   make -C Tests
-#   xctest Tests/obj/UDWorkflowTests.bundle
+test: all
+	$(MAKE) -C Tests run-tests

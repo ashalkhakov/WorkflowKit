@@ -28,12 +28,51 @@
 		_correlationKeys = [NSMutableDictionary dictionary];
 		_forkExpected = [NSMutableDictionary dictionary];
 		_tokens = [NSMutableArray array];
+		_children = [NSMutableDictionary dictionary];
 		_tokenSerial = 0;
 		_pendingServices = 0;
 		_pendingTimers = 0;
 		_quiesce = dispatch_semaphore_create(0);
 	}
 	return self;
+}
+
+- (void)dealloc
+{
+	if (_queue != NULL) {
+		UDDispatchRelease(_queue);
+	}
+	if (_quiesce != NULL) {
+		UDDispatchRelease(_quiesce);
+	}
+}
+
+- (void)setQueue:(dispatch_queue_t)queue
+{
+	if (queue == _queue) {
+		return;
+	}
+	if (queue != NULL) {
+		UDDispatchRetain(queue);
+	}
+	if (_queue != NULL) {
+		UDDispatchRelease(_queue);
+	}
+	_queue = queue;
+}
+
+- (void)setQuiesce:(dispatch_semaphore_t)quiesce
+{
+	if (quiesce == _quiesce) {
+		return;
+	}
+	if (quiesce != NULL) {
+		UDDispatchRetain(quiesce);
+	}
+	if (_quiesce != NULL) {
+		UDDispatchRelease(_quiesce);
+	}
+	_quiesce = quiesce;
 }
 
 - (UDToken *)nextReadyToken

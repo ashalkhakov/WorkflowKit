@@ -27,6 +27,9 @@
 @property (nonatomic, strong) NSMutableDictionary *forkExpected;
 @property (nonatomic, strong) NSMutableArray<UDToken *> *tokens;
 @property (nonatomic, weak) UDProcessInstance *parent;
+/* Running embedded subprocesses, keyed by the host token's id. The parent
+ * owns them: a child's only other references are weak. */
+@property (nonatomic, strong) NSMutableDictionary<NSString *, UDProcessInstance *> *children;
 @property (nonatomic, copy) NSString *hostTokenId;
 @property (nonatomic, getter=isCompleted) BOOL completed;
 @property (nonatomic, getter=isFailed) BOOL failed;
@@ -34,8 +37,8 @@
 @property (nonatomic) NSUInteger tokenSerial;
 @property (nonatomic) NSUInteger pendingServices;
 @property (nonatomic) NSUInteger pendingTimers;
-@property (nonatomic, strong) dispatch_queue_t queue;
-@property (nonatomic, strong) dispatch_semaphore_t quiesce;
+@property (nonatomic, UD_DISPATCH_PROPERTY) dispatch_queue_t queue;
+@property (nonatomic, UD_DISPATCH_PROPERTY) dispatch_semaphore_t quiesce;
 
 - (UDToken *)nextReadyToken;
 - (NSArray<UDToken *> *)tokensAtNode:(NSString *)nodeId

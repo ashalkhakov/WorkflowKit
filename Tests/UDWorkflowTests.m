@@ -255,7 +255,7 @@
 	XCTAssertNotNil(again, @"%@", error);
 	XCTAssertEqual([again.nodes count], [def.nodes count]);
 	XCTAssertEqual([again.flows count], [def.flows count]);
-	XCTAssertEqualWithAccuracy([again startEvent].boundsX, 10, 0.01);
+	XCTAssertEqualWithAccuracy([again startEvent].boundsX, 10.0, 0.01);
 }
 
 - (void)testComparisonExpression

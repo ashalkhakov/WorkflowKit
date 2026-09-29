@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# A push and the pull request for the same branch share one group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  ########################### GNUstep / Linux ###########################
+  # Built against the patched stack from gnustep-patches, by that
+  # repository's own Scripts/build-gnustep.sh -- the shape ODataStore uses --
+  # never a distro GNUstep. The engine is Foundation-only, so the stack is
+  # too; the designer will add libs-gui and libs-back when it lands.
+  gnustep:
+    name: Ubuntu (GNUstep, clang, gnustep-2.0)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PREFIX: ${{ github.workspace }}/build
+      SOURCES: ${{ github.workspace }}/dependencies
+      CC: clang
+      CXX: clang++
+      LIBRARY_COMBO: ng-gnu-gnu
+      RUNTIME_VERSION: gnustep-2.0
+      COMPONENTS: libobjc2 libdispatch tools-make libs-base tools-xctest
+      # libobjc2 and libdispatch land in the prefix's plain lib/, which the
+      # gnustep layout does not treat as a library root.
+      LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
+      # A commit, not a branch: it decides the recipe hash the stack is
+      # cached under. The same pin as ODataStore.
+      GNUSTEP_PATCHES_REF: b154b9f351b6413337cf57cc02827e634c05580f
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/source
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ashalkhakov/gnustep-patches
+          ref: ${{ env.GNUSTEP_PATCHES_REF }}
+          path: gnustep-patches
+
+      - name: Install packages
+        run: |
+          ./.github/scripts/apt-update.sh
+          sudo apt-get -q -y install \
+            pkg-config libgnutls28-dev libffi-dev libicu-dev libxml2-dev libxslt1-dev \
+            libssl-dev zlib1g-dev libcurl4-gnutls-dev
+          # The gnustep-2.0 runtime needs ld.gold or lld; ld.gold is gone
+          # from binutils on 24.04.
+          if [ -x /usr/bin/ld.gold ]; then
+            sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 10
+          else
+            sudo apt-get -q -y install lld
+            sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.lld 10
+          fi
+
+      - name: GNUstep recipe
+        id: recipe
+        run: echo "hash=$(../gnustep-patches/Scripts/build-gnustep.sh --print-recipe-hash)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore GNUstep
+        id: gnustep-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.PREFIX }}
+          key: gnustep-${{ runner.os }}-${{ steps.recipe.outputs.hash }}
+
+      - name: Build GNUstep
+        if: steps.gnustep-cache.outputs.cache-hit != 'true'
+        run: ../gnustep-patches/Scripts/build-gnustep.sh
+
+      - name: Save GNUstep
+        if: steps.gnustep-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.PREFIX }}
+          key: gnustep-${{ runner.os }}-${{ steps.recipe.outputs.hash }}
+
+      - name: Verify GNUstep
+        if: steps.gnustep-cache.outputs.cache-hit == 'true'
+        run: ../gnustep-patches/Scripts/build-gnustep.sh --verify-only
+
+      # On its own, so a compile error is reported as that and not as a
+      # test failure.
+      - name: Build the library
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make -j"$(nproc)"
+
+      - name: Build the examples
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make examples
+
+      - name: Unit tests
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make test
+
+      - name: Purchase request demo
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          LD_LIBRARY_PATH="$PWD/obj:$LD_LIBRARY_PATH" \
+            timeout 120 ./Examples/obj/PurchaseRequestDemo
