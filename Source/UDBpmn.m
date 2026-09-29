@@ -140,6 +140,22 @@ UDParseWhole(NSString *text, long long *value)
 @implementation UDBpmnWriteContext
 @end
 
+/* The expression Camunda models write to pass the business key on. */
+static NSString * const UDBusinessKeyExpression = @"#{execution.processBusinessKey}";
+
+static NSString *
+UDMappingAttrs(UDVariableMapping *mapping)
+{
+	if (mapping.isAllVariables) {
+		return @" variables=\"all\"";
+	}
+	if (mapping.isBusinessKey) {
+		return UDAttr(@"businessKey", UDBusinessKeyExpression);
+	}
+	return [UDAttr(@"source", mapping.source) stringByAppendingString:
+		UDAttr(@"target", mapping.target)];
+}
+
 @implementation UDBpmnWriter
 
 + (NSString *)messageIdFor:(NSString *)name context:(UDBpmnWriteContext *)context
@@ -360,6 +376,17 @@ UDParseWhole(NSString *text, long long *value)
 		case UDGatewayKindEventBased: tag = @"eventBasedGateway"; break;
 		}
 		[attrs appendString:UDAttr(@"default", gateway.defaultFlowId)];
+	} else if ([node isKindOfClass:[UDCallActivity class]]) {
+		UDCallActivity *call = (UDCallActivity *)node;
+		tag = @"callActivity";
+		[attrs appendString:UDAttr(@"calledElement", call.calledElement)];
+		if (call.binding == UDCalledElementBindingDeployment) {
+			[attrs appendString:@" camunda:calledElementBinding=\"deployment\""];
+		} else if (call.binding == UDCalledElementBindingVersion) {
+			[attrs appendString:@" camunda:calledElementBinding=\"version\""];
+			[attrs appendString:UDAttr(@"camunda:calledElementVersion",
+				[NSString stringWithFormat:@"%ld", (long)call.calledElementVersion])];
+		}
 	} else if ([node isKindOfClass:[UDSubProcess class]]) {
 		tag = @"subProcess";
 		UDProcessDefinition *scope = [(UDSubProcess *)node innerDefinition];
@@ -383,13 +410,25 @@ UDParseWhole(NSString *text, long long *value)
 		[attrs appendString:@" camunda:exclusive=\"false\""];
 	}
 	[attrs appendString:UDAttr(@"camunda:taskPriority", [node.taskPriority stringValue])];
-	NSMutableString *wiring = [NSMutableString string];
+	NSMutableString *extensions = [NSMutableString string];
 	if (node.retryTimeCycle != nil) {
-		[wiring appendFormat:
-			@"%@<bpmn:extensionElements>\n"
-			 @"%@  <camunda:failedJobRetryTimeCycle>%@</camunda:failedJobRetryTimeCycle>\n"
-			 @"%@</bpmn:extensionElements>\n",
-			inner, inner, UDEscapeXML(node.retryTimeCycle), inner];
+		[extensions appendFormat:
+			@"%@  <camunda:failedJobRetryTimeCycle>%@</camunda:failedJobRetryTimeCycle>\n",
+			inner, UDEscapeXML(node.retryTimeCycle)];
+	}
+	if ([node isKindOfClass:[UDCallActivity class]]) {
+		UDCallActivity *call = (UDCallActivity *)node;
+		for (UDVariableMapping *mapping in call.inputs) {
+			[extensions appendFormat:@"%@  <camunda:in%@/>\n", inner, UDMappingAttrs(mapping)];
+		}
+		for (UDVariableMapping *mapping in call.outputs) {
+			[extensions appendFormat:@"%@  <camunda:out%@/>\n", inner, UDMappingAttrs(mapping)];
+		}
+	}
+	NSMutableString *wiring = [NSMutableString string];
+	if ([extensions length] > 0) {
+		[wiring appendFormat:@"%@<bpmn:extensionElements>\n%@%@</bpmn:extensionElements>\n",
+			inner, extensions, inner];
 	}
 	for (NSString *flowId in node.incomingFlowIds) {
 		[wiring appendFormat:@"%@<bpmn:incoming>%@</bpmn:incoming>\n",
@@ -844,6 +883,117 @@ UDIgnoredElements(void)
 	return [context.messages objectForKey:ref] ?: ref;
 }
 
++ (BOOL)readCall:(NSXMLElement *)element
+              id:(NSString *)elementId
+            into:(UDDefinitionBuilder *)builder
+         context:(UDBpmnReadContext *)context
+{
+	for (NSString *unsupported in @[ @"calledElementTenantId", @"variableMappingClass",
+	                                 @"variableMappingDelegateExpression", @"caseRef" ]) {
+		if ([self attr:unsupported namespace:UDCamundaNamespace of:element] != nil) {
+			[self fail:context error:UDBpmnError(@"%@: camunda:%@ is not supported",
+				elementId, unsupported)];
+			return NO;
+		}
+	}
+	NSString *called = [self trimmed:[self attr:@"calledElement" of:element]];
+	if ([called length] == 0) {
+		[self fail:context error:UDBpmnError(
+			@"%@: a call activity needs calledElement, the key of a process", elementId)];
+		return NO;
+	}
+	if ([called rangeOfString:@"{"].location != NSNotFound) {
+		[self fail:context error:UDBpmnError(
+			@"%@: calledElement \"%@\" is an expression; only process keys are supported",
+			elementId, called)];
+		return NO;
+	}
+	[builder addCallActivity:elementId calledElement:called];
+
+	NSString *binding = [self attr:@"calledElementBinding" namespace:UDCamundaNamespace of:element];
+	if ([binding isEqualToString:@"deployment"]) {
+		[builder setBinding:UDCalledElementBindingDeployment version:0 forElement:elementId];
+	} else if ([binding isEqualToString:@"version"]) {
+		NSString *text = [self attr:@"calledElementVersion" namespace:UDCamundaNamespace of:element];
+		long long version = 0;
+		if (text == nil || !UDParseWhole(text, &version) || version < 1) {
+			[self fail:context error:UDBpmnError(
+				@"%@: the version binding needs camunda:calledElementVersion, a version number",
+				elementId)];
+			return NO;
+		}
+		[builder setBinding:UDCalledElementBindingVersion version:(NSInteger)version
+		         forElement:elementId];
+	} else if (binding != nil && ![binding isEqualToString:@"latest"]) {
+		[self fail:context error:UDBpmnError(
+			@"%@: camunda:calledElementBinding \"%@\" is not supported", elementId, binding)];
+		return NO;
+	}
+
+	NSXMLElement *extensions = [self child:element named:@"extensionElements"];
+	for (NSXMLElement *extension in [self children:extensions of:UDCamundaNamespace]) {
+		NSString *kind = [extension localName];
+		BOOL input = [kind isEqualToString:@"in"];
+		if (!input && ![kind isEqualToString:@"out"]) {
+			continue;
+		}
+		UDVariableMapping *mapping = [self mappingFrom:extension input:input id:elementId
+		                                       context:context];
+		if (mapping == nil) {
+			return NO;
+		}
+		if (input) {
+			[builder addInput:mapping forElement:elementId];
+		} else {
+			[builder addOutput:mapping forElement:elementId];
+		}
+	}
+	return context.error == nil;
+}
+
++ (UDVariableMapping *)mappingFrom:(NSXMLElement *)extension
+                             input:(BOOL)input
+                                id:(NSString *)elementId
+                           context:(UDBpmnReadContext *)context
+{
+	NSString *kind = input ? @"camunda:in" : @"camunda:out";
+	if ([self attr:@"sourceExpression" of:extension] != nil) {
+		[self fail:context error:UDBpmnError(
+			@"%@: %@ sourceExpression is not supported; map variables by name", elementId, kind)];
+		return nil;
+	}
+	if ([[self attr:@"local" of:extension] isEqualToString:@"true"]) {
+		[self fail:context error:UDBpmnError(
+			@"%@: %@ local=\"true\" is not supported", elementId, kind)];
+		return nil;
+	}
+	NSString *businessKey = [self attr:@"businessKey" of:extension];
+	if (businessKey != nil) {
+		NSString *compact = [[businessKey componentsSeparatedByCharactersInSet:
+			[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsJoinedByString:@""];
+		if (!input || !([compact isEqualToString:UDBusinessKeyExpression]
+		                || [compact isEqualToString:@"${execution.processBusinessKey}"])) {
+			[self fail:context error:UDBpmnError(
+				@"%@: %@ businessKey can only pass the calling instance's business key on (%@)",
+				elementId, kind, UDBusinessKeyExpression)];
+			return nil;
+		}
+		return [UDVariableMapping businessKey];
+	}
+	if ([[self attr:@"variables" of:extension] isEqualToString:@"all"]) {
+		return [UDVariableMapping allVariables];
+	}
+	NSString *source = [self attr:@"source" of:extension];
+	NSString *target = [self attr:@"target" of:extension];
+	if ([source length] == 0 || [target length] == 0) {
+		[self fail:context error:UDBpmnError(
+			@"%@: %@ needs source and target, variables=\"all\" or businessKey",
+			elementId, kind)];
+		return nil;
+	}
+	return [UDVariableMapping mappingFrom:source to:target];
+}
+
 + (BOOL)readNode:(NSXMLElement *)element
             name:(NSString *)name
               id:(NSString *)elementId
@@ -991,6 +1141,8 @@ UDIgnoredElements(void)
 		[builder addParallel:elementId];
 	} else if ([name isEqualToString:@"eventBasedGateway"]) {
 		[builder addEventBased:elementId];
+	} else if ([name isEqualToString:@"callActivity"]) {
+		return [self readCall:element id:elementId into:builder context:context];
 	} else if ([name isEqualToString:@"subProcess"]) {
 		if ([[self attr:@"triggeredByEvent" of:element] isEqualToString:@"true"]) {
 			[self fail:context error:UDBpmnError(

@@ -5,20 +5,6 @@
 
 @implementation UDEventTests
 
-- (BOOL)waitForActive:(NSString *)activityId
-                   in:(NSString *)processInstanceId
-               engine:(UDProcessEngine *)engine
-{
-	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
-	while ([deadline timeIntervalSinceNow] > 0) {
-		if ([[self active:processInstanceId engine:engine] containsObject:activityId]) {
-			return YES;
-		}
-		[NSThread sleepForTimeInterval:0.02];
-	}
-	return NO;
-}
-
 #pragma mark - Events
 
 - (void)testTimerAndMessageCatch

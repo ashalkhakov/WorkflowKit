@@ -55,6 +55,7 @@
         <attribute name="isScope" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="lockRevision" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="superProcessInstanceId" optional="YES" attributeType="String"/>
         <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDExecution" inverseName="parent" inverseEntity="UDExecution"/>
         <relationship name="eventSubscriptions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDEventSubscription" inverseName="execution" inverseEntity="UDEventSubscription"/>
@@ -62,6 +63,8 @@
         <relationship name="incidents" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDIncident" inverseName="execution" inverseEntity="UDIncident"/>
         <relationship name="jobs" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDJob" inverseName="execution" inverseEntity="UDJob"/>
         <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="children" inverseEntity="UDExecution"/>
+        <relationship name="subProcessInstance" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="UDExecution" inverseName="superExecution" inverseEntity="UDExecution"/>
+        <relationship name="superExecution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="subProcessInstance" inverseEntity="UDExecution"/>
         <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDTask" inverseName="execution" inverseEntity="UDTask"/>
         <relationship name="variables" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDVariable" inverseName="execution" inverseEntity="UDVariable"/>
         <fetchIndex name="byExecutionId">
@@ -72,6 +75,9 @@
         </fetchIndex>
         <fetchIndex name="byBusinessKey">
             <fetchIndexElement property="businessKey" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="bySuperProcessInstance">
+            <fetchIndexElement property="superProcessInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
     <entity name="UDVariable" representedClassName="UDVariableEntity" syncable="YES">
@@ -169,6 +175,7 @@
         <attribute name="processInstanceId" attributeType="String"/>
         <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="state" attributeType="String"/>
+        <attribute name="superProcessInstanceId" optional="YES" attributeType="String"/>
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
@@ -209,6 +216,7 @@
         <attribute name="activityInstanceId" attributeType="String"/>
         <attribute name="activityName" optional="YES" attributeType="String"/>
         <attribute name="activityType" attributeType="String"/>
+        <attribute name="calledProcessInstanceId" optional="YES" attributeType="String"/>
         <attribute name="canceled" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="processInstanceId" attributeType="String"/>

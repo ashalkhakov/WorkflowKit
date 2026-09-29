@@ -6,6 +6,7 @@
 
 NSString * const UDProcessInstanceStateActive = @"ACTIVE";
 NSString * const UDProcessInstanceStateCompleted = @"COMPLETED";
+NSString * const UDProcessInstanceStateInternallyTerminated = @"INTERNALLY_TERMINATED";
 NSString * const UDTaskDeleteReasonCompleted = @"completed";
 NSString * const UDTaskDeleteReasonDeleted = @"deleted";
 NSString * const UDIncidentStateOpen = @"open";
@@ -31,6 +32,7 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 @property (nonatomic, readwrite, copy) NSString *businessKey;
 @property (nonatomic, readwrite, copy) NSString *definitionId;
 @property (nonatomic, readwrite, copy) NSString *definitionKey;
+@property (nonatomic, readwrite, copy) NSString *superProcessInstanceId;
 @property (nonatomic, readwrite, getter=isEnded) BOOL ended;
 @end
 
@@ -45,6 +47,7 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 	instance.businessKey = root.businessKey;
 	instance.definitionId = root.definitionId;
 	instance.definitionKey = definition.processId;
+	instance.superProcessInstanceId = root.superProcessInstanceId;
 	instance.ended = ended;
 	return instance;
 }
@@ -69,6 +72,7 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 	instance.businessKey = history.businessKey;
 	instance.definitionId = history.definitionId;
 	instance.definitionKey = history.definitionKey;
+	instance.superProcessInstanceId = history.superProcessInstanceId;
 	instance.ended = history.endTime != nil;
 	return instance;
 }
@@ -125,6 +129,7 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 @property (nonatomic, readwrite, copy) NSDate *startTime;
 @property (nonatomic, readwrite, copy) NSDate *endTime;
 @property (nonatomic, readwrite, copy) NSString *state;
+@property (nonatomic, readwrite, copy) NSString *superProcessInstanceId;
 @end
 
 @implementation UDHistoricProcessInstance
@@ -139,6 +144,7 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 	instance.startTime = entity.startTime;
 	instance.endTime = entity.endTime;
 	instance.state = entity.state;
+	instance.superProcessInstanceId = entity.superProcessInstanceId;
 	return instance;
 }
 
@@ -255,6 +261,32 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 		*error = [self notRunning:processInstanceId];
 	}
 	return instance;
+}
+
+- (NSArray<UDProcessInstance *> *)subProcessInstancesOf:(NSString *)processInstanceId
+                                                  error:(NSError **)error
+{
+	__block NSMutableArray *instances = nil;
+	BOOL ok = [_engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		instances = [NSMutableArray array];
+		NSArray *roots = [command fetch:@"UDExecution"
+		                      predicate:[NSPredicate predicateWithFormat:
+		                          @"superProcessInstanceId == %@ AND parent == nil",
+		                          processInstanceId]
+		                           sort:nil
+		                          limit:0];
+		for (UDExecutionEntity *root in roots) {
+			[instances addObject:[UDProcessInstance ud_instanceWithExecution:root
+				definition:[command definitionForExecution:root]
+				ended:NO]];
+		}
+		return YES;
+	} error:error];
+	if (!ok) {
+		return nil;
+	}
+	return instances;
 }
 
 - (NSArray<NSString *> *)activeActivityIdsForProcessInstance:(NSString *)processInstanceId
@@ -587,6 +619,7 @@ processInstanceId:(NSString *)processInstanceId
 @property (nonatomic, readwrite, copy) NSString *activityName;
 @property (nonatomic, readwrite, copy) NSString *activityType;
 @property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSString *calledProcessInstanceId;
 @property (nonatomic, readwrite, copy) NSDate *startTime;
 @property (nonatomic, readwrite, copy) NSDate *endTime;
 @property (nonatomic, readwrite, getter=isCanceled) BOOL canceled;
@@ -706,6 +739,7 @@ processInstanceId:(NSString *)processInstanceId
 		value.activityId = row.activityId;
 		value.activityName = row.activityName;
 		value.activityType = row.activityType;
+		value.calledProcessInstanceId = row.calledProcessInstanceId;
 		value.processInstanceId = row.processInstanceId;
 		value.startTime = row.startTime;
 		value.endTime = row.endTime;

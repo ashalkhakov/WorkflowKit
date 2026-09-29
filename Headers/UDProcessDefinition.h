@@ -92,6 +92,16 @@
 - (instancetype)addSubProcess:(NSString *)elementId
                          name:(NSString *)name
                         inner:(UDProcessDefinition *)inner;
+/* Calls the latest version of the process with that key; the binding,
+ * inputs and outputs are set afterwards. */
+- (instancetype)addCallActivity:(NSString *)elementId
+                  calledElement:(NSString *)processKey;
+/* version is only read for UDCalledElementBindingVersion. */
+- (instancetype)setBinding:(UDCalledElementBinding)binding
+                   version:(NSInteger)version
+                forElement:(NSString *)elementId;
+- (instancetype)addInput:(UDVariableMapping *)mapping forElement:(NSString *)elementId;
+- (instancetype)addOutput:(UDVariableMapping *)mapping forElement:(NSString *)elementId;
 - (instancetype)addBoundaryError:(NSString *)elementId
                           onTask:(NSString *)taskId
                         errorRef:(NSString *)errorRef

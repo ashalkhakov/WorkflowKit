@@ -17,6 +17,8 @@ typedef NS_ENUM(NSInteger, UDHistoryLevel) {
 
 extern NSString * const UDProcessInstanceStateActive;
 extern NSString * const UDProcessInstanceStateCompleted;
+/* Canceled with the call activity that started it. */
+extern NSString * const UDProcessInstanceStateInternallyTerminated;
 
 @interface UDHistoricProcessInstance : NSObject
 @property (nonatomic, readonly, copy) NSString *processInstanceId;
@@ -27,6 +29,8 @@ extern NSString * const UDProcessInstanceStateCompleted;
 /* nil while the instance runs. */
 @property (nonatomic, readonly, copy) NSDate *endTime;
 @property (nonatomic, readonly, copy) NSString *state;
+/* The instance whose call activity started this one; nil otherwise. */
+@property (nonatomic, readonly, copy) NSString *superProcessInstanceId;
 @end
 
 /* One time a path was at a node: an activity, event or gateway. */
@@ -37,6 +41,8 @@ extern NSString * const UDProcessInstanceStateCompleted;
 /* The BPMN element: userTask, exclusiveGateway, boundaryEvent, ... */
 @property (nonatomic, readonly, copy) NSString *activityType;
 @property (nonatomic, readonly, copy) NSString *processInstanceId;
+/* For a call activity: the instance it started. */
+@property (nonatomic, readonly, copy) NSString *calledProcessInstanceId;
 @property (nonatomic, readonly, copy) NSDate *startTime;
 /* nil while running. */
 @property (nonatomic, readonly, copy) NSDate *endTime;

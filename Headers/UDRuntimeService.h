@@ -11,6 +11,8 @@
 @property (nonatomic, readonly, copy) NSString *businessKey;
 @property (nonatomic, readonly, copy) NSString *definitionId;
 @property (nonatomic, readonly, copy) NSString *definitionKey;
+/* The instance whose call activity started this one; nil otherwise. */
+@property (nonatomic, readonly, copy) NSString *superProcessInstanceId;
 /* YES once the instance has reached its end: it is then only in history. */
 @property (nonatomic, readonly, getter=isEnded) BOOL ended;
 @end
@@ -42,6 +44,10 @@
 /* nil, with an error, for an instance that has ended or never existed. */
 - (UDProcessInstance *)processInstanceWithId:(NSString *)processInstanceId
                                        error:(NSError **)error;
+/* The running instances the instance's call activities started, in no
+ * particular order. */
+- (NSArray<UDProcessInstance *> *)subProcessInstancesOf:(NSString *)processInstanceId
+                                                  error:(NSError **)error;
 /* The activities the instance's paths are active in, sorted. A path
  * waiting at a join is not active. */
 - (NSArray<NSString *> *)activeActivityIdsForProcessInstance:(NSString *)processInstanceId

@@ -41,7 +41,7 @@
 	NSString *xml =
 		@"<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"d\">"
 		 @"<process id=\"calls\" isExecutable=\"true\">"
-		 @"<startEvent id=\"s\"/><callActivity id=\"other\" calledElement=\"x\"/><endEvent id=\"e\"/>"
+		 @"<startEvent id=\"s\"/><complexGateway id=\"other\"/><endEvent id=\"e\"/>"
 		 @"<sequenceFlow id=\"f1\" sourceRef=\"s\" targetRef=\"other\"/>"
 		 @"<sequenceFlow id=\"f2\" sourceRef=\"other\" targetRef=\"e\"/>"
 		 @"</process></definitions>";
@@ -50,7 +50,7 @@
 		           name:@"calls"
 		filterDuplicates:YES
 		          error:&error]);
-	XCTAssertTrue([[error localizedDescription] rangeOfString:@"callActivity"].location
+	XCTAssertTrue([[error localizedDescription] rangeOfString:@"complexGateway"].location
 		!= NSNotFound, @"%@", error);
 	XCTAssertNil([engine.repositoryService latestDefinitionForKey:@"calls" error:NULL]);
 }

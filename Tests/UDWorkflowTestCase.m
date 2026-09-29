@@ -182,6 +182,20 @@
 	return NO;
 }
 
+- (BOOL)waitForActive:(NSString *)activityId
+                   in:(NSString *)processInstanceId
+               engine:(UDProcessEngine *)engine
+{
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
+	while ([deadline timeIntervalSinceNow] > 0) {
+		if ([[self active:processInstanceId engine:engine] containsObject:activityId]) {
+			return YES;
+		}
+		[NSThread sleepForTimeInterval:0.02];
+	}
+	return NO;
+}
+
 - (NSArray *)rows:(NSString *)entity engine:(UDProcessEngine *)engine
 {
 	__block NSArray *rows = nil;
@@ -231,6 +245,18 @@
 	return def;
 }
 
+static NSArray *
+UDMappingStrings(NSArray<UDVariableMapping *> *mappings)
+{
+	NSMutableArray *strings = [NSMutableArray array];
+	for (UDVariableMapping *mapping in mappings) {
+		[strings addObject:mapping.isAllVariables ? @"all"
+			: mapping.isBusinessKey ? @"businessKey"
+			: [NSString stringWithFormat:@"%@->%@", mapping.source, mapping.target]];
+	}
+	return strings;
+}
+
 - (void)assertNode:(UDFlowNode *)a matches:(UDFlowNode *)b
 {
 	XCTAssertEqualObjects(NSStringFromClass([a class]), NSStringFromClass([b class]), @"%@", a.elementId);
@@ -270,6 +296,13 @@
 		if (x.kind != UDTaskKindUser) {
 			XCTAssertEqualObjects(x.actionKey, y.actionKey, @"%@", a.elementId);
 		}
+	} else if ([a isKindOfClass:[UDCallActivity class]]) {
+		UDCallActivity *x = (UDCallActivity *)a, *y = (UDCallActivity *)b;
+		XCTAssertEqualObjects(x.calledElement, y.calledElement, @"%@", a.elementId);
+		XCTAssertEqual(x.binding, y.binding, @"%@", a.elementId);
+		XCTAssertEqual(x.calledElementVersion, y.calledElementVersion, @"%@", a.elementId);
+		XCTAssertEqualObjects(UDMappingStrings(x.inputs), UDMappingStrings(y.inputs), @"%@", a.elementId);
+		XCTAssertEqualObjects(UDMappingStrings(x.outputs), UDMappingStrings(y.outputs), @"%@", a.elementId);
 	} else if ([a isKindOfClass:[UDGateway class]]) {
 		XCTAssertEqual([(UDGateway *)a kind], [(UDGateway *)b kind], @"%@", a.elementId);
 		XCTAssertEqualObjects([(UDGateway *)a defaultFlowId], [(UDGateway *)b defaultFlowId],

@@ -169,6 +169,91 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 
 @end
 
+@interface UDVariableMapping ()
+- (instancetype)initWithSource:(NSString *)source
+                        target:(NSString *)target
+                  allVariables:(BOOL)allVariables
+                   businessKey:(BOOL)businessKey;
+@end
+
+@implementation UDVariableMapping
+
+- (instancetype)initWithSource:(NSString *)source
+                        target:(NSString *)target
+                  allVariables:(BOOL)allVariables
+                   businessKey:(BOOL)businessKey
+{
+	self = [super init];
+	if (self) {
+		_source = [source copy];
+		_target = [target copy];
+		_allVariables = allVariables;
+		_businessKey = businessKey;
+	}
+	return self;
+}
+
++ (instancetype)mappingFrom:(NSString *)source to:(NSString *)target
+{
+	return [[self alloc] initWithSource:source target:target allVariables:NO businessKey:NO];
+}
+
++ (instancetype)allVariables
+{
+	return [[self alloc] initWithSource:nil target:nil allVariables:YES businessKey:NO];
+}
+
++ (instancetype)businessKey
+{
+	return [[self alloc] initWithSource:nil target:nil allVariables:NO businessKey:YES];
+}
+
+@end
+
+@interface UDCallActivity ()
+@property (nonatomic, readwrite) UDCalledElementBinding binding;
+@property (nonatomic, readwrite) NSInteger calledElementVersion;
+@property (nonatomic, strong) NSMutableArray<UDVariableMapping *> *mutableInputs;
+@property (nonatomic, strong) NSMutableArray<UDVariableMapping *> *mutableOutputs;
+@end
+
+@implementation UDCallActivity
+
+- (instancetype)initWithElementId:(NSString *)elementId
+                             name:(NSString *)name
+                    calledElement:(NSString *)calledElement
+{
+	self = [super initWithElementId:elementId name:name];
+	if (self) {
+		_calledElement = [calledElement copy];
+		_mutableInputs = [NSMutableArray array];
+		_mutableOutputs = [NSMutableArray array];
+	}
+	return self;
+}
+
+- (NSArray<UDVariableMapping *> *)inputs
+{
+	return [_mutableInputs copy];
+}
+
+- (NSArray<UDVariableMapping *> *)outputs
+{
+	return [_mutableOutputs copy];
+}
+
+- (void)addInput:(UDVariableMapping *)mapping
+{
+	[_mutableInputs addObject:mapping];
+}
+
+- (void)addOutput:(UDVariableMapping *)mapping
+{
+	[_mutableOutputs addObject:mapping];
+}
+
+@end
+
 @implementation UDSequenceFlow
 
 - (instancetype)initWithElementId:(NSString *)elementId

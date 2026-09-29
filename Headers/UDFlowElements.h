@@ -101,6 +101,56 @@
                              name:(NSString *)name NS_UNAVAILABLE;
 @end
 
+/* Which version of the called process a call activity starts, as
+ * camunda:calledElementBinding. */
+typedef NS_ENUM(NSInteger, UDCalledElementBinding) {
+	/* The latest version deployed when the activity is entered. */
+	UDCalledElementBindingLatest = 0,
+	/* The version deployed together with the calling process. */
+	UDCalledElementBindingDeployment,
+	/* The version camunda:calledElementVersion names. */
+	UDCalledElementBindingVersion
+};
+
+/* One camunda:in or camunda:out of a call activity: a variable copied to
+ * another name, every variable, or the business key. */
+@interface UDVariableMapping : NSObject
+/* nil for all variables or the business key. */
+@property (nonatomic, readonly, copy) NSString *source;
+@property (nonatomic, readonly, copy) NSString *target;
+/* variables="all": every variable, under its own name. */
+@property (nonatomic, readonly, getter=isAllVariables) BOOL allVariables;
+/* businessKey="#{execution.processBusinessKey}": the calling instance's
+ * business key becomes the called one's. Inputs only. */
+@property (nonatomic, readonly, getter=isBusinessKey) BOOL businessKey;
++ (instancetype)mappingFrom:(NSString *)source to:(NSString *)target;
++ (instancetype)allVariables;
++ (instancetype)businessKey;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+/*
+ * Starts an instance of another process and waits for it to end. The
+ * inputs are evaluated against the variables visible at the activity and
+ * become the called instance's; when it ends, the outputs are evaluated
+ * against its variables and set as the process's (where they exist, else
+ * on the process instance).
+ */
+@interface UDCallActivity : UDFlowNode
+/* The called process's key. */
+@property (nonatomic, readonly, copy) NSString *calledElement;
+@property (nonatomic, readonly) UDCalledElementBinding binding;
+/* For UDCalledElementBindingVersion; 0 otherwise. */
+@property (nonatomic, readonly) NSInteger calledElementVersion;
+@property (nonatomic, readonly, copy) NSArray<UDVariableMapping *> *inputs;
+@property (nonatomic, readonly, copy) NSArray<UDVariableMapping *> *outputs;
+- (instancetype)initWithElementId:(NSString *)elementId
+                             name:(NSString *)name
+                    calledElement:(NSString *)calledElement NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithElementId:(NSString *)elementId
+                             name:(NSString *)name NS_UNAVAILABLE;
+@end
+
 @interface UDSequenceFlow : NSObject <UDFlowElement>
 
 @property (nonatomic, readonly, copy) NSString *elementId;

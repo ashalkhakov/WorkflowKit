@@ -14,6 +14,13 @@
 - (void)setTaskPriority:(NSNumber *)priority;
 @end
 
+@interface UDCallActivity (UDBuilderAccess)
+- (void)setBinding:(UDCalledElementBinding)binding;
+- (void)setCalledElementVersion:(NSInteger)version;
+- (void)addInput:(UDVariableMapping *)mapping;
+- (void)addOutput:(UDVariableMapping *)mapping;
+@end
+
 @interface UDProcessDefinition ()
 @property (nonatomic, readwrite) NSInteger version;
 @property (nonatomic, readwrite, copy) NSString *definitionId;
@@ -421,6 +428,43 @@
 	return [self addNode:node];
 }
 
+- (instancetype)addCallActivity:(NSString *)elementId
+                  calledElement:(NSString *)processKey
+{
+	UDCallActivity *node = [[UDCallActivity alloc] initWithElementId:elementId
+	                                                            name:elementId
+	                                                   calledElement:processKey];
+	return [self addNode:node];
+}
+
+- (UDCallActivity *)callActivity:(NSString *)elementId
+{
+	UDFlowNode *node = [self.nodes objectForKey:elementId];
+	return [node isKindOfClass:[UDCallActivity class]] ? (UDCallActivity *)node : nil;
+}
+
+- (instancetype)setBinding:(UDCalledElementBinding)binding
+                   version:(NSInteger)version
+                forElement:(NSString *)elementId
+{
+	UDCallActivity *node = [self callActivity:elementId];
+	[node setBinding:binding];
+	[node setCalledElementVersion:binding == UDCalledElementBindingVersion ? version : 0];
+	return self;
+}
+
+- (instancetype)addInput:(UDVariableMapping *)mapping forElement:(NSString *)elementId
+{
+	[[self callActivity:elementId] addInput:mapping];
+	return self;
+}
+
+- (instancetype)addOutput:(UDVariableMapping *)mapping forElement:(NSString *)elementId
+{
+	[[self callActivity:elementId] addOutput:mapping];
+	return self;
+}
+
 - (instancetype)addBoundaryError:(NSString *)elementId
                           onTask:(NSString *)taskId
                         errorRef:(NSString *)errorRef
@@ -581,6 +625,33 @@
 	return NO;
 }
 
+- (BOOL)validateCall:(UDCallActivity *)call error:(NSError **)error
+{
+	if ([call.calledElement length] == 0) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: a call activity needs the key of the process it calls", call.elementId]];
+	}
+	if (call.binding == UDCalledElementBindingVersion && call.calledElementVersion < 1) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: the version binding needs a version of 1 or more", call.elementId]];
+	}
+	NSArray *groups = @[ call.inputs, call.outputs ];
+	for (NSUInteger i = 0; i < [groups count]; i++) {
+		for (UDVariableMapping *mapping in [groups objectAtIndex:i]) {
+			if (mapping.isBusinessKey && i == 1) {
+				return [self fail:error message:[NSString stringWithFormat:
+					@"%@: the business key can only be passed in", call.elementId]];
+			}
+			if (!mapping.isBusinessKey && !mapping.isAllVariables
+			    && ([mapping.source length] == 0 || [mapping.target length] == 0)) {
+				return [self fail:error message:[NSString stringWithFormat:
+					@"%@: a variable mapping needs a source and a target", call.elementId]];
+			}
+		}
+	}
+	return YES;
+}
+
 - (BOOL)validate:(NSError **)error
 {
 	NSUInteger starts = 0;
@@ -632,6 +703,11 @@
 					node.elementId]];
 		}
 
+		if ([node isKindOfClass:[UDCallActivity class]]
+		    && ![self validateCall:(UDCallActivity *)node error:error]) {
+			return NO;
+		}
+
 		if (node.retryTimeCycle != nil) {
 			NSInteger attempts = 0;
 			NSArray *delays = nil;
@@ -646,10 +722,12 @@
 		if (isBoundary) {
 			UDEvent *boundary = (UDEvent *)node;
 			UDFlowNode *host = [self.nodes objectForKey:boundary.attachedToId];
-			if (![host isKindOfClass:[UDTask class]] && ![host isKindOfClass:[UDSubProcess class]]) {
+			if (![host isKindOfClass:[UDTask class]] && ![host isKindOfClass:[UDSubProcess class]]
+			    && ![host isKindOfClass:[UDCallActivity class]]) {
 				return [self fail:error
 				          message:[NSString stringWithFormat:
-						@"boundary %@ needs a task or subprocess host", node.elementId]];
+						@"boundary %@ needs a task, subprocess or call activity host",
+						node.elementId]];
 			}
 			if ([node.outgoingFlowIds count] == 0) {
 				return [self fail:error

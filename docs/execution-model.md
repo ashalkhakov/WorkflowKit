@@ -76,6 +76,18 @@ form a tree whose root is the process instance itself.
   activity, nested by BPMN scope. They are what the API reports, and what
   history records. Their relation to executions is many-to-one.
 
+A **call activity** starts another process instance, with a tree of its
+own. Its root points at the execution at the call activity (the super
+execution), which points back at it; both are Core Data relationships, and
+removing the calling execution removes the called instance. The called
+instance starts in the calling command and runs to its own wait states
+there. When it ends, the call activity's outputs are evaluated against its
+variables and the calling execution leaves the activity, in the same
+command. A BPMN error nobody in the called instance catches continues at
+the call activity, as if thrown there. Commands on the called instance may
+touch the caller's executions; optimistic locking turns a race with a
+command on the caller into a conflict and a retry.
+
 Parallel joins wait by making each arriving execution inactive at the join.
 The join fires when every incoming flow has an inactive execution in the same
 scope. The inclusive join fires when no execution in the scope can still
@@ -248,7 +260,7 @@ relationships, so a command faults in only the executions it touches.
 | Group | Entities |
 |---|---|
 | Repository | `UDDeployment`, `UDResource` (BPMN bytes), `UDDefinitionRecord` (key, version, deployment, resource, suspended) |
-| Runtime | `UDExecution` (parent/children, process instance, activity id, activity instance id, active, concurrent, scope, business key, suspended), `UDVariable`, `UDTask`, `UDIdentityLink`, `UDEventSubscription`, `UDJob`, `UDExternalTask`, `UDIncident` |
+| Runtime | `UDExecution` (parent/children, process instance, activity id, activity instance id, active, concurrent, scope, business key, suspended, super execution and called instance), `UDVariable`, `UDTask`, `UDIdentityLink`, `UDEventSubscription`, `UDJob`, `UDExternalTask`, `UDIncident` |
 | History | `UDHistoricProcessInstance`, `UDHistoricActivityInstance`, `UDHistoricTaskInstance`, `UDHistoricVariable`, `UDHistoricVariableUpdate`, `UDHistoricIncident`, `UDHistoricJobLog` |
 
 ## BPMN extensions and expressions
@@ -310,6 +322,12 @@ predates FEEL; Camunda 8 moved to FEEL.
   variables to every receiver.
 - **Priorities are whole numbers.** `camunda:taskPriority` as an
   expression is refused on deployment.
+- **Call activities pass variables only by name.** `camunda:in` and
+  `camunda:out` take `source`/`target`, `variables="all"`, and the business
+  key; `sourceExpression`, `local="true"`, mapping delegates, the
+  `versionTag` binding and expressions in `calledElement` are refused on
+  deployment. An error uncaught all the way up ends the throwing path in the
+  called instance, as for any uncaught error.
 - **History cleanup** runs on demand (`cleanUpHistory:`) or every
   `historyCleanupInterval` seconds, not in a daily batch window, and only
   by end time. A definition without `camunda:historyTimeToLive` keeps its
@@ -358,4 +376,7 @@ macOS:
 
 The token engine is removed at step 2. After that come standard BPMN
 reading (phase 2) and the remaining constructs (phase 5), each one following
-the reference's documented behaviour.
+the reference's documented behaviour. Phase 5 so far: signal events and
+terminate end events; call activities (bindings, `camunda:in`/`out`,
+business key, errors out of the called instance, cancellation with the
+caller). Still to come: fuller FEEL, multi-instance, event subprocesses.

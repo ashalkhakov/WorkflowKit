@@ -56,6 +56,10 @@
             engine:(UDProcessEngine *)engine
            seconds:(NSTimeInterval)seconds;
 
+- (BOOL)waitForActive:(NSString *)activityId
+                   in:(NSString *)processInstanceId
+               engine:(UDProcessEngine *)engine;
+
 - (NSArray *)rows:(NSString *)entity engine:(UDProcessEngine *)engine;
 
 - (UDProcessDefinition *)approvalDefinition;

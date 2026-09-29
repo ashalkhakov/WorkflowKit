@@ -10,6 +10,7 @@ UDWorkflowTests_OBJC_FILES = \
 	UDGatewayTests.m \
 	UDEventTests.m \
 	UDSubprocessTests.m \
+	UDCallActivityTests.m \
 	UDExternalTaskTests.m \
 	UDJobTests.m \
 	UDHistoryTests.m \

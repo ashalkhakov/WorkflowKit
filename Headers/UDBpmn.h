@@ -31,8 +31,8 @@ extern NSString * const UDFeelLanguage;
 
 /*
  * Reads BPMN 2.0 XML into definitions. Elements the engine does not run --
- * call activities, multi-instance, signal events and the rest of the
- * subset's out-of-scope list -- fail the read with an error naming them,
+ * multi-instance, event subprocesses and the rest of the subset's
+ * out-of-scope list -- fail the read with an error naming them,
  * rather than being dropped. Documentation, extension elements, lanes,
  * annotations and data objects are ignored.
  */

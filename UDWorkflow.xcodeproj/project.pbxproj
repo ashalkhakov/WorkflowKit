@@ -36,6 +36,7 @@
 		857C15DE3E9EF73232D6567D /* UDServices.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = F340A4B9288BBB43AE054359 /* UDServices.m */; };
 		85A835DEB6E250FC7AF6D707 /* UDBpmnTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 055592E76BDBCDDF15D659E9 /* UDBpmnTests.m */; };
 		86EF380CD56EC9764EFC3650 /* UDStore.h in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 25C0B60A9F56FC7C7D839CB9 /* UDStore.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		8C219AE18F7BA442EB76ECEA /* UDCallActivityTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 0C25E73827AB6BED92B7F11A /* UDCallActivityTests.m */; };
 		8EC6851BD66968738E44691E /* UDHandlers.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 805376A20C2352799AD568B9 /* UDHandlers.m */; };
 		8F46BD15E33EE6C55EEAD58B /* UDCondition.h in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 5F8E76CC08B9C71E755FC28C /* UDCondition.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		9A3839141B0CA522EA4DE219 /* Foundation.framework in UDWorkflow */ = { isa = PBXBuildFile; fileRef = B29454D488C4F49E273C15A0 /* Foundation.framework */; };
@@ -73,6 +74,7 @@
 /* Begin PBXFileReference section */
 		055592E76BDBCDDF15D659E9 /* UDBpmnTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDBpmnTests.m; sourceTree = "<group>"; };
 		055986732A4AE086A3AD4692 /* UDHistoryTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDHistoryTests.m; sourceTree = "<group>"; };
+		0C25E73827AB6BED92B7F11A /* UDCallActivityTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDCallActivityTests.m; sourceTree = "<group>"; };
 		0CD064134369F3D63646BA7C /* UDHandlers.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UDHandlers.h; sourceTree = "<group>"; };
 		0D9C115F376FBC31493752AA /* UDWorkflow.framework */ = { isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = UDWorkflow.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D9E881A6CBBB60E5366EA0B /* GNUmakefile */ = { isa = PBXFileReference; lastKnownFileType = text; path = GNUmakefile; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 				CC06C30792DFD1C139623C04 /* UDGatewayTests.m */,
 				37D945C1A93E0B791EE8C400 /* UDEventTests.m */,
 				40923AAB7421C89526C49E0C /* UDSubprocessTests.m */,
+				0C25E73827AB6BED92B7F11A /* UDCallActivityTests.m */,
 				775ABB6AA38FF2553127CC96 /* UDExternalTaskTests.m */,
 				8CD1A266AE9E24F04EDA40FC /* UDJobTests.m */,
 				055986732A4AE086A3AD4692 /* UDHistoryTests.m */,
@@ -391,6 +394,7 @@
 				5C692F27581691B5AF233BFC /* UDGatewayTests.m in UDWorkflowTests */,
 				CECF821B605A16111288498A /* UDEventTests.m in UDWorkflowTests */,
 				64C05A7487EC91DA0B4E8075 /* UDSubprocessTests.m in UDWorkflowTests */,
+				8C219AE18F7BA442EB76ECEA /* UDCallActivityTests.m in UDWorkflowTests */,
 				52278BDD2A076FBC0F7B4E73 /* UDExternalTaskTests.m in UDWorkflowTests */,
 				61BA8CC333E98077D420B245 /* UDJobTests.m in UDWorkflowTests */,
 				69CAABF6E3EBCE66F4AEAB5C /* UDHistoryTests.m in UDWorkflowTests */,

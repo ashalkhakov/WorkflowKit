@@ -52,7 +52,15 @@
 	[[b connect:@"milestone" to:@"race"] connect:@"manual" to:@"race"];
 	[[b connect:@"race" to:@"paid"] connect:@"race" to:@"timeout"];
 	[[b connect:@"paid" to:@"notify"] connect:@"notify" to:@"done"];
-	[b connect:@"timeout" to:@"late"];
+	[b addCallActivity:@"escalate" calledElement:@"escalation"];
+	[b setBinding:UDCalledElementBindingVersion version:2 forElement:@"escalate"];
+	[[[b addInput:[UDVariableMapping businessKey] forElement:@"escalate"]
+		addInput:[UDVariableMapping allVariables] forElement:@"escalate"]
+		addInput:[UDVariableMapping mappingFrom:@"amount" to:@"sum"] forElement:@"escalate"];
+	[b addOutput:[UDVariableMapping mappingFrom:@"verdict" to:@"escalation"] forElement:@"escalate"];
+	[b addBoundaryTimer:@"stale" onTask:@"escalate" duration:3600 interrupting:YES];
+	[[b connect:@"timeout" to:@"escalate"] connect:@"escalate" to:@"late"];
+	[b connect:@"stale" to:@"late"];
 	[[b connect:@"race" to:@"recalled"] connect:@"recalled" to:@"aborted"];
 	[[b connect:@"onStop" to:@"announce"] connect:@"announce" to:@"announced"];
 	[[[b connect:@"onBad" to:@"badCredit"] connect:@"onAny" to:@"anyError"]
@@ -86,6 +94,9 @@
 	XCTAssertTrue([xml rangeOfString:@"camunda:topic=\"credit.check\""].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:failedJobRetryTimeCycle>R5/PT5M</camunda:failedJobRetryTimeCycle>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmndi:BPMNShape"].location != NSNotFound);
+	XCTAssertTrue([xml rangeOfString:@"calledElement=\"escalation\" camunda:calledElementBinding=\"version\" camunda:calledElementVersion=\"2\""].location != NSNotFound, @"%@", xml);
+	XCTAssertTrue([xml rangeOfString:@"<camunda:in businessKey=\"#{execution.processBusinessKey}\"/>"].location != NSNotFound);
+	XCTAssertTrue([xml rangeOfString:@"<camunda:out source=\"verdict\" target=\"escalation\"/>"].location != NSNotFound);
 	UDProcessDefinition *again = [UDBpmnReader definitionFromXMLString:xml error:&error];
 	XCTAssertNotNil(again, @"%@\n%@", error, xml);
 	[self assertDefinition:definition matches:again];

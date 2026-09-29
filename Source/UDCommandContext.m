@@ -49,6 +49,9 @@ UDActivityType(UDFlowNode *node)
 		case UDGatewayKindEventBased: return @"eventBasedGateway";
 		}
 	}
+	if ([node isKindOfClass:[UDCallActivity class]]) {
+		return @"callActivity";
+	}
 	return [node isKindOfClass:[UDSubProcess class]] ? @"subProcess" : @"activity";
 }
 
@@ -306,6 +309,16 @@ UDGone(NSManagedObject *object)
                                   variables:(NSDictionary *)variables
                                  startEvent:(UDEvent *)startEvent
 {
+	return [self startProcessInstance:definition businessKey:businessKey variables:variables
+	                       startEvent:startEvent superExecution:nil];
+}
+
+- (UDExecutionEntity *)startProcessInstance:(UDProcessDefinition *)definition
+                                businessKey:(NSString *)businessKey
+                                  variables:(NSDictionary *)variables
+                                 startEvent:(UDEvent *)startEvent
+                             superExecution:(UDExecutionEntity *)superExecution
+{
 	UDEvent *start = startEvent ?: [definition startEvent];
 	if (start == nil) {
 		[self fail:UDCommandError(UDWorkflowErrorInvalidDefinition,
@@ -320,6 +333,8 @@ UDGone(NSManagedObject *object)
 	root.businessKey = businessKey;
 	root.isScope = YES;
 	root.isActive = YES;
+	root.superExecution = superExecution;
+	root.superProcessInstanceId = superExecution.processInstanceId;
 
 	UDHistoricProcessInstanceEntity *history =
 		[self records:UDHistoryLevelActivity] ? [self insert:UDHistoricInstanceName] : nil;
@@ -329,6 +344,7 @@ UDGone(NSManagedObject *object)
 	history.definitionKey = definition.processId;
 	history.startTime = [NSDate date];
 	history.state = UDHistoricStateActive;
+	history.superProcessInstanceId = root.superProcessInstanceId;
 
 	if (![self setVariables:variables from:root]) {
 		return nil;
@@ -346,7 +362,7 @@ UDGone(NSManagedObject *object)
 	if ([node isKindOfClass:[UDSubProcess class]]) {
 		return YES;
 	}
-	return [node isKindOfClass:[UDTask class]]
+	return ([node isKindOfClass:[UDTask class]] || [node isKindOfClass:[UDCallActivity class]])
 		&& [[scope boundaryEventsAttachedTo:node.elementId] count] > 0;
 }
 
@@ -421,6 +437,8 @@ UDGone(NSManagedObject *object)
 		[self executeTask:(UDTask *)node execution:execution];
 	} else if ([node isKindOfClass:[UDGateway class]]) {
 		[self executeGateway:(UDGateway *)node scope:scope execution:execution];
+	} else if ([node isKindOfClass:[UDCallActivity class]]) {
+		[self executeCall:(UDCallActivity *)node execution:execution];
 	} else {
 		[self fail:UDCommandError(UDWorkflowErrorUnknownElement,
 			[NSString stringWithFormat:@"%@ cannot be executed", node.elementId])];
@@ -757,26 +775,54 @@ UDGone(NSManagedObject *object)
 {
 	/* The error travels outward through the scopes around the activity --
 	 * the activity's own, if it has boundary events, then each enclosing
-	 * subprocess -- and the nearest boundary that catches it wins. */
+	 * subprocess, then, out of a called instance, the call activity and the
+	 * scopes around it -- and the nearest boundary that catches it wins. */
 	UDProcessDefinition *definition = [self definitionForExecution:execution];
-	for (UDExecutionEntity *scopeExecution = execution; scopeExecution != nil;
-	     scopeExecution = scopeExecution.parent) {
-		if (!scopeExecution.isScope || scopeExecution.parent == nil) {
+	UDExecutionEntity *scopeExecution = execution;
+	while (scopeExecution != nil) {
+		if (scopeExecution.parent == nil) {
+			UDExecutionEntity *caller = scopeExecution.superExecution;
+			if (caller == nil) {
+				break;
+			}
+			definition = [self definitionForExecution:caller];
+			UDFlowNode *call = [definition flowNodeWithId:caller.activityId];
+			UDEvent *catcher = [call isKindOfClass:[UDCallActivity class]]
+				? [self errorBoundaryOn:call
+				                  scope:[definition scopeOfFlowNode:call.elementId]
+				                   code:errorCode]
+				: nil;
+			if (catcher != nil) {
+				/* A call activity with boundary events is a scope: the
+				 * caller is its scope execution. The outputs are passed
+				 * back as on a normal end. */
+				NSDictionary *outputs = [self outputsOf:(UDCallActivity *)call
+				                                   from:[self visibleVariables:scopeExecution]];
+				if ([self setVariables:outputs from:caller]) {
+					[self boundary:catcher firedOn:caller subscription:nil];
+				}
+				return;
+			}
+			scopeExecution = caller;
 			continue;
 		}
-		NSString *ownerId = scopeExecution.parent.activityId;
-		UDFlowNode *owner = [definition flowNodeWithId:ownerId];
-		if (![owner isKindOfClass:[UDTask class]] && ![owner isKindOfClass:[UDSubProcess class]]) {
-			continue;
+		if (scopeExecution.isScope) {
+			NSString *ownerId = scopeExecution.parent.activityId;
+			UDFlowNode *owner = [definition flowNodeWithId:ownerId];
+			UDEvent *catcher = nil;
+			if ([owner isKindOfClass:[UDTask class]] || [owner isKindOfClass:[UDSubProcess class]]) {
+				catcher = [self errorBoundaryOn:owner
+				                          scope:[definition scopeOfFlowNode:ownerId]
+				                           code:errorCode];
+			}
+			if (catcher != nil) {
+				[self boundary:catcher firedOn:scopeExecution subscription:nil];
+				return;
+			}
 		}
-		UDEvent *catcher = [self errorBoundaryOn:owner
-		                                   scope:[definition scopeOfFlowNode:ownerId]
-		                                    code:errorCode];
-		if (catcher != nil) {
-			[self boundary:catcher firedOn:scopeExecution subscription:nil];
-			return;
-		}
+		scopeExecution = scopeExecution.parent;
 	}
+	definition = [self definitionForExecution:execution];
 	/* Nothing catches it: the path ends, as the reference does by default. */
 	UDFlowNode *node = [definition flowNodeWithId:execution.activityId];
 	if (node != nil && [self isActivityScope:execution node:node]) {
@@ -787,6 +833,111 @@ UDGone(NSManagedObject *object)
 	} else {
 		[self activityEnded:execution.activityInstanceId canceled:YES];
 		[self endPath:execution];
+	}
+}
+
+#pragma mark - Call activities
+
+/* The version of the called process the activity's binding picks. */
+- (UDProcessDefinition *)calledDefinition:(UDCallActivity *)call
+                                execution:(UDExecutionEntity *)execution
+{
+	UDRepositoryService *repository = self.engine.repositoryService;
+	NSString *key = call.calledElement;
+	NSError *error = nil;
+	UDProcessDefinition *called = nil;
+	switch (call.binding) {
+	case UDCalledElementBindingLatest:
+		called = [repository latestDefinitionForKey:key error:&error];
+		break;
+	case UDCalledElementBindingVersion:
+		called = [repository definitionForKey:key version:call.calledElementVersion error:&error];
+		break;
+	case UDCalledElementBindingDeployment: {
+		UDProcessDefinition *caller = [self definitionForExecution:execution];
+		UDDeployment *deployment = [repository deploymentWithId:caller.deploymentId error:&error];
+		for (UDProcessDefinition *candidate in deployment.definitions) {
+			if ([candidate.processId isEqualToString:key]) {
+				called = candidate;
+			}
+		}
+		if (called == nil && deployment != nil) {
+			error = UDCommandError(UDWorkflowErrorInvalidDefinition,
+				[NSString stringWithFormat:@"%@ is not in the deployment of %@",
+					key, caller.processId]);
+		}
+		break;
+	}
+	}
+	if (called == nil) {
+		[self fail:UDCommandError(UDWorkflowErrorInvalidDefinition,
+			[NSString stringWithFormat:@"call activity %@: %@", call.elementId,
+				[error localizedDescription] ?: @"no process to call"])];
+	}
+	return called;
+}
+
+/* The mappings applied to the variables on one side of the call. */
+- (NSDictionary *)map:(NSArray<UDVariableMapping *> *)mappings from:(NSDictionary *)variables
+{
+	NSMutableDictionary *result = [NSMutableDictionary dictionary];
+	for (UDVariableMapping *mapping in mappings) {
+		if (mapping.isAllVariables) {
+			[result addEntriesFromDictionary:variables];
+		} else if (!mapping.isBusinessKey) {
+			/* A source that does not exist passes null, as the reference
+			 * does. */
+			[result setObject:[variables objectForKey:mapping.source] ?: [NSNull null]
+			           forKey:mapping.target];
+		}
+	}
+	return result;
+}
+
+- (NSDictionary *)outputsOf:(UDCallActivity *)call from:(NSDictionary *)calledVariables
+{
+	return [self map:call.outputs from:calledVariables];
+}
+
+/* The activity starts an instance of the called process, in this command,
+ * and waits for it. */
+- (void)executeCall:(UDCallActivity *)call execution:(UDExecutionEntity *)execution
+{
+	UDProcessDefinition *called = [self calledDefinition:call execution:execution];
+	if (called == nil) {
+		return;
+	}
+	NSString *businessKey = nil;
+	for (UDVariableMapping *mapping in call.inputs) {
+		if (mapping.isBusinessKey) {
+			businessKey = [execution processInstance].businessKey;
+		}
+	}
+	UDExecutionEntity *child =
+		[self startProcessInstance:called
+		               businessKey:businessKey
+		                 variables:[self map:call.inputs from:[self visibleVariables:execution]]
+		                startEvent:nil
+		            superExecution:execution];
+	UDHistoricActivityInstanceEntity *row =
+		[_openActivities objectForKey:execution.activityInstanceId ?: @""];
+	row.calledProcessInstanceId = child.processInstanceId;
+}
+
+/* The called instance has ended: its outputs go to the calling process,
+ * and the call activity is left. */
+- (void)returnFrom:(NSDictionary *)calledVariables to:(UDExecutionEntity *)caller
+{
+	UDFlowNode *node = [self node:caller.activityId of:caller];
+	if (![node isKindOfClass:[UDCallActivity class]]) {
+		[self fail:UDCommandError(UDWorkflowErrorInvalidState,
+			[NSString stringWithFormat:@"the calling execution is at %@, not a call activity",
+				caller.activityId])];
+		return;
+	}
+	if ([self setVariables:[self outputsOf:(UDCallActivity *)node from:calledVariables]
+	                  from:caller]) {
+		[self completeActivity:caller];
 	}
 }
 
@@ -1055,6 +1206,12 @@ UDGone(NSManagedObject *object)
 	for (UDExternalTaskEntity *externalTask in [path.externalTasks allObjects]) {
 		externalTask.execution = level;
 	}
+	/* Before the path goes: removing it would take the called instance
+	 * with it. */
+	UDExecutionEntity *called = path.subProcessInstance;
+	if (called != nil) {
+		called.superExecution = level;
+	}
 	[self remove:path];
 }
 
@@ -1087,7 +1244,12 @@ UDGone(NSManagedObject *object)
 	UDProcessInstance *value = [UDProcessInstance ud_instanceWithExecution:root
 		definition:[self definitionForExecution:root]
 		ended:YES];
+	UDExecutionEntity *caller = root.superExecution;
+	NSDictionary *calledVariables = caller != nil ? [self visibleVariables:root] : nil;
 	[self remove:root];
+	if (caller != nil) {
+		[self returnFrom:calledVariables to:caller];
+	}
 	UDProcessEngine *engine = self.engine;
 	[self afterCommit:^{
 		[engine ud_processInstanceEnded:value];
@@ -1517,6 +1679,10 @@ UDGone(NSManagedObject *object)
 - (void)cancelSubtree:(UDExecutionEntity *)root
 {
 	NSMutableArray *pending = [NSMutableArray arrayWithObject:root];
+	/* The executions of instances that call activities in the subtree
+	 * started. The caller removes only the subtree; these go explicitly, so
+	 * that nothing still scheduled for them runs. */
+	NSMutableSet *called = [NSMutableSet set];
 	while ([pending count] > 0) {
 		UDExecutionEntity *execution = [pending lastObject];
 		[pending removeLastObject];
@@ -1539,12 +1705,41 @@ UDGone(NSManagedObject *object)
 				[self historyJob:job state:UDJobLogStateDeleted];
 			}
 		}
+		BOOL inCalled = [called containsObject:execution];
 		for (UDExecutionEntity *child in execution.children) {
 			if (![child isDeleted]) {
 				[pending addObject:child];
+				if (inCalled) {
+					[called addObject:child];
+				}
 			}
 		}
+		UDExecutionEntity *calledInstance = execution.subProcessInstance;
+		if (calledInstance != nil && ![calledInstance isDeleted]) {
+			[self processInstanceTerminated:calledInstance];
+			[pending addObject:calledInstance];
+			[called addObject:calledInstance];
+		}
 	}
+	for (UDExecutionEntity *execution in called) {
+		[self remove:execution];
+	}
+}
+
+/* A called instance canceled with its call activity. */
+- (void)processInstanceTerminated:(UDExecutionEntity *)instance
+{
+	if (![self records:UDHistoryLevelActivity]) {
+		return;
+	}
+	UDHistoricProcessInstanceEntity *history = [[self fetch:UDHistoricInstanceName
+	                                              predicate:[NSPredicate predicateWithFormat:
+	                                                  @"processInstanceId == %@",
+	                                                  instance.processInstanceId]
+	                                                   sort:nil
+	                                                  limit:1] lastObject];
+	history.endTime = [NSDate date];
+	history.state = UDHistoricStateInternallyTerminated;
 }
 
 #pragma mark - Variables

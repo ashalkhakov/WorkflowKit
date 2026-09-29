@@ -24,6 +24,7 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`, for workers using `externalTaskService` (fetch and lock by topic, complete, failure with retries and timeout, BPMN error). The engine's in-process worker is one: it hands tasks to the service handler with the activity's retry cycle (default three attempts). No retries left raises an incident. |
 | Script task | `scriptTask` | Same handler path as service, action key in `ud:action`. No script text. |
 | Embedded subprocess | `subProcess` | A scope execution of its own; it sees its parents' variables, and new variables land on the process instance. |
+| Call activity | `callActivity` `calledElement` | Starts an instance of the process with that key, in the same transaction, and waits for it to end. `camunda:calledElementBinding`: `latest` (default), `deployment`, or `version` with `camunda:calledElementVersion`. Variables pass only through `camunda:in` / `camunda:out`: `source` and `target`, or `variables="all"`; `camunda:in businessKey="#{execution.processBusinessKey}"` passes the business key. A missing source passes null. Outputs are set where the variable exists, else on the process instance. |
 
 ### Transactions
 
@@ -54,14 +55,14 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Message catch | `intermediateCatchEvent` + message | Wait state with an event subscription. |
 | Timer catch | `intermediateCatchEvent` + timer | Wait state with a timer job at an absolute due date. |
 | Message throw / message end | throw / end + message | `UDProcessEngineDelegate` `didThrowMessage`, after commit. |
-| Boundary message | `boundaryEvent` `attachedToRef` | On a task or subprocess. Interrupting, or non-interrupting and repeatable. |
-| Boundary timer | `boundaryEvent` + timer | On a task or subprocess, armed when it is entered; fires once. |
+| Boundary message | `boundaryEvent` `attachedToRef` | On a task, subprocess or call activity. Interrupting, or non-interrupting and repeatable. |
+| Boundary timer | `boundaryEvent` + timer | On a task, subprocess or call activity, armed when it is entered; fires once. |
 | Signal start | `startEvent` + `signalEventDefinition` | A start subscription per deployed latest version; a signal starts an instance of every definition subscribed. |
 | Signal catch | `intermediateCatchEvent` + signal | Wait state with a signal subscription; also behind an event-based gateway. |
 | Signal throw / signal end | throw / end + signal | Broadcast in the throwing transaction to every waiting catcher, in every instance, and every signal start. |
-| Boundary signal | `boundaryEvent` + signal | On a task or subprocess; interrupting, or non-interrupting and repeatable. |
+| Boundary signal | `boundaryEvent` + signal | On a task, subprocess or call activity; interrupting, or non-interrupting and repeatable. |
 | Terminate end | `endEvent` + `terminateEventDefinition` | Ends its scope -- the instance, or the subprocess it is in -- with every path in it. |
-| Boundary error | `boundaryEvent` + `errorEventDefinition` | Catches a BPMN error with its `errorCode`, or any without `errorRef`, on the task or on any subprocess around it, nearest first. An uncaught error ends its path. |
+| Boundary error | `boundaryEvent` + `errorEventDefinition` | Catches a BPMN error with its `errorCode`, or any without `errorRef`, on the task or on any subprocess around it, nearest first, and then, out of a called instance, on the call activity and the scopes around it; the call activity's outputs are passed back first. An uncaught error ends its path. |
 
 ## 2. Event rules
 
@@ -70,6 +71,8 @@ Timers are jobs with an absolute due date; the job executor fires them, so a res
 Messages are correlated through `runtimeService`: by name, narrowed by business key and by process variables that must be equal, to exactly one recipient (`correlateMessage:`) or to all (`correlateMessageToAll:`). Payload variables are set on the receiving instance.
 
 **Interrupting boundary:** the host activity's scope execution is removed with everything in it; the path continues from the boundary event.
+
+Interrupting a call activity, or terminating the scope it is in, cancels the instance it called: its history ends as `INTERNALLY_TERMINATED`.
 
 **Non-interrupting:** the activity goes on; a new concurrent path leaves the boundary. A message boundary stays armed for the next message.
 
@@ -95,11 +98,12 @@ The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` syntax 
 |---|---|
 | Collaboration | pool, lane, messageFlow, conversation, choreography |
 | Gateways | complex |
-| Activities | event subprocess, call activity, transaction, ad-hoc, multi-instance, loop, compensation |
+| Activities | event subprocess, transaction, ad-hoc, multi-instance, loop, compensation |
 | Tasks | manual, business rule, send, receive, receive-task as event stand-in |
 | Events | escalation, cancel, compensate, link, conditional, multiple, parallel multiple |
 | Event use | non-interrupting start in event subprocess |
 | Data | data object, data store, data association, properties as BPMN itemAware |
+| Call activity extras | expressions in `calledElement`, `versionTag` binding, `sourceExpression`, `local="true"`, variable mapping delegates, tenants, CMMN cases |
 | Execution extras | full BPMN DI edge waypoints |
 
 ## 5. XML shape
@@ -126,7 +130,7 @@ Deploying stores the XML, and the engine runs the definition read back from it, 
 
 | Piece | Rule |
 |---|---|
-| Execution | A path through an instance; executions form a tree under the process instance. |
+| Execution | A path through an instance; executions form a tree under the process instance. A called instance's root points back at the execution at its call activity. |
 | Command | One call: its own Core Data context, run until every path is at a wait state or has ended, one save. |
 | Concurrency | A lost race fails with `UDWorkflowErrorConflict` and changes nothing; the engine retries its own commands. |
 | Worker and jobs | The in-process worker and the job executor run one instance's exclusive work on one serial queue at a time. A job is acquired, run and, on failure, recorded in three transactions. |
@@ -136,6 +140,6 @@ Deploying stores the XML, and the engine runs the definition read back from it, 
 
 Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/Height` and exported as BPMN DI.
 
-Tests: `Tests/UDWorkflowTests.m` is an XCTest case (`#import <XCTest/XCTest.h>`). On GNUstep, `make test` builds the library and runs the bundle under tools-xctest; see `CLAUDE.md` for the patched stack it is built against.
+Tests: `Tests/` holds one XCTest case per area (gateways, events, subprocesses, call activities, external tasks, jobs, history, deployment, durability, BPMN), on a shared `UDWorkflowTestCase`. On GNUstep, `make test` builds the library and runs the bundle under tools-xctest; see `CLAUDE.md` for the patched stack it is built against.
 
-V3 candidates: call activity, error start in event subprocess, signal events, multi-instance, full BPMN DI edge waypoints.
+V3 candidates: error start in event subprocess, multi-instance, full BPMN DI edge waypoints.

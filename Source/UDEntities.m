@@ -11,12 +11,14 @@ NSString * const UDIncidentTypeFailedJobName = @"failedJob";
 NSString * const UDIncidentTypeFailedExternalTaskName = @"failedExternalTask";
 NSString * const UDHistoricStateActive = @"ACTIVE";
 NSString * const UDHistoricStateCompleted = @"COMPLETED";
+NSString * const UDHistoricStateInternallyTerminated = @"INTERNALLY_TERMINATED";
 
 @implementation UDExecutionEntity
 @dynamic executionId, processInstanceId, definitionId, businessKey;
 @dynamic activityId, activityInstanceId, isActive, isConcurrent, isScope;
 @dynamic suspended, lockRevision, parent, children, variables, tasks;
 @dynamic eventSubscriptions, jobs, externalTasks, incidents;
+@dynamic superProcessInstanceId, superExecution, subProcessInstance;
 
 - (BOOL)isProcessInstance
 {
@@ -196,7 +198,7 @@ UDIsIntegerNumber(NSNumber *number)
 
 @implementation UDHistoricProcessInstanceEntity
 @dynamic processInstanceId, businessKey, definitionId, definitionKey;
-@dynamic startTime, endTime, state;
+@dynamic startTime, endTime, state, superProcessInstanceId;
 @end
 
 @implementation UDHistoricVariableEntity
@@ -206,7 +208,7 @@ UDIsIntegerNumber(NSNumber *number)
 
 @implementation UDHistoricActivityInstanceEntity
 @dynamic activityInstanceId, activityId, activityName, activityType;
-@dynamic processInstanceId, startTime, endTime, canceled, sequence;
+@dynamic processInstanceId, startTime, endTime, canceled, sequence, calledProcessInstanceId;
 @end
 
 @implementation UDHistoricTaskInstanceEntity

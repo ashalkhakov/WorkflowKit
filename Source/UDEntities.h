@@ -20,6 +20,12 @@
 @property (nonatomic, copy) NSString *businessKey;
 @property (nonatomic, copy) NSString *activityId;
 @property (nonatomic, copy) NSString *activityInstanceId;
+/* On a process instance started by a call activity: the calling
+ * instance, and the execution at the call activity. */
+@property (nonatomic, copy) NSString *superProcessInstanceId;
+@property (nonatomic, strong) UDExecutionEntity *superExecution;
+/* On the execution at a call activity: the instance it called. */
+@property (nonatomic, strong) UDExecutionEntity *subProcessInstance;
 @property (nonatomic) BOOL isActive;
 @property (nonatomic) BOOL isConcurrent;
 @property (nonatomic) BOOL isScope;
@@ -157,6 +163,7 @@ extern NSString * const UDEventTypeSignal;
 
 extern NSString * const UDHistoricStateActive;
 extern NSString * const UDHistoricStateCompleted;
+extern NSString * const UDHistoricStateInternallyTerminated;
 
 @interface UDHistoricProcessInstanceEntity : NSManagedObject
 @property (nonatomic, copy) NSString *processInstanceId;
@@ -166,6 +173,7 @@ extern NSString * const UDHistoricStateCompleted;
 @property (nonatomic, copy) NSDate *startTime;
 @property (nonatomic, copy) NSDate *endTime;
 @property (nonatomic, copy) NSString *state;
+@property (nonatomic, copy) NSString *superProcessInstanceId;
 @end
 
 @interface UDHistoricVariableEntity : NSManagedObject
@@ -186,6 +194,8 @@ extern NSString * const UDHistoricStateCompleted;
 @property (nonatomic, copy) NSString *activityId;
 @property (nonatomic, copy) NSString *activityName;
 @property (nonatomic, copy) NSString *activityType;
+/* For a call activity: the instance it started. */
+@property (nonatomic, copy) NSString *calledProcessInstanceId;
 @property (nonatomic, copy) NSString *processInstanceId;
 @property (nonatomic, copy) NSDate *startTime;
 @property (nonatomic, copy) NSDate *endTime;
