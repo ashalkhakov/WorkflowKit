@@ -8,6 +8,7 @@
 #import "UDRuntimeState.h"
 #import "UDHandlers.h"
 #import "UDStore.h"
+#import "UDRepositoryService.h"
 #import "UDEngine.h"
 #import "UDBpmn.h"
 

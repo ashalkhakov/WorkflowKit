@@ -1,7 +1,7 @@
 #import "UDEngine.h"
 #import "UDFlowElements.h"
 #import "UDCondition.h"
-#import "UDBpmn.h"
+#import "UDRepositoryService.h"
 #import <dispatch/dispatch.h>
 #include <time.h>
 
@@ -112,7 +112,6 @@ typedef BOOL (^UDUnitInput)(UDProcessInstance *root, NSError **error);
 	dispatch_source_t _scheduler;
 	NSDate *_backoffUntil;
 	BOOL _closed;
-	NSMutableDictionary *_definitions;
 	NSCondition *_settle;
 	NSMutableDictionary *_busy;
 }
@@ -124,7 +123,7 @@ typedef BOOL (^UDUnitInput)(UDProcessInstance *root, NSError **error);
 		return nil;
 	}
 	_store = store;
-	_definitions = [NSMutableDictionary dictionary];
+	_repositoryService = [[UDRepositoryService alloc] initWithStore:store];
 	_settle = [[NSCondition alloc] init];
 	_busy = [NSMutableDictionary dictionary];
 	self.workerQueue = dispatch_get_global_queue(
@@ -258,61 +257,6 @@ typedef BOOL (^UDUnitInput)(UDProcessInstance *root, NSError **error);
 	return settled;
 }
 
-#pragma mark - Definitions
-
-- (NSString *)keyForProcess:(NSString *)processId version:(NSInteger)version
-{
-	return [NSString stringWithFormat:@"%@#%ld", processId, (long)version];
-}
-
-- (UDProcessDefinition *)definitionForProcess:(NSString *)processId
-                                      version:(NSInteger)version
-{
-	@synchronized (_definitions) {
-		return [_definitions objectForKey:[self keyForProcess:processId
-		                                              version:version]];
-	}
-}
-
-- (UDProcessDefinition *)latestDefinitionForProcess:(NSString *)processId
-{
-	UDProcessDefinition *latest = nil;
-	@synchronized (_definitions) {
-		for (UDProcessDefinition *definition in [_definitions allValues]) {
-			if ([definition.processId isEqualToString:processId]
-			    && (latest == nil || definition.version > latest.version)) {
-				latest = definition;
-			}
-		}
-	}
-	return latest;
-}
-
-- (BOOL)deployDefinition:(UDProcessDefinition *)definition error:(NSError **)error
-{
-	if (definition == nil || definition.processId == nil) {
-		if (error != NULL) {
-			*error = UDError(UDWorkflowErrorInvalidDefinition, @"no definition to deploy");
-		}
-		return NO;
-	}
-	/* A definition that BPMN cannot express yet (a target-action
-	 * condition) still deploys; it is only missing from the record. */
-	NSString *bpmn = [UDBpmnWriter XMLStringFromDefinition:definition error:NULL];
-	if (![self.store recordDeploymentOfProcess:definition.processId
-	                                   version:definition.version
-	                                      bpmn:bpmn
-	                                     error:error]) {
-		return NO;
-	}
-	@synchronized (_definitions) {
-		[_definitions setObject:definition
-		                 forKey:[self keyForProcess:definition.processId
-		                                    version:definition.version]];
-	}
-	return YES;
-}
-
 #pragma mark - Loading and committing
 
 - (UDProcessInstance *)loadInstance:(NSString *)instanceId error:(NSError **)error
@@ -321,15 +265,11 @@ typedef BOOL (^UDUnitInput)(UDProcessInstance *root, NSError **error);
 	if (record == nil) {
 		return nil;
 	}
-	UDProcessDefinition *definition = [self definitionForProcess:record.processId
-	                                                     version:record.version];
+	UDProcessDefinition *definition =
+		[self.repositoryService definitionForKey:record.processId
+		                                 version:record.version
+		                                   error:error];
 	if (definition == nil) {
-		if (error != NULL) {
-			*error = UDError(UDWorkflowErrorInvalidDefinition,
-				[NSString stringWithFormat:
-					@"%@ version %ld is not deployed in this engine",
-					record.processId, (long)record.version]);
-		}
 		return nil;
 	}
 	NSDictionary *state = [NSPropertyListSerialization
@@ -1630,13 +1570,16 @@ typedef BOOL (^UDUnitInput)(UDProcessInstance *root, NSError **error);
 			return nil;
 		}
 	}
-	UDProcessDefinition *definition = [self latestDefinitionForProcess:processId];
+	UDProcessDefinition *definition =
+		[self.repositoryService latestDefinitionForKey:processId error:error];
+	if (definition == nil) {
+		return nil;
+	}
 	UDEvent *start = [definition startEvent];
 	if (start == nil) {
 		if (error != NULL) {
-			*error = UDError(UDWorkflowErrorInvalidDefinition, definition == nil
-				? [NSString stringWithFormat:@"%@ is not deployed", processId]
-				: @"definition has no start event");
+			*error = UDError(UDWorkflowErrorInvalidDefinition,
+				@"definition has no start event");
 		}
 		return nil;
 	}

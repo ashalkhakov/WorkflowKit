@@ -1,6 +1,6 @@
 # Execution model
 
-Status: adopted, not yet implemented. Replaces the token-marking model of
+Status: adopted; step 1 (repository) implemented. Replaces the token-marking model of
 `persistence-design.md`, which describes the code as it stands today.
 
 ## Reference, and the clean-room rule
@@ -305,9 +305,10 @@ predates FEEL; Camunda 8 moved to FEEL.
 Each step lands with the existing scenarios passing again on GNUstep and
 macOS:
 
-1. **Repository.** The new model's repository entities, deployment with
+1. ~~**Repository.** The new model's repository entities, deployment with
    engine-assigned versions and duplicate filtering, and definitions loaded
-   back from stored BPMN.
+   back from stored BPMN.~~ Done, with standard BPMN reading and writing for
+   the current subset.
 2. **Core.** Executions, the agenda and behaviours for today's subset,
    commands with one context and one save, optimistic locking, scoped
    variables, tasks, event subscriptions, business-key and variable

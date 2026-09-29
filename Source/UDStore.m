@@ -2,9 +2,17 @@
 #import <CoreData/CoreData.h>
 
 static NSString * const UDDeploymentEntity = @"UDDeployment";
+static NSString * const UDResourceEntity = @"UDResource";
+static NSString * const UDDefinitionEntity = @"UDDefinitionRecord";
 static NSString * const UDInstanceEntity = @"UDInstance";
 static NSString * const UDJobEntity = @"UDJob";
 static NSString * const UDCorrelationEntity = @"UDCorrelation";
+
+@implementation UDDeploymentRecord
+@end
+
+@implementation UDDefinitionRecord
+@end
 
 @implementation UDInstanceRecord
 @end
@@ -152,70 +160,189 @@ UDJobMatchKey(NSInteger kind, NSString *tokenId)
 	return ok;
 }
 
-- (BOOL)recordDeploymentOfProcess:(NSString *)processId
-                          version:(NSInteger)version
-                             bpmn:(NSString *)bpmn
-                            error:(NSError **)error
+- (UDDeploymentRecord *)deploymentRecordFromRow:(NSManagedObject *)row
 {
-	__block BOOL ok = YES;
+	if (row == nil) {
+		return nil;
+	}
+	UDDeploymentRecord *record = [[UDDeploymentRecord alloc] init];
+	record.deploymentId = [row valueForKey:@"deploymentId"];
+	record.name = [row valueForKey:@"name"];
+	record.deployedAt = [row valueForKey:@"deployedAt"];
+	NSMutableDictionary *resources = [NSMutableDictionary dictionary];
+	for (NSManagedObject *resource in [row valueForKey:@"resources"]) {
+		[resources setObject:[resource valueForKey:@"bytes"]
+		              forKey:[resource valueForKey:@"name"]];
+	}
+	record.resources = resources;
+	return record;
+}
+
+- (UDDefinitionRecord *)definitionRecordFromRow:(NSManagedObject *)row
+{
+	if (row == nil) {
+		return nil;
+	}
+	UDDefinitionRecord *record = [[UDDefinitionRecord alloc] init];
+	record.definitionId = [row valueForKey:@"definitionId"];
+	record.key = [row valueForKey:@"key"];
+	record.name = [row valueForKey:@"name"];
+	record.version = [[row valueForKey:@"version"] integerValue];
+	record.deploymentId = [[row valueForKey:@"deployment"] valueForKey:@"deploymentId"];
+	record.resourceName = [row valueForKey:@"resourceName"];
+	record.suspended = [[row valueForKey:@"suspended"] boolValue];
+	return record;
+}
+
+- (NSArray<UDDefinitionRecord *> *)insertDeployment:(UDDeploymentRecord *)deployment
+                                        definitions:(NSArray<UDDefinitionRecord *> *)definitions
+                                              error:(NSError **)error
+{
+	__block BOOL ok = NO;
 	__block NSError *localError = nil;
+	NSMutableArray *stored = [NSMutableArray array];
 	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:UDDeploymentEntity
-		                  predicate:[NSPredicate predicateWithFormat:
-		                      @"processId == %@ AND version == %@",
-		                      processId, [NSNumber numberWithInteger:version]]
-		                       sort:nil
-		                      limit:1];
-		if ([rows count] > 0) {
-			NSManagedObject *row = [rows objectAtIndex:0];
-			NSString *stored = [row valueForKey:@"bpmn"];
-			if (stored != nil && bpmn != nil && ![stored isEqualToString:bpmn]) {
-				localError = [NSError errorWithDomain:UDWorkflowErrorDomain
-				                                 code:UDWorkflowErrorInvalidDefinition
-				                             userInfo:@{ NSLocalizedDescriptionKey:
-					[NSString stringWithFormat:
-						@"%@ version %ld is already deployed with different content",
-						processId, (long)version] }];
-				ok = NO;
-			} else if (stored == nil && bpmn != nil) {
-				[row setValue:bpmn forKey:@"bpmn"];
-			}
-			if (ok) {
-				ok = [self saveAndReset:&localError];
-			} else {
-				[self->_context reset];
-			}
-			return;
-		}
 		NSManagedObject *row = [NSEntityDescription
 			insertNewObjectForEntityForName:UDDeploymentEntity
 			         inManagedObjectContext:self->_context];
-		[row setValue:processId forKey:@"processId"];
-		[row setValue:[NSNumber numberWithInteger:version] forKey:@"version"];
-		[row setValue:bpmn forKey:@"bpmn"];
-		[row setValue:[NSDate date] forKey:@"deployedAt"];
+		[row setValue:deployment.deploymentId forKey:@"deploymentId"];
+		[row setValue:deployment.name forKey:@"name"];
+		[row setValue:deployment.deployedAt forKey:@"deployedAt"];
+		for (NSString *name in deployment.resources) {
+			NSManagedObject *resource = [NSEntityDescription
+				insertNewObjectForEntityForName:UDResourceEntity
+				         inManagedObjectContext:self->_context];
+			[resource setValue:name forKey:@"name"];
+			[resource setValue:[deployment.resources objectForKey:name] forKey:@"bytes"];
+			[resource setValue:row forKey:@"deployment"];
+		}
+		/* Two definitions of one key in one deployment count on from each
+		 * other, not both from the stored latest. */
+		NSMutableDictionary *next = [NSMutableDictionary dictionary];
+		for (UDDefinitionRecord *definition in definitions) {
+			NSNumber *version = [next objectForKey:definition.key];
+			if (version == nil) {
+				NSManagedObject *latest = [[self fetch:UDDefinitionEntity
+				                             predicate:[NSPredicate predicateWithFormat:
+				                                 @"key == %@", definition.key]
+				                                  sort:@[ [NSSortDescriptor
+				                                      sortDescriptorWithKey:@"version"
+				                                                  ascending:NO] ]
+				                                 limit:1] lastObject];
+				version = [NSNumber numberWithInteger:
+					[[latest valueForKey:@"version"] integerValue] + 1];
+			}
+			[next setObject:[NSNumber numberWithInteger:[version integerValue] + 1]
+			         forKey:definition.key];
+			UDDefinitionRecord *record = [[UDDefinitionRecord alloc] init];
+			record.definitionId = [[NSUUID UUID] UUIDString];
+			record.key = definition.key;
+			record.name = definition.name;
+			record.version = [version integerValue];
+			record.deploymentId = deployment.deploymentId;
+			record.resourceName = definition.resourceName;
+			NSManagedObject *definitionRow = [NSEntityDescription
+				insertNewObjectForEntityForName:UDDefinitionEntity
+				         inManagedObjectContext:self->_context];
+			[definitionRow setValue:record.definitionId forKey:@"definitionId"];
+			[definitionRow setValue:record.key forKey:@"key"];
+			[definitionRow setValue:record.name forKey:@"name"];
+			[definitionRow setValue:version forKey:@"version"];
+			[definitionRow setValue:record.resourceName forKey:@"resourceName"];
+			[definitionRow setValue:row forKey:@"deployment"];
+			[stored addObject:record];
+		}
 		ok = [self saveAndReset:&localError];
 	}];
-	if (!ok && error != NULL) {
-		*error = localError;
+	if (!ok) {
+		if (error != NULL) {
+			*error = localError;
+		}
+		return nil;
 	}
-	return ok;
+	return stored;
 }
 
-- (NSString *)bpmnForProcess:(NSString *)processId version:(NSInteger)version
+- (UDDeploymentRecord *)latestDeploymentNamed:(NSString *)name
 {
-	__block NSString *bpmn = nil;
+	__block UDDeploymentRecord *record = nil;
+	[_context performBlockAndWait:^{
+		NSArray *rows = [self fetch:UDDeploymentEntity
+		                  predicate:[NSPredicate predicateWithFormat:@"name == %@", name]
+		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"deployedAt"
+		                                                             ascending:NO] ]
+		                      limit:1];
+		record = [self deploymentRecordFromRow:[rows lastObject]];
+		[self->_context reset];
+	}];
+	return record;
+}
+
+- (UDDeploymentRecord *)deploymentWithId:(NSString *)deploymentId
+{
+	__block UDDeploymentRecord *record = nil;
 	[_context performBlockAndWait:^{
 		NSArray *rows = [self fetch:UDDeploymentEntity
 		                  predicate:[NSPredicate predicateWithFormat:
-		                      @"processId == %@ AND version == %@",
-		                      processId, [NSNumber numberWithInteger:version]]
+		                      @"deploymentId == %@", deploymentId]
 		                       sort:nil
 		                      limit:1];
-		bpmn = [[rows lastObject] valueForKey:@"bpmn"];
+		record = [self deploymentRecordFromRow:[rows lastObject]];
 		[self->_context reset];
 	}];
-	return bpmn;
+	return record;
+}
+
+- (NSArray<UDDefinitionRecord *> *)definitionRecordsInDeployment:(NSString *)deploymentId
+{
+	NSMutableArray *records = [NSMutableArray array];
+	[_context performBlockAndWait:^{
+		NSArray *rows = [self fetch:UDDefinitionEntity
+		                  predicate:[NSPredicate predicateWithFormat:
+		                      @"deployment.deploymentId == %@", deploymentId]
+		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"key"
+		                                                             ascending:YES] ]
+		                      limit:0];
+		for (NSManagedObject *row in rows) {
+			[records addObject:[self definitionRecordFromRow:row]];
+		}
+		[self->_context reset];
+	}];
+	return records;
+}
+
+- (UDDefinitionRecord *)definitionRecordForKey:(NSString *)key version:(NSInteger)version
+{
+	NSPredicate *predicate = version > 0
+		? [NSPredicate predicateWithFormat:@"key == %@ AND version == %@",
+			key, [NSNumber numberWithInteger:version]]
+		: [NSPredicate predicateWithFormat:@"key == %@", key];
+	__block UDDefinitionRecord *record = nil;
+	[_context performBlockAndWait:^{
+		NSArray *rows = [self fetch:UDDefinitionEntity
+		                  predicate:predicate
+		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"version"
+		                                                             ascending:NO] ]
+		                      limit:1];
+		record = [self definitionRecordFromRow:[rows lastObject]];
+		[self->_context reset];
+	}];
+	return record;
+}
+
+- (UDDefinitionRecord *)definitionRecordWithId:(NSString *)definitionId
+{
+	__block UDDefinitionRecord *record = nil;
+	[_context performBlockAndWait:^{
+		NSArray *rows = [self fetch:UDDefinitionEntity
+		                  predicate:[NSPredicate predicateWithFormat:
+		                      @"definitionId == %@", definitionId]
+		                       sort:nil
+		                      limit:1];
+		record = [self definitionRecordFromRow:[rows lastObject]];
+		[self->_context reset];
+	}];
+	return record;
 }
 
 - (UDInstanceRecord *)instanceRecord:(NSString *)instanceId error:(NSError **)error

@@ -5,6 +5,7 @@
 #import "UDRuntimeState.h"
 #import "UDHandlers.h"
 #import "UDStore.h"
+#import "UDRepositoryService.h"
 #import <dispatch/dispatch.h>
 
 @class UDEngine;
@@ -48,6 +49,9 @@ didFailToCommit:(NSError *)error;
 @interface UDEngine : NSObject
 
 @property (nonatomic, readonly, strong) UDStore *store;
+/* Deployments and definitions. Instances run on the definitions deployed
+ * here, read back from the store when the engine has not seen them. */
+@property (nonatomic, readonly, strong) UDRepositoryService *repositoryService;
 @property (nonatomic, weak) id<UDEngineDelegate> delegate;
 @property (nonatomic, strong) id<UDServiceTaskHandler> serviceHandler;
 @property (nonatomic, strong) id<UDUserTaskPort> userTaskPort;
@@ -62,15 +66,10 @@ didFailToCommit:(NSError *)error;
 
 /* Picks up where a previous run left off: sends the service jobs still in
  * the store again and arms the timers. Call once, after setting the
- * handlers and deploying the definitions. */
+ * handlers. */
 - (BOOL)openWithError:(NSError **)error;
 /* Stops the timer scheduler. In-flight service calls still report back. */
 - (void)close;
-
-/* Makes a definition runnable in this engine and records it in the store.
- * Instances run on the definitions deployed into the engine, so deploy
- * every version that may still have instances before -openWithError:. */
-- (BOOL)deployDefinition:(UDProcessDefinition *)definition error:(NSError **)error;
 
 /* Starts the latest deployed version. Answers the new instance's id. */
 - (NSString *)startProcess:(NSString *)processId

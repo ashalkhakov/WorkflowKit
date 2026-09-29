@@ -16,6 +16,26 @@ typedef NS_ENUM(NSInteger, UDJobKind) {
 	UDJobKindTimer
 };
 
+/* A deployment: a named set of BPMN resources. */
+@interface UDDeploymentRecord : NSObject
+@property (nonatomic, copy) NSString *deploymentId;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, copy) NSDate *deployedAt;
+/* Resource name to bytes. */
+@property (nonatomic, copy) NSDictionary<NSString *, NSData *> *resources;
+@end
+
+/* A process definition as deployed: one version of one process key. */
+@interface UDDefinitionRecord : NSObject
+@property (nonatomic, copy) NSString *definitionId;
+@property (nonatomic, copy) NSString *key;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic) NSInteger version;
+@property (nonatomic, copy) NSString *deploymentId;
+@property (nonatomic, copy) NSString *resourceName;
+@property (nonatomic) BOOL suspended;
+@end
+
 /* An instance's row: what a unit of work loads and commits. */
 @interface UDInstanceRecord : NSObject
 @property (nonatomic, copy) NSString *instanceId;
@@ -61,14 +81,19 @@ typedef NS_ENUM(NSInteger, UDJobKind) {
                             error:(NSError **)error;
 - (instancetype)init NS_UNAVAILABLE;
 
-/* Records a deployed definition. Recording the same process and version
- * again is a no-op when the BPMN is the same (or unknown) and an error
- * when it differs: a version is immutable once deployed. */
-- (BOOL)recordDeploymentOfProcess:(NSString *)processId
-                          version:(NSInteger)version
-                             bpmn:(NSString *)bpmn
-                            error:(NSError **)error;
-- (NSString *)bpmnForProcess:(NSString *)processId version:(NSInteger)version;
+/* Stores a deployment, its resources and its definitions in one save.
+ * Each definition gets the next version of its key and a fresh id; the
+ * records answered carry them. */
+- (NSArray<UDDefinitionRecord *> *)insertDeployment:(UDDeploymentRecord *)deployment
+                                        definitions:(NSArray<UDDefinitionRecord *> *)definitions
+                                              error:(NSError **)error;
+/* The most recent deployment of that name, resources included. */
+- (UDDeploymentRecord *)latestDeploymentNamed:(NSString *)name;
+- (UDDeploymentRecord *)deploymentWithId:(NSString *)deploymentId;
+- (NSArray<UDDefinitionRecord *> *)definitionRecordsInDeployment:(NSString *)deploymentId;
+/* version 0 means the latest. */
+- (UDDefinitionRecord *)definitionRecordForKey:(NSString *)key version:(NSInteger)version;
+- (UDDefinitionRecord *)definitionRecordWithId:(NSString *)definitionId;
 
 - (UDInstanceRecord *)instanceRecord:(NSString *)instanceId error:(NSError **)error;
 - (NSArray<NSString *> *)instanceIdsWithStatus:(UDInstanceStatus)status;

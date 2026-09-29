@@ -1,19 +1,41 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="1">
-    <entity name="UDDeployment" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="bpmn" optional="YES" attributeType="String"/>
-        <attribute name="deployedAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="processId" attributeType="String"/>
+    <entity name="UDDefinitionRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="key" attributeType="String"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="resourceName" attributeType="String"/>
+        <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="version" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDDeployment" inverseName="definitions" inverseEntity="UDDeployment"/>
         <uniquenessConstraints>
             <uniquenessConstraint>
-                <constraint value="processId"/>
+                <constraint value="definitionId"/>
+            </uniquenessConstraint>
+            <uniquenessConstraint>
+                <constraint value="key"/>
                 <constraint value="version"/>
             </uniquenessConstraint>
         </uniquenessConstraints>
-        <fetchIndex name="byProcess">
-            <fetchIndexElement property="processId" type="Binary" order="ascending"/>
+        <fetchIndex name="byKeyVersion">
+            <fetchIndexElement property="key" type="Binary" order="ascending"/>
             <fetchIndexElement property="version" type="Binary" order="descending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDDeployment" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="deployedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deploymentId" attributeType="String"/>
+        <attribute name="name" attributeType="String"/>
+        <relationship name="definitions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDDefinitionRecord" inverseName="deployment" inverseEntity="UDDefinitionRecord"/>
+        <relationship name="resources" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDResource" inverseName="deployment" inverseEntity="UDResource"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="deploymentId"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <fetchIndex name="byName">
+            <fetchIndexElement property="name" type="Binary" order="ascending"/>
+            <fetchIndexElement property="deployedAt" type="Binary" order="descending"/>
         </fetchIndex>
     </entity>
     <entity name="UDInstance" representedClassName="NSManagedObject" syncable="YES">
@@ -74,5 +96,10 @@
         <fetchIndex name="byInstance">
             <fetchIndexElement property="instanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+    </entity>
+    <entity name="UDResource" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="bytes" attributeType="Binary"/>
+        <attribute name="name" attributeType="String"/>
+        <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDDeployment" inverseName="resources" inverseEntity="UDDeployment"/>
     </entity>
 </model>

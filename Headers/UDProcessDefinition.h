@@ -6,9 +6,15 @@
 
 @interface UDProcessDefinition : NSObject
 
+/* The BPMN process id: the key versions are counted under. */
 @property (nonatomic, readonly, copy) NSString *processId;
 @property (nonatomic, readonly, copy) NSString *name;
+/* Assigned by the repository when the definition is deployed: 0, and nil
+ * ids, for a definition that was only built or parsed. */
 @property (nonatomic, readonly) NSInteger version;
+@property (nonatomic, readonly, copy) NSString *definitionId;
+@property (nonatomic, readonly, copy) NSString *deploymentId;
+@property (nonatomic, readonly, copy) NSString *resourceName;
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, UDFlowNode *> *nodes;
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, UDSequenceFlow *> *flows;
 @property (nonatomic, readonly, copy) NSArray<NSString *> *flowOrder;
@@ -25,10 +31,8 @@
 
 @interface UDDefinitionBuilder : NSObject
 
-+ (instancetype)process:(NSString *)processId version:(NSInteger)version;
-+ (instancetype)process:(NSString *)processId
-                   name:(NSString *)name
-                version:(NSInteger)version;
++ (instancetype)process:(NSString *)processId;
++ (instancetype)process:(NSString *)processId name:(NSString *)name;
 
 - (instancetype)addStart:(NSString *)elementId;
 - (instancetype)addMessageStart:(NSString *)elementId message:(NSString *)messageName;
@@ -38,6 +42,8 @@
 - (instancetype)addMessageCatch:(NSString *)elementId message:(NSString *)messageName;
 - (instancetype)addTimerCatch:(NSString *)elementId duration:(NSTimeInterval)duration;
 - (instancetype)addMessageThrow:(NSString *)elementId message:(NSString *)messageName;
+/* A none intermediate throw event: a milestone the token passes. */
+- (instancetype)addIntermediateThrow:(NSString *)elementId;
 - (instancetype)addBoundaryMessage:(NSString *)elementId
                             onTask:(NSString *)taskId
                            message:(NSString *)messageName
@@ -68,6 +74,8 @@
                           onTask:(NSString *)taskId
                         errorRef:(NSString *)errorRef
                     interrupting:(BOOL)interrupting;
+/* Names a node or a sequence flow already added. */
+- (instancetype)setName:(NSString *)name forElement:(NSString *)elementId;
 - (instancetype)setBoundsFor:(NSString *)elementId
                            x:(double)x
                            y:(double)y

@@ -21,27 +21,13 @@
 
 + (instancetype)key:(NSString *)key equals:(id)value;
 + (instancetype)key:(NSString *)key greaterThan:(id)value;
+/* `key op value`, the comparison subset of FEEL: operators = != > >= < <=
+ * (== is accepted too), values numbers, true/false, or double-quoted
+ * strings. */
 + (instancetype)conditionWithExpression:(NSString *)expression
                                   error:(NSError **)error;
+/* The condition as FEEL. */
 - (NSString *)expressionString;
-
-@end
-
-/*
- * Target-action condition.
- * Action signature:
- *   - (BOOL)evaluateCondition:(UDActionCondition *)condition
- *                   variables:(NSDictionary *)variables
- *                       error:(NSError **)error;
- */
-@interface UDActionCondition : NSObject <UDCondition>
-
-@property (nonatomic, readonly, weak) id target;
-@property (nonatomic, readonly) SEL action;
-
-- (instancetype)init NS_UNAVAILABLE;
-- (instancetype)initWithTarget:(id)target
-                        action:(SEL)action NS_DESIGNATED_INITIALIZER;
 
 @end
 

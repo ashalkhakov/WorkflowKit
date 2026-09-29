@@ -1,12 +1,18 @@
 #import "UDProcessDefinition.h"
+#import "UDProcessDefinition+Repository.h"
 #import "UDFlowElements.h"
 
 @interface UDFlowNode (UDBuilderAccess)
 - (void)addIncomingFlowId:(NSString *)flowId;
 - (void)addOutgoingFlowId:(NSString *)flowId;
+- (void)setName:(NSString *)name;
 @end
 
 @interface UDProcessDefinition ()
+@property (nonatomic, readwrite) NSInteger version;
+@property (nonatomic, readwrite, copy) NSString *definitionId;
+@property (nonatomic, readwrite, copy) NSString *deploymentId;
+@property (nonatomic, readwrite, copy) NSString *resourceName;
 - (instancetype)initWithProcessId:(NSString *)processId
                              name:(NSString *)name
                           version:(NSInteger)version
@@ -34,6 +40,25 @@
 		_flowOrder = [flowOrder copy];
 	}
 	return self;
+}
+
+- (UDProcessDefinition *)ud_deployedCopyWithVersion:(NSInteger)version
+                                        definitionId:(NSString *)definitionId
+                                        deploymentId:(NSString *)deploymentId
+                                        resourceName:(NSString *)resourceName
+{
+	/* Nodes and flows are immutable once built, so the copy shares them. */
+	UDProcessDefinition *copy =
+		[[UDProcessDefinition alloc] initWithProcessId:self.processId
+		                                          name:self.name
+		                                       version:version
+		                                         nodes:self.nodes
+		                                         flows:self.flows
+		                                     flowOrder:self.flowOrder];
+	copy.definitionId = definitionId;
+	copy.deploymentId = deploymentId;
+	copy.resourceName = resourceName;
+	return copy;
 }
 
 - (UDEvent *)startEvent
@@ -104,7 +129,6 @@
 @interface UDDefinitionBuilder ()
 @property (nonatomic, copy) NSString *processId;
 @property (nonatomic, copy) NSString *processName;
-@property (nonatomic) NSInteger version;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UDFlowNode *> *nodes;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UDSequenceFlow *> *flows;
 @property (nonatomic, strong) NSMutableArray<NSString *> *flowOrder;
@@ -113,19 +137,16 @@
 
 @implementation UDDefinitionBuilder
 
-+ (instancetype)process:(NSString *)processId version:(NSInteger)version
++ (instancetype)process:(NSString *)processId
 {
-	return [self process:processId name:processId version:version];
+	return [self process:processId name:processId];
 }
 
-+ (instancetype)process:(NSString *)processId
-                   name:(NSString *)name
-                version:(NSInteger)version
++ (instancetype)process:(NSString *)processId name:(NSString *)name
 {
 	UDDefinitionBuilder *builder = [[self alloc] init];
 	builder.processId = processId;
 	builder.processName = name;
-	builder.version = version;
 	builder.nodes = [NSMutableDictionary dictionary];
 	builder.flows = [NSMutableDictionary dictionary];
 	builder.flowOrder = [NSMutableArray array];
@@ -211,6 +232,14 @@
 	return [self addEvent:elementId kind:UDEventKindIntermediateThrow
 	              trigger:UDEventTriggerMessage messageName:messageName
 	        timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addIntermediateThrow:(NSString *)elementId
+{
+	return [self addEvent:elementId kind:UDEventKindIntermediateThrow
+	              trigger:UDEventTriggerNone messageName:nil
+	        timerDuration:0 attachedToId:nil errorRef:nil
+	         interrupting:NO];
 }
 
 - (instancetype)addBoundaryMessage:(NSString *)elementId
@@ -324,6 +353,27 @@
 	              trigger:UDEventTriggerError messageName:errorRef
 	        timerDuration:0 attachedToId:taskId errorRef:errorRef
 	         interrupting:interrupting];
+}
+
+- (instancetype)setName:(NSString *)name forElement:(NSString *)elementId
+{
+	UDFlowNode *node = [self.nodes objectForKey:elementId];
+	if (node != nil) {
+		[node setName:name];
+		return self;
+	}
+	UDSequenceFlow *flow = [self.flows objectForKey:elementId];
+	if (flow != nil) {
+		UDSequenceFlow *named =
+			[[UDSequenceFlow alloc] initWithElementId:flow.elementId
+			                                     name:name
+			                                 sourceId:flow.sourceId
+			                                 targetId:flow.targetId
+			                                condition:flow.condition
+			                              defaultFlow:flow.isDefaultFlow];
+		[self.flows setObject:named forKey:elementId];
+	}
+	return self;
 }
 
 - (instancetype)setBoundsFor:(NSString *)elementId
@@ -531,7 +581,7 @@
 
 	return [[UDProcessDefinition alloc] initWithProcessId:self.processId
 	                                                 name:self.processName
-	                                              version:self.version
+	                                              version:0
 	                                                nodes:self.nodes
 	                                                flows:self.flows
 	                                            flowOrder:self.flowOrder];

@@ -14,15 +14,15 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Sequence flow | `sequenceFlow` | `UDSequenceFlow` |
 | Conditional flow | `conditionExpression` | `UDComparisonCondition` |
 | Default flow | `exclusiveGateway/@default` | `UDGateway.defaultFlowId` |
-| Version | `ud:version` | `definition.version` |
+| Version | assigned on deployment | `definition.version`: 1 for a key's first deployment, the next for each changed one |
 
 ### Activities
 
 | Construct | BPMN | Notes |
 |---|---|---|
-| User task | `userTask` | Waiting token + `UDUserTaskPort`. `ud:assignee`. |
-| Service task | `serviceTask` | Worker queue. `implementation` / `ud:action`. |
-| Script task | `scriptTask` | Same handler path as service. ObjC action key only. |
+| User task | `userTask` | Waiting token + `UDUserTaskPort`. `camunda:assignee`. |
+| Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`, the handler's action key. |
+| Script task | `scriptTask` | Same handler path as service, action key in `ud:action`. No script text. |
 | Embedded subprocess | `subProcess` | Child `UDProcessDefinition`. Host token waits; variables merge on complete. |
 
 ### Gateways
@@ -62,19 +62,17 @@ A service or script task is a service job, committed before the call is made and
 
 ## 3. Conditions
 
-No JavaScript. Sequence-flow conditions are `UDComparisonCondition` objects:
+Conditions are FEEL, the expression language of DMN; the engine implements its comparison subset so far. No JavaScript, no XPath.
 
 ```
 amount > 1000
-approved == YES
+approved = true
 name != "x"
 ```
 
-Operators: `==` `!=` `>` `>=` `<` `<=`.
+Operators: `=` `!=` `>` `>=` `<` `<=` (`==` is accepted). Values: integers, floats, `true`/`false`, double-quoted strings.
 
-Values: integers, floats, `YES`/`NO`/`true`/`false`, quoted strings.
-
-`UDActionCondition` exists for in-process target-action checks and does **not** round-trip through BPMN XML.
+The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` syntax with the same single comparison inside, so files from both run. See `docs/execution-model.md` for how the language is chosen.
 
 ## 4. Out of scope (V2 reject or ignore)
 
@@ -91,7 +89,15 @@ Values: integers, floats, `YES`/`NO`/`true`/`false`, quoted strings.
 
 ## 5. XML shape
 
-Namespace `http://www.omg.org/spec/BPMN/20100524/MODEL` with extensions in `https://udworkflow.local/bpmn` (prefix `ud`). Writer emits both standard child event definitions and `ud:*` attributes so the reader can stay attribute-driven.
+Standard BPMN 2.0 (`http://www.omg.org/spec/BPMN/20100524/MODEL`), as Camunda Modeler reads and writes it:
+
+- `message` and `error` elements at the top, referenced by `messageRef` and `errorRef` (an error boundary matches the error's `errorCode`; no `errorRef` catches any error).
+- Timers as `timeDuration` in ISO-8601: weeks, days, hours, minutes, seconds. `timeDate`, `timeCycle` and calendar lengths (years, months) are refused for now.
+- Embedded subprocesses hold their own flow elements.
+- Settings BPMN has no attribute for use Camunda's namespace (`http://camunda.org/schema/1.0/bpmn`, prefix `camunda`); `ud:` (`https://udworkflow.local/bpmn`) is used only for a script task's action.
+- Layout is BPMN DI: a `BPMNShape` with `dc:Bounds` per node that has bounds, and a straight `BPMNEdge` per flow between two such nodes. The engine keeps no edge waypoints.
+
+The reader fails on any out-of-scope element, naming it, rather than dropping it. Documentation, extension elements, lanes, annotations and data objects are ignored. Only processes with `isExecutable="true"` are read.
 
 Round-trip path:
 
@@ -99,7 +105,7 @@ Round-trip path:
 UDProcessDefinition → UDBpmnWriter → XML → UDBpmnReader → UDDefinitionBuilder → UDProcessDefinition
 ```
 
-Import of unknown elements is ignored; missing required V1 structure fails `build:`.
+Deploying stores the XML, and the engine runs the definition read back from it, so what runs is always what is stored.
 
 ## 6. Runtime contract
 
@@ -112,7 +118,7 @@ Import of unknown elements is ignored; missing required V1 structure fails `buil
 | Public API | Instances by id. Delegates and target-action. Blocks are not part of the model. |
 | Persistence | `UDStore`: Core Data (`Model/UDWorkflow.xcdatamodeld`) over in-memory, SQLite or a FreeCoreData SQL backend. See `docs/persistence-design.md`. |
 
-Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/Height` and exported as `ud:x` `ud:y` `ud:w` `ud:h`.
+Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/Height` and exported as BPMN DI.
 
 Tests: `Tests/UDWorkflowTests.m` is an XCTest case (`#import <XCTest/XCTest.h>`). On GNUstep, `make test` builds the library and runs the bundle under tools-xctest; see `CLAUDE.md` for the patched stack it is built against.
 

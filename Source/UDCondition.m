@@ -80,7 +80,8 @@
 
 - (NSString *)expressionString
 {
-	NSString *op = @"==";
+	/* FEEL: `=` for equality, `true`/`false`, double-quoted strings. */
+	NSString *op = @"=";
 	switch (self.op) {
 	case UDComparisonOpNotEqual: op = @"!="; break;
 	case UDComparisonOpGreater: op = @">"; break;
@@ -91,12 +92,12 @@
 	}
 
 	id value = self.value;
-	NSString *rhs = @"nil";
+	NSString *rhs = @"null";
 	if ([value isKindOfClass:[NSNumber class]]) {
 		NSNumber *number = (NSNumber *)value;
 		if (strcmp([number objCType], @encode(BOOL)) == 0
 		    || strcmp([number objCType], @encode(char)) == 0) {
-			rhs = [number boolValue] ? @"YES" : @"NO";
+			rhs = [number boolValue] ? @"true" : @"false";
 		} else {
 			rhs = [number stringValue];
 		}
@@ -150,7 +151,8 @@
 		op = UDComparisonOpLessOrEqual;
 	} else if ([scanner scanString:@"!=" intoString:NULL]) {
 		op = UDComparisonOpNotEqual;
-	} else if ([scanner scanString:@"==" intoString:NULL]) {
+	} else if ([scanner scanString:@"==" intoString:NULL]
+	           || [scanner scanString:@"=" intoString:NULL]) {
 		op = UDComparisonOpEqual;
 	} else if ([scanner scanString:@">" intoString:NULL]) {
 		op = UDComparisonOpGreater;
@@ -206,70 +208,6 @@
 		return nil;
 	}
 	return [[self alloc] initWithKey:key op:op value:value];
-}
-
-@end
-
-@implementation UDActionCondition
-
-- (instancetype)initWithTarget:(id)target action:(SEL)action
-{
-	self = [super init];
-	if (self) {
-		_target = target;
-		_action = action;
-	}
-	return self;
-}
-
-- (BOOL)evaluateWithVariables:(NSDictionary *)variables
-                        error:(NSError **)error
-{
-	id target = self.target;
-	if (target == nil || self.action == NULL) {
-		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorCondition
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"action condition has no target" }];
-		}
-		return NO;
-	}
-	if (![target respondsToSelector:self.action]) {
-		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorCondition
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"action condition target does not respond" }];
-		}
-		return NO;
-	}
-
-	NSMethodSignature *sig = [target methodSignatureForSelector:self.action];
-	if (sig == nil || [sig numberOfArguments] < 5) {
-		if (error != NULL) {
-			*error = [NSError errorWithDomain:UDWorkflowErrorDomain
-			                             code:UDWorkflowErrorCondition
-			                         userInfo:@{ NSLocalizedDescriptionKey:
-					@"action must be evaluateCondition:variables:error:" }];
-		}
-		return NO;
-	}
-
-	NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:sig];
-	[invocation setTarget:target];
-	[invocation setSelector:self.action];
-	UDActionCondition *condition = self;
-	[invocation setArgument:&condition atIndex:2];
-	[invocation setArgument:&variables atIndex:3];
-	[invocation setArgument:&error atIndex:4];
-	[invocation invoke];
-
-	BOOL ok = NO;
-	if ([sig methodReturnLength] >= sizeof(BOOL)) {
-		[invocation getReturnValue:&ok];
-	}
-	return ok;
 }
 
 @end

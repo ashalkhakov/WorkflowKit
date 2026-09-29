@@ -63,8 +63,7 @@ static UDProcessDefinition *
 UDPurchaseRequestDefinition(NSError **error)
 {
 	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"purchase-request"
-	                                                 name:@"Purchase Request"
-	                                              version:1];
+	                                                 name:@"Purchase Request"];
 	[[[[b addStart:@"start"]
 		addUserTask:@"fill" name:@"Submit request" assignee:@"requester"]
 		addExclusive:@"byAmount" defaultFlow:@"flow_auto"]
@@ -95,8 +94,7 @@ static UDProcessDefinition *
 UDFulfillmentDefinition(NSError **error)
 {
 	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"order-fulfillment"
-	                                                 name:@"Order Fulfillment"
-	                                              version:1];
+	                                                 name:@"Order Fulfillment"];
 	[[[[b addStart:@"start"]
 		addParallel:@"fork"]
 		addServiceTask:@"pick" action:@"warehouse.pick"]
@@ -115,8 +113,7 @@ static UDProcessDefinition *
 UDTimerWaitDefinition(NSError **error)
 {
 	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"timer-wait"
-	                                                 name:@"Timer Wait"
-	                                              version:1];
+	                                                 name:@"Timer Wait"];
 	[[[b addStart:@"start"] addTimerCatch:@"wait" duration:0] addEnd:@"end"];
 	[[b connect:@"start" to:@"wait"] connect:@"wait" to:@"end"];
 	return [b build:error];
@@ -126,8 +123,7 @@ static UDProcessDefinition *
 UDMessageWaitDefinition(NSError **error)
 {
 	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"message-wait"
-	                                                 name:@"Message Wait"
-	                                              version:1];
+	                                                 name:@"Message Wait"];
 	[[[b addStart:@"start"] addMessageCatch:@"go" message:@"go"] addEnd:@"end"];
 	[[b connect:@"start" to:@"go"] connect:@"go" to:@"end"];
 	return [b build:error];
@@ -211,7 +207,7 @@ UDMakeEngine(NSURL *url, id<UDEngineDelegate> delegate, NSError **error)
 		UDMessageWaitDefinition(error)
 	];
 	for (UDProcessDefinition *definition in definitions) {
-		if (![engine deployDefinition:definition error:error]) {
+		if ([engine.repositoryService deployDefinition:definition error:error] == nil) {
 			return nil;
 		}
 	}
@@ -367,8 +363,11 @@ main(int argc, const char *argv[])
 				(unsigned long)[definition.flows count]);
 			return 1;
 		}
-		/* The imported copy deploys as the same version: same content. */
-		if (![engine deployDefinition:importedPurchase error:&error]) {
+		/* The imported copy writes back to the same BPMN, so deploying it
+		 * is a duplicate: still version 1. */
+		UDDeployment *redeployed =
+			[engine.repositoryService deployDefinition:importedPurchase error:&error];
+		if ([[redeployed.definitions lastObject] version] != 1) {
 			return UDFail(@"deploy imported purchase failed", error);
 		}
 		if (!UDDrivePurchase(engine, @{ @"amount": @400 },
