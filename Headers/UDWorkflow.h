@@ -12,6 +12,7 @@
 #import "UDTaskService.h"
 #import "UDHistoryService.h"
 #import "UDManagementService.h"
+#import "UDExternalTaskService.h"
 #import "UDProcessEngine.h"
 #import "UDBpmn.h"
 

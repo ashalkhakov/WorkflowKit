@@ -8,6 +8,7 @@
 #import "UDTaskService.h"
 #import "UDHistoryService.h"
 #import "UDManagementService.h"
+#import "UDExternalTaskService.h"
 #import <dispatch/dispatch.h>
 
 @class UDProcessEngine;
@@ -43,6 +44,7 @@ processInstanceEnded:(UDProcessInstance *)instance;
 @property (nonatomic, readonly, strong) UDTaskService *taskService;
 @property (nonatomic, readonly, strong) UDHistoryService *historyService;
 @property (nonatomic, readonly, strong) UDManagementService *managementService;
+@property (nonatomic, readonly, strong) UDExternalTaskService *externalTaskService;
 
 /* Owner of the engine's job locks and worker id of its in-process worker.
  * Stable across restarts on one host by default, so an engine that
@@ -58,8 +60,10 @@ processInstanceEnded:(UDProcessInstance *)instance;
 @property (nonatomic) NSTimeInterval lockDuration;
 
 @property (nonatomic, weak) id<UDProcessEngineDelegate> delegate;
-/* Handles every external task's topic in process. Without one, external
- * tasks wait for a worker outside the engine. */
+/* Handles every external task's topic in process: the engine's own
+ * worker fetches each task as it is created and hands it over, with the
+ * activity's retry cycle for failures. Without one, external tasks wait
+ * for workers using externalTaskService. */
 @property (nonatomic, strong) id<UDServiceTaskHandler> serviceHandler;
 /* Where the service handler runs. Default: the global default-priority
  * queue. */

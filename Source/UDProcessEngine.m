@@ -50,6 +50,7 @@ UDIsConflict(NSError *error)
 	_taskService = [[UDTaskService alloc] initWithProcessEngine:self];
 	_historyService = [[UDHistoryService alloc] initWithProcessEngine:self];
 	_managementService = [[UDManagementService alloc] initWithProcessEngine:self];
+	_externalTaskService = [[UDExternalTaskService alloc] initWithProcessEngine:self];
 	_jobExecutorActive = YES;
 	_identifier = [NSString stringWithFormat:@"udworkflow@%@",
 		[[NSProcessInfo processInfo] hostName]];
@@ -261,36 +262,21 @@ UDIsConflict(NSError *error)
  * the service handler; the matching -endWork: follows its result. */
 - (void)lockAndInvoke:(NSString *)externalTaskId processInstanceId:(NSString *)processInstanceId
 {
-	__block UDServiceInvocation *invocation = nil;
-	NSString *workerId = self.identifier;
-	NSTimeInterval lockDuration = self.lockDuration;
-	[self runInternal:^BOOL(UDCommandContext *command, NSError **error) {
-		(void)error;
-		UDExternalTaskEntity *task = [[command fetch:@"UDExternalTask"
-		                                   predicate:[NSPredicate predicateWithFormat:
-		                                       @"externalTaskId == %@", externalTaskId]
-		                                        sort:nil
-		                                       limit:1] lastObject];
-		if (task == nil
-		    || (task.lockExpiration != nil && [task.lockExpiration timeIntervalSinceNow] > 0)
-		    || (task.retries != nil && [task.retries intValue] <= 0)) {
-			return YES;
-		}
-		task.workerId = workerId;
-		task.lockExpiration = [NSDate dateWithTimeIntervalSinceNow:lockDuration];
-		invocation = [[UDServiceInvocation alloc]
-			initWithExternalTaskId:task.externalTaskId
-			                 topic:task.topic
-			             variables:[command visibleVariables:task.execution]
-			     processInstanceId:task.processInstanceId
-			            activityId:task.activityId];
-		return YES;
-	} error:NULL];
 	id<UDServiceTaskHandler> handler = self.serviceHandler;
-	if (invocation == nil || handler == nil) {
+	UDExternalTask *task = handler == nil ? nil
+		: [self.externalTaskService ud_lockTask:externalTaskId
+		                               workerId:self.identifier
+		                               duration:self.lockDuration];
+	if (task == nil) {
 		[self endWork:processInstanceId];
 		return;
 	}
+	UDServiceInvocation *invocation =
+		[[UDServiceInvocation alloc] initWithExternalTaskId:task.externalTaskId
+		                                              topic:task.topic
+		                                          variables:task.variables
+		                                  processInstanceId:task.processInstanceId
+		                                         activityId:task.activityId];
 	invocation.target = self;
 	invocation.action = @selector(ud_invocation:didFinish:);
 	dispatch_async(self.workerQueue, ^{
@@ -303,83 +289,75 @@ UDIsConflict(NSError *error)
 {
 	NSString *processInstanceId = invocation.processInstanceId;
 	dispatch_async([self stripeFor:processInstanceId], ^{
-		[self completeExternalTask:invocation.externalTaskId result:result];
+		[self reportResult:result forExternalTask:invocation.externalTaskId];
 		[self endWork:processInstanceId];
 	});
 }
 
-- (void)completeExternalTask:(NSString *)externalTaskId result:(UDServiceResult *)result
+/* The in-process worker's side of the external task service: complete,
+ * report a BPMN error, or report a failure with the activity's retry
+ * cycle -- three attempts without one. */
+- (void)reportResult:(UDServiceResult *)result forExternalTask:(NSString *)externalTaskId
 {
 	NSString *workerId = self.identifier;
+	UDExternalTaskService *service = self.externalTaskService;
 	NSError *failure = result.error;
 	NSError *invalid = nil;
 	if (failure == nil
 	    && ![UDCommandContext areStorableVariables:result.variables error:&invalid]) {
 		failure = invalid;
 	}
-	[self runInternal:^BOOL(UDCommandContext *command, NSError **error) {
-		(void)error;
-		UDExternalTaskEntity *task = [[command fetch:@"UDExternalTask"
-		                                   predicate:[NSPredicate predicateWithFormat:
-		                                       @"externalTaskId == %@", externalTaskId]
-		                                        sort:nil
-		                                       limit:1] lastObject];
-		if (task == nil || ![task.workerId isEqualToString:workerId]) {
-			/* Gone (a boundary event took the activity away) or taken
-			 * over after the lock ran out: this result is stale. */
-			return YES;
-		}
-		UDExecutionEntity *execution = task.execution;
-		if (failure != nil) {
-			NSString *errorCode = [[failure userInfo] objectForKey:UDWorkflowErrorRefKey];
-			if ([errorCode isKindOfClass:[NSString class]]) {
-				[command.context deleteObject:task];
-				[command throwBpmnError:errorCode fromExecution:execution];
-				return YES;
+	NSString *errorCode = [[failure userInfo] objectForKey:UDWorkflowErrorRefKey];
+	NSError *error = nil;
+	for (int attempt = 0; attempt < UD_CONFLICT_ATTEMPTS; attempt++) {
+		BOOL ok = NO;
+		error = nil;
+		if (failure == nil) {
+			ok = [service complete:externalTaskId workerId:workerId
+			             variables:result.variables error:&error];
+		} else if ([errorCode isKindOfClass:[NSString class]]) {
+			ok = [service handleBpmnError:externalTaskId workerId:workerId
+			                    errorCode:errorCode variables:nil error:&error];
+		} else {
+			UDExternalTask *task = [service externalTaskWithId:externalTaskId];
+			if (task == nil || ![task.workerId isEqualToString:workerId]) {
+				return;
 			}
-			/* The in-process worker's policy: the activity's retry cycle, as
-			 * for a job, three attempts without one. */
-			NSString *cycle = [[[command definitionForExecution:execution]
+			NSString *cycle = [[[self.repositoryService definitionWithId:task.definitionId error:NULL]
 				flowNodeWithId:task.activityId] retryTimeCycle];
 			NSInteger attempts = UD_DEFAULT_ATTEMPTS;
 			NSArray *delays = nil;
 			UDParseRetryCycle(cycle, &attempts, &delays);
 			NSInteger before = task.retries != nil ? [task.retries integerValue] : attempts;
-			NSInteger left = before - 1;
-			NSTimeInterval delay = UDRetryDelay(cycle, before);
-			task.retries = [NSNumber numberWithInteger:left];
-			task.errorMessage = [failure localizedDescription];
-			task.workerId = nil;
-			/* Not offered again before the retry's delay is up. */
-			task.lockExpiration = delay > 0 && left > 0
-				? [NSDate dateWithTimeIntervalSinceNow:delay] : nil;
-			if (left <= 0) {
-				[command raiseIncident:UDIncidentTypeFailedExternalTask
-				         configuration:task.externalTaskId
-				               message:task.errorMessage
-				            activityId:task.activityId
-				     processInstanceId:task.processInstanceId
-				             execution:execution];
-			} else if (delay > 0) {
-				[command afterCommit:^{
-					[self reschedule];
-				}];
-			} else {
-				NSString *processInstanceId = task.processInstanceId;
-				[command afterCommit:^{
-					[self ud_externalTaskCreated:externalTaskId
-					           processInstanceId:processInstanceId];
-				}];
-			}
-			return YES;
+			ok = [service handleFailure:externalTaskId
+			                   workerId:workerId
+			               errorMessage:[failure localizedDescription]
+			                    retries:before - 1
+			               retryTimeout:UDRetryDelay(cycle, before)
+			                      error:&error];
 		}
-		if (![command setVariables:result.variables from:execution]) {
-			return NO;
+		if (ok || !UDIsConflict(error)) {
+			break;
 		}
-		[command.context deleteObject:task];
-		[command completeActivity:execution];
-		return YES;
-	} error:NULL];
+	}
+	if (error == nil
+	    || ([[error domain] isEqualToString:UDWorkflowErrorDomain]
+	        && ([error code] == UDWorkflowErrorUnknownElement
+	            || [error code] == UDWorkflowErrorInvalidState))) {
+		/* Done, or stale: the task is gone (a boundary event took the
+		 * activity away) or was taken over after the lock ran out. */
+		return;
+	}
+	[self notify:^(id<UDProcessEngineDelegate> delegate) {
+		if ([delegate respondsToSelector:@selector(processEngine:commandFailed:)]) {
+			[delegate processEngine:self commandFailed:error];
+		}
+	}];
+}
+
+- (void)ud_reschedule
+{
+	[self reschedule];
 }
 
 #pragma mark - The job executor

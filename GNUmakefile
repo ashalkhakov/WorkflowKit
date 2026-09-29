@@ -26,6 +26,7 @@ UDWorkflow_OBJC_FILES = \
 	Source/UDEntities.m \
 	Source/UDCommandContext.m \
 	Source/UDServices.m \
+	Source/UDExternalTaskService.m \
 	Source/UDProcessEngine.m
 
 UDWorkflow_HEADER_FILES_DIR = Headers
@@ -42,6 +43,7 @@ UDWorkflow_HEADER_FILES = \
 	UDTaskService.h \
 	UDHistoryService.h \
 	UDManagementService.h \
+	UDExternalTaskService.h \
 	UDProcessEngine.h \
 	UDBpmn.h \
 	UDWorkflow.h

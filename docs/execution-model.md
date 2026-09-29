@@ -1,6 +1,6 @@
 # Execution model
 
-Status: adopted; steps 1 (repository), 2 (core) and 3 (jobs) implemented. Replaces the token-marking model of
+Status: adopted; steps 1 to 4 (repository, core, jobs, external tasks) implemented. Replaces the token-marking model of
 `persistence-design.md`, which describes the code as it stands today.
 
 ## Reference, and the clean-room rule
@@ -326,8 +326,14 @@ macOS:
    back), and `jobExecutorActive` for stepping through jobs in tests. Not
    yet: `asyncAfter` on gateways and async continuations on boundary
    events, which the builder refuses rather than ignores.
-4. **External tasks.** Fetch-and-lock, the in-process worker behind
-   `UDServiceTaskHandler`, and BPMN errors from workers.
+4. ~~**External tasks.** Fetch-and-lock, the in-process worker behind
+   `UDServiceTaskHandler`, and BPMN errors from workers.~~ Done:
+   `externalTaskService` fetches and locks by topic (priority, then age),
+   completes, reports failures with a retry timeout and BPMN errors,
+   extends and releases locks, and gives retries back, resolving the
+   incident. The in-process worker is a client of it. Not yet: reading
+   `camunda:taskPriority`, so every task has priority 0, and choosing
+   which variables a fetch returns.
 5. **History**, by level.
 
 The token engine is removed at step 2. After that come standard BPMN

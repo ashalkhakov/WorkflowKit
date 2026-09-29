@@ -21,7 +21,7 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Construct | BPMN | Notes |
 |---|---|---|
 | User task | `userTask` | Wait state; a task in `taskService`, completed with `completeTask:`. `camunda:assignee`. |
-| Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`. The in-process worker hands it to the service handler, with the activity's retry cycle (default three attempts); none left raises an incident. |
+| Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`, for workers using `externalTaskService` (fetch and lock by topic, complete, failure with retries and timeout, BPMN error). The engine's in-process worker is one: it hands tasks to the service handler with the activity's retry cycle (default three attempts). No retries left raises an incident. |
 | Script task | `scriptTask` | Same handler path as service, action key in `ud:action`. No script text. |
 | Embedded subprocess | `subProcess` | A scope execution of its own; it sees its parents' variables, and new variables land on the process instance. |
 

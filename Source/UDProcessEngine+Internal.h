@@ -28,8 +28,18 @@
 /* Runs one job on the calling thread: acquire, then run, then on failure
  * record it. force ignores the due date, retries and other owners' locks. */
 - (BOOL)ud_runJob:(NSString *)jobId force:(BOOL)force error:(NSError **)error;
+- (void)ud_reschedule;
 /* The serial queue a process instance's work runs on. */
 - (dispatch_queue_t)ud_queueFor:(NSString *)key;
+@end
+
+@interface UDExternalTaskService (UDInternal)
+- (instancetype)initWithProcessEngine:(UDProcessEngine *)engine;
+/* Locks that one task, if it is available: how the in-process worker
+ * takes a task the moment it is created. */
+- (UDExternalTask *)ud_lockTask:(NSString *)externalTaskId
+                       workerId:(NSString *)workerId
+                       duration:(NSTimeInterval)duration;
 @end
 
 @interface UDManagementService (UDInternal)
