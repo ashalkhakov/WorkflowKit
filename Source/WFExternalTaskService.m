@@ -79,7 +79,8 @@ WFTaskError(WFErrorCode code, NSString *message)
 
 - (BOOL)isAvailable:(WFExternalTaskEntity *)task
 {
-	return (task.lockExpiration == nil || [task.lockExpiration timeIntervalSinceNow] <= 0)
+	return !task.suspended
+		&& (task.lockExpiration == nil || [task.lockExpiration timeIntervalSinceNow] <= 0)
 		&& (task.retries == nil || [task.retries integerValue] > 0);
 }
 
@@ -132,7 +133,7 @@ WFTaskError(WFErrorCode code, NSString *message)
 		NSDate *now = [NSDate date];
 		NSArray *candidates = [command fetch:@"WFExternalTask"
 		                           predicate:[NSPredicate predicateWithFormat:
-		                               @"topic IN %@ AND (lockExpiration == nil OR lockExpiration <= %@) AND (retries == nil OR retries > 0)",
+		                               @"topic IN %@ AND suspended == NO AND (lockExpiration == nil OR lockExpiration <= %@) AND (retries == nil OR retries > 0)",
 		                               [lockDurations allKeys], now]
 		                                sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"priority" ascending:NO],
 		                                        [NSSortDescriptor sortDescriptorWithKey:@"createdAt" ascending:YES] ]
@@ -168,6 +169,14 @@ WFTaskError(WFErrorCode code, NSString *message)
 			*error = WFTaskError(WFErrorInvalidState,
 				[NSString stringWithFormat:@"external task %@ is not locked by %@",
 					externalTaskId, workerId]);
+		}
+		return nil;
+	}
+	if (task.suspended) {
+		if (error != NULL) {
+			*error = WFTaskError(WFErrorSuspended,
+				[NSString stringWithFormat:@"external task %@ belongs to a suspended process instance",
+					externalTaskId]);
 		}
 		return nil;
 	}

@@ -20,7 +20,8 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 
 | Construct | BPMN | Notes |
 |---|---|---|
-| User task | `userTask` | Wait state; a task in `taskService`, completed with `completeTask:`. `camunda:assignee`. |
+| User task | `userTask` | Wait state; a task in `taskService`, completed with `completeTask:`. `camunda:assignee`, `candidateUsers`, `candidateGroups`, `dueDate`, `followUpDate` and `priority`, each literal (`ann`; `ann,bob`; an ISO date; a number) or an expression (`${reviewer}`, `=owner.manager`) evaluated when the task is created. Candidates find it with `tasksForCandidateUser:groups:` or `tasksForCandidateGroup:` until one claims it. |
+| Input/output | `camunda:inputOutput` on a task, subprocess or call activity | Input parameters -- text, an expression, `camunda:list` or `camunda:map` -- are evaluated where the path arrives and become the activity's local variables; output parameters are evaluated in the activity as it completes and set where it is. An interrupted activity maps no outputs; `camunda:script` values are refused. |
 | Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`, for workers using `externalTaskService` (fetch and lock by topic, complete, failure with retries and timeout, BPMN error). The engine's in-process worker is one: it hands tasks to the service handler with the activity's retry cycle (default three attempts). No retries left raises an incident. |
 | Script task | `scriptTask` | Same handler path as service, action key in `wf:action`. No script text. |
 | Embedded subprocess | `subProcess` | A scope execution of its own; it sees its parents' variables, and new variables land on the process instance. |
@@ -144,6 +145,7 @@ Deploying stores the XML, and the engine runs the definition read back from it, 
 | Concurrency | A lost race fails with `WFErrorConflict` and changes nothing; the engine retries its own commands. |
 | Worker and jobs | The in-process worker and the job executor run one instance's exclusive work on one serial queue at a time. A job is acquired, run and, on failure, recorded in three transactions. |
 | Public API | `WFProcessEngine` and its services; value objects out. Delegates and target-action. |
+| Operations | `runtimeService` deletes an instance (with a reason, recorded as externally terminated; what it called goes with it) and suspends or activates it with the instances it called; `repositoryService` suspends or activates a definition, optionally with its instances. A suspended instance's tasks cannot be completed, its jobs and external tasks wait, and messages and signals pass it by; a suspended definition starts nothing. |
 | History | Written in the command's transaction at `historyLevel`: NONE, ACTIVITY (process, activity and task instances), AUDIT (and latest variables; the default), FULL (and variable updates, incidents, the job log). The store keeps the level. `camunda:historyTimeToLive` (days) lets cleanup remove an ended instance's history. |
 | Persistence | `WFStore`: Core Data (`Model/WorkflowKit.xcdatamodeld`) over in-memory, SQLite or a FreeCoreData SQL backend. |
 

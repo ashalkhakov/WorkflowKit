@@ -16,6 +16,8 @@ extern NSString * const WFProcessInstanceStateActive;
 extern NSString * const WFProcessInstanceStateCompleted;
 /* Canceled with the call activity that started it. */
 extern NSString * const WFProcessInstanceStateInternallyTerminated;
+/* Deleted through the runtime service. */
+extern NSString * const WFProcessInstanceStateExternallyTerminated;
 
 @interface WFHistoricProcessInstance : NSObject
 @property (nonatomic, readonly, copy) NSString *processInstanceId;
@@ -28,6 +30,8 @@ extern NSString * const WFProcessInstanceStateInternallyTerminated;
 @property (nonatomic, readonly, copy) NSString *state;
 /* The instance whose call activity started this one; nil otherwise. */
 @property (nonatomic, readonly, copy) NSString *superProcessInstanceId;
+/* Why it was deleted, for one that was. */
+@property (nonatomic, readonly, copy) NSString *deleteReason;
 @end
 
 /* One time a path was at a node: an activity, event or gateway. */

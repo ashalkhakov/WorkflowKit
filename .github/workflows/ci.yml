@@ -34,7 +34,7 @@ jobs:
       LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
       # A commit, not a branch: it decides the recipe hash the stack is
       # cached under. The same pin as ODataStore.
-      GNUSTEP_PATCHES_REF: 75b1e4cb29a43287daf4f67dcfa8825cb4c32ce8
+      GNUSTEP_PATCHES_REF: 0211d2cda98a8a71648204e1dd35bc46572b46eb
       # FreeCoreData, pinned to a commit like the stack: #53, optimistic
       # locking for the SQLite store, which the engine's joins rely on.
       FREECOREDATA_REF: 3c547abc4f402e6b871dbc44586f87fd416f08b4

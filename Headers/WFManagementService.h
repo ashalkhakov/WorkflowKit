@@ -19,6 +19,8 @@ extern NSString * const WFJobTypeAsyncAfterName;
 @property (nonatomic, readonly) NSInteger retries;
 @property (nonatomic, readonly, copy) NSString *exceptionMessage;
 @property (nonatomic, readonly, getter=isExclusive) BOOL exclusive;
+/* Its instance or definition is suspended: it is not run. */
+@property (nonatomic, readonly, getter=isSuspended) BOOL suspended;
 @end
 
 extern NSString * const WFIncidentTypeFailedJobName;

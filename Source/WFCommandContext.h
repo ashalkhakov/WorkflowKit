@@ -66,6 +66,12 @@
  * starts an instance for a timer start event, or continues an async
  * continuation. */
 - (void)runJob:(WFJobEntity *)job;
+/* Suspension, of an instance with the instances it called, or of a
+ * definition (its timer start too) and, optionally, its instances. */
+- (BOOL)isDefinitionSuspended:(NSString *)definitionId;
+- (void)setSuspended:(BOOL)suspended processInstance:(NSString *)processInstanceId;
+- (void)setSuspended:(BOOL)suspended definition:(NSString *)definitionId includeInstances:(BOOL)instances;
+- (void)deleteProcessInstance:(WFExecutionEntity *)root reason:(NSString *)reason;
 /* A job or external task that ran out of retries. */
 - (void)raiseIncident:(NSString *)type
         configuration:(NSString *)configuration
@@ -78,6 +84,7 @@
 /* History, at the engine's level. */
 - (void)historyJob:(WFJobEntity *)job state:(NSString *)state;
 - (void)historyTaskCompleted:(NSString *)taskId;
+- (void)historyTask:(NSString *)taskId assignee:(NSString *)assignee;
 
 /* Variables visible from the execution: its scope chain, nearest first. */
 - (NSDictionary *)visibleVariables:(WFExecutionEntity *)execution;

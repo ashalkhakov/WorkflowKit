@@ -312,6 +312,11 @@ WFMappingStrings(NSArray<WFVariableMapping *> *mappings)
 		WFTask *x = (WFTask *)a, *y = (WFTask *)b;
 		XCTAssertEqual(x.kind, y.kind, @"%@", a.elementId);
 		XCTAssertEqualObjects(x.assignee, y.assignee, @"%@", a.elementId);
+		for (NSString *key in @[ @"assigneeExpression", @"candidateUsers", @"candidateGroups", @"dueDate",
+		                         @"followUpDate", @"priority" ]) {
+			XCTAssertEqualObjects([[x valueForKey:key] expressionString], [[y valueForKey:key] expressionString],
+				@"%@ %@", a.elementId, key);
+		}
 		if (x.kind != WFTaskKindUser) {
 			XCTAssertEqualObjects(x.actionKey, y.actionKey, @"%@", a.elementId);
 		}

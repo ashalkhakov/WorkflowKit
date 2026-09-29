@@ -14,6 +14,7 @@ NSString * const WFIncidentTypeFailedExternalTaskName = @"failedExternalTask";
 NSString * const WFHistoricStateActive = @"ACTIVE";
 NSString * const WFHistoricStateCompleted = @"COMPLETED";
 NSString * const WFHistoricStateInternallyTerminated = @"INTERNALLY_TERMINATED";
+NSString * const WFHistoricStateExternallyTerminated = @"EXTERNALLY_TERMINATED";
 
 @implementation WFExecutionEntity
 @dynamic executionId, processInstanceId, definitionId, businessKey;
@@ -175,7 +176,14 @@ WFIsIntegerNumber(NSNumber *number)
 
 @implementation WFTaskEntity
 @dynamic taskId, name, taskDefinitionKey, assignee, processInstanceId;
-@dynamic definitionId, activityInstanceId, createdAt, dueDate, priority, execution;
+@dynamic definitionId, activityInstanceId, createdAt, dueDate, followUpDate, priority, suspended;
+@dynamic execution, identityLinks;
+@end
+
+NSString * const WFIdentityLinkCandidate = @"candidate";
+
+@implementation WFIdentityLinkEntity
+@dynamic type, userId, groupId, processInstanceId, task;
 @end
 
 @implementation WFEventSubscriptionEntity
@@ -186,12 +194,12 @@ WFIsIntegerNumber(NSNumber *number)
 @implementation WFJobEntity
 @dynamic jobId, jobType, activityId, processInstanceId, definitionId, dueDate, createdAt;
 @dynamic lockOwner, lockExpiration, retries, exclusive, priority;
-@dynamic exceptionMessage, repeat, execution;
+@dynamic exceptionMessage, repeat, suspended, execution;
 @end
 
 @implementation WFExternalTaskEntity
 @dynamic externalTaskId, topic, activityId, activityInstanceId, processInstanceId;
-@dynamic workerId, lockExpiration, retries, errorMessage, priority, createdAt, execution;
+@dynamic workerId, lockExpiration, retries, errorMessage, priority, createdAt, suspended, execution;
 @end
 
 @implementation WFIncidentEntity
@@ -201,7 +209,7 @@ WFIsIntegerNumber(NSNumber *number)
 
 @implementation WFHistoricProcessInstanceEntity
 @dynamic processInstanceId, businessKey, definitionId, definitionKey;
-@dynamic startTime, endTime, state, superProcessInstanceId;
+@dynamic startTime, endTime, state, superProcessInstanceId, deleteReason;
 @end
 
 @implementation WFHistoricVariableEntity

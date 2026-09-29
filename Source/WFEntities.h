@@ -93,8 +93,22 @@ typedef NS_ENUM(int16_t, WFVariableType) {
 @property (nonatomic, copy) NSString *activityInstanceId;
 @property (nonatomic, copy) NSDate *createdAt;
 @property (nonatomic, copy) NSDate *dueDate;
+@property (nonatomic, copy) NSDate *followUpDate;
 @property (nonatomic) int32_t priority;
+@property (nonatomic) BOOL suspended;
 @property (nonatomic, strong) WFExecutionEntity *execution;
+@property (nonatomic, strong) NSSet *identityLinks;
+@end
+
+extern NSString * const WFIdentityLinkCandidate;
+
+/* A user or group a task is offered to. */
+@interface WFIdentityLinkEntity : NSManagedObject
+@property (nonatomic, copy) NSString *type;
+@property (nonatomic, copy) NSString *userId;
+@property (nonatomic, copy) NSString *groupId;
+@property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, strong) WFTaskEntity *task;
 @end
 
 extern NSString * const WFEventTypeMessage;
@@ -144,6 +158,7 @@ extern NSString * const WFEventTypeCompensating;
 /* A timer cycle's rest after this firing: R2/PT10M, R/PT1H; nil for a
  * timer that fires once. */
 @property (nonatomic, copy) NSString *repeat;
+@property (nonatomic) BOOL suspended;
 @property (nonatomic, strong) WFExecutionEntity *execution;
 @end
 
@@ -159,6 +174,7 @@ extern NSString * const WFEventTypeCompensating;
 @property (nonatomic, copy) NSString *errorMessage;
 @property (nonatomic) int64_t priority;
 @property (nonatomic, copy) NSDate *createdAt;
+@property (nonatomic) BOOL suspended;
 @property (nonatomic, strong) WFExecutionEntity *execution;
 @end
 
@@ -180,6 +196,7 @@ extern NSString * const WFEventTypeCompensating;
 extern NSString * const WFHistoricStateActive;
 extern NSString * const WFHistoricStateCompleted;
 extern NSString * const WFHistoricStateInternallyTerminated;
+extern NSString * const WFHistoricStateExternallyTerminated;
 
 @interface WFHistoricProcessInstanceEntity : NSManagedObject
 @property (nonatomic, copy) NSString *processInstanceId;
@@ -190,6 +207,7 @@ extern NSString * const WFHistoricStateInternallyTerminated;
 @property (nonatomic, copy) NSDate *endTime;
 @property (nonatomic, copy) NSString *state;
 @property (nonatomic, copy) NSString *superProcessInstanceId;
+@property (nonatomic, copy) NSString *deleteReason;
 @end
 
 @interface WFHistoricVariableEntity : NSManagedObject

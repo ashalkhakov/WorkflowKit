@@ -277,7 +277,19 @@ A task row holds:
 
 Completing a task signals its execution. Identity management itself (users,
 groups, passwords) is out of scope. Assignees and groups are plain strings,
-resolved by the application.
+resolved by the application: a query for a candidate user takes that
+user's groups as an argument. Claiming a task someone else holds fails.
+
+**Input/output mappings** make an activity a scope: its inputs are its
+own variables, set as it is entered, and its outputs are evaluated in
+that scope when it completes normally -- a task or call activity as its
+scope execution is removed, a subprocess as its scope ends, an instance
+of a multi-instance activity as its body counts it.
+
+**Suspension** is a flag on every row an instance owns -- executions,
+tasks, jobs, external tasks -- set across the instance and the instances
+it called, so each place that picks work up filters on its own table.
+A suspended definition is checked where any instance starts.
 
 ## History
 
@@ -381,6 +393,8 @@ predates FEEL; Camunda 8 moved to FEEL.
 - **Timers:** a date and time without an offset is taken as UTC; cron
   cycles are refused. A cycle's next firing is counted from when the last
   was due, not from when it ran.
+- **Deleting a called instance** is refused; the instance that called it
+  is deleted instead, taking it along. Deleting fires no listeners.
 - **History cleanup** runs on demand (`cleanUpHistory:`) or every
   `historyCleanupInterval` seconds, not in a daily batch window, and only
   by end time. A definition without `camunda:historyTimeToLive` keeps its

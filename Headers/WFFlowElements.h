@@ -2,6 +2,7 @@
 
 @class WFFeelExpression;
 @class WFMultiInstance;
+@class WFParameter;
 
 @protocol WFFlowElement <NSObject>
 @property (nonatomic, readonly, copy) NSString *elementId;
@@ -38,6 +39,13 @@
  * is thrown for the activity whose compensation boundary event names it.
  * It has no sequence flows. */
 @property (nonatomic, readonly, getter=isForCompensation) BOOL forCompensation;
+/* camunda:inputOutput on an activity. Inputs are evaluated where the path
+ * arrives, before the activity starts, and become its local variables;
+ * outputs are evaluated in the activity when it completes and set where
+ * it is -- where each variable exists, else on the process instance. An
+ * activity interrupted by a boundary event maps no outputs. */
+@property (nonatomic, readonly, copy) NSArray<WFParameter *> *inputParameters;
+@property (nonatomic, readonly, copy) NSArray<WFParameter *> *outputParameters;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId
@@ -149,7 +157,20 @@ typedef NS_ENUM(NSInteger, WFTimerKind) {
 @interface WFTask : WFFlowNode
 @property (nonatomic, readonly) WFTaskKind kind;
 @property (nonatomic, readonly, copy) NSString *actionKey;
+/* A user task's assignee when it is literal text; nil when it is computed
+ * or not set. */
 @property (nonatomic, readonly, copy) NSString *assignee;
+/* A user task's assignment, each evaluated over the variables when the
+ * task is created; nil when not set. camunda:assignee (a user),
+ * candidateUsers and candidateGroups (a list, or text separated by
+ * commas), dueDate and followUpDate (a date and time, a date, or its
+ * text), priority (a whole number; 50 when not set). */
+@property (nonatomic, readonly, strong) WFFeelExpression *assigneeExpression;
+@property (nonatomic, readonly, strong) WFFeelExpression *candidateUsers;
+@property (nonatomic, readonly, strong) WFFeelExpression *candidateGroups;
+@property (nonatomic, readonly, strong) WFFeelExpression *dueDate;
+@property (nonatomic, readonly, strong) WFFeelExpression *followUpDate;
+@property (nonatomic, readonly, strong) WFFeelExpression *priority;
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name
                              kind:(WFTaskKind)kind
@@ -183,6 +204,15 @@ typedef NS_ENUM(NSInteger, WFTimerKind) {
                  innerDefinition:(WFProcessDefinition *)innerDefinition NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name NS_UNAVAILABLE;
+@end
+
+/* One input or output parameter: a name and the expression its value
+ * comes from; nil for null. */
+@interface WFParameter : NSObject
+@property (nonatomic, readonly, copy) NSString *name;
+@property (nonatomic, readonly, strong) WFFeelExpression *expression;
++ (instancetype)parameter:(NSString *)name expression:(WFFeelExpression *)expression;
+- (instancetype)init NS_UNAVAILABLE;
 @end
 
 /* Which version of the called process a call activity starts, as

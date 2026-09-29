@@ -69,7 +69,9 @@ typedef NS_ENUM(NSInteger, WFErrorCode) {
 	WFErrorInvalidBpmn,
 	/* Another command changed the same instance first; nothing was
 	 * committed, and the call can be retried. */
-	WFErrorConflict
+	WFErrorConflict,
+	/* The process instance, or its definition, is suspended. */
+	WFErrorSuspended
 };
 
 extern NSString * const WFErrorDomain;

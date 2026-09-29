@@ -1,6 +1,7 @@
 #import "WFFlowElements.h"
 #import "WFProcessDefinition.h"
 #import "WFTimers.h"
+#import "WFFeelInternal.h"
 
 NSString * const WFErrorDomain = @"WFErrorDomain";
 NSString * const WFErrorRefKey = @"WFErrorRef";
@@ -15,6 +16,10 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @property (nonatomic, readwrite, strong) NSNumber *taskPriority;
 @property (nonatomic, readwrite, strong) WFMultiInstance *multiInstance;
 @property (nonatomic, readwrite, getter=isForCompensation) BOOL forCompensation;
+@property (nonatomic, strong) NSMutableArray<WFParameter *> *mutableInputParameters;
+@property (nonatomic, strong) NSMutableArray<WFParameter *> *mutableOutputParameters;
+- (void)addInputParameter:(WFParameter *)parameter;
+- (void)addOutputParameter:(WFParameter *)parameter;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableIncoming;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableOutgoing;
 - (void)addIncomingFlowId:(NSString *)flowId;
@@ -32,6 +37,8 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 		_elementId = [elementId copy];
 		_name = [name copy];
 		_exclusive = YES;
+		_mutableInputParameters = [NSMutableArray array];
+		_mutableOutputParameters = [NSMutableArray array];
 		_mutableIncoming = [NSMutableArray array];
 		_mutableOutgoing = [NSMutableArray array];
 	}
@@ -66,10 +73,53 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 {
 }
 
+- (NSArray<WFParameter *> *)inputParameters
+{
+	return [_mutableInputParameters copy];
+}
+
+- (NSArray<WFParameter *> *)outputParameters
+{
+	return [_mutableOutputParameters copy];
+}
+
+- (void)addInputParameter:(WFParameter *)parameter
+{
+	[_mutableInputParameters addObject:parameter];
+}
+
+- (void)addOutputParameter:(WFParameter *)parameter
+{
+	[_mutableOutputParameters addObject:parameter];
+}
+
 - (NSString *)description
 {
 	return [NSString stringWithFormat:@"<%@ %@>",
 		NSStringFromClass([self class]), self.elementId];
+}
+
+@end
+
+@interface WFParameter ()
+- (instancetype)initWithName:(NSString *)name expression:(WFFeelExpression *)expression;
+@end
+
+@implementation WFParameter
+
+- (instancetype)initWithName:(NSString *)name expression:(WFFeelExpression *)expression
+{
+	self = [super init];
+	if (self) {
+		_name = [name copy];
+		_expression = expression;
+	}
+	return self;
+}
+
++ (instancetype)parameter:(NSString *)name expression:(WFFeelExpression *)expression
+{
+	return [[self alloc] initWithName:name expression:expression];
 }
 
 @end
@@ -203,7 +253,22 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 
 @end
 
+@interface WFTask ()
+@property (nonatomic, readwrite, strong) WFFeelExpression *assigneeExpression;
+@property (nonatomic, readwrite, strong) WFFeelExpression *candidateUsers;
+@property (nonatomic, readwrite, strong) WFFeelExpression *candidateGroups;
+@property (nonatomic, readwrite, strong) WFFeelExpression *dueDate;
+@property (nonatomic, readwrite, strong) WFFeelExpression *followUpDate;
+@property (nonatomic, readwrite, strong) WFFeelExpression *priority;
+@end
+
 @implementation WFTask
+
+- (NSString *)assignee
+{
+	WFFeelNode *root = [self.assigneeExpression root];
+	return root.kind == WFFeelNodeLiteral && [root.value isKindOfClass:[NSString class]] ? root.value : nil;
+}
 
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name
@@ -215,7 +280,8 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 	if (self) {
 		_kind = kind;
 		_actionKey = [actionKey copy];
-		_assignee = [assignee copy];
+		_assigneeExpression = assignee != nil
+			? [WFFeelExpression expressionWithString:WFFeelLiteralText(assignee) error:NULL] : nil;
 	}
 	return self;
 }

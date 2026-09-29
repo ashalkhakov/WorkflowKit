@@ -110,6 +110,24 @@
 /* Throws a BPMN error with that code, caught as a service task's is;
  * uncaught, its path ends. */
 - (instancetype)addErrorEnd:(NSString *)elementId errorRef:(NSString *)errorRef;
+/* A user task's assignment, as Camunda's attributes have it: keys
+ * assignee, candidateUsers, candidateGroups, dueDate, followUpDate and
+ * priority, each literal text (ann; ann,bob; 2030-01-01T09:00:00Z; 70) or
+ * an expression (${reviewer}, =owner.manager). Text that is neither
+ * fails -build:. */
+- (instancetype)setAssignment:(NSDictionary<NSString *, NSString *> *)attributes
+                   forElement:(NSString *)elementId;
+/* An activity's input or output parameter: the value as Camunda writes it
+ * -- text, ${...} or =FEEL; nil for null -- or as an expression. Text
+ * that is neither fails -build:. */
+- (instancetype)addInputParameter:(NSString *)name value:(NSString *)value forElement:(NSString *)elementId;
+- (instancetype)addOutputParameter:(NSString *)name value:(NSString *)value forElement:(NSString *)elementId;
+- (instancetype)addInputParameter:(NSString *)name
+                       expression:(WFFeelExpression *)expression
+                       forElement:(NSString *)elementId;
+- (instancetype)addOutputParameter:(NSString *)name
+                        expression:(WFFeelExpression *)expression
+                        forElement:(NSString *)elementId;
 /* A timer event's timer, replacing the duration it was added with. */
 - (instancetype)setTimer:(WFTimer *)timer forElement:(NSString *)elementId;
 /* The same from FEEL: "due", "@\"R3/PT10M\"", "now() + duration(wait)".

@@ -3,6 +3,7 @@
 #import "WFCondition.h"
 #import "WFDuration.h"
 #import "WFTimers.h"
+#import "WFFeelInternal.h"
 #include <math.h>
 
 NSString * const WFBpmnNamespace =
@@ -329,6 +330,49 @@ WFCaughtCode(NSString *code)
 	return element;
 }
 
+/* A parameter's value into the element: a list as camunda:list, a
+ * context as camunda:map, text as itself, anything else as =FEEL. */
++ (void)value:(WFFeelNode *)node into:(NSXMLElement *)element
+{
+	if (node == nil) {
+		return;
+	}
+	if (node.kind == WFFeelNodeList) {
+		NSXMLElement *list = WFElement(@"camunda:list");
+		for (WFFeelNode *item in node.children) {
+			NSXMLElement *value = WFElement(@"camunda:value");
+			[self value:item into:value];
+			[list addChild:value];
+		}
+		[element addChild:list];
+		return;
+	}
+	if (node.kind == WFFeelNodeContext) {
+		NSXMLElement *map = WFElement(@"camunda:map");
+		for (NSUInteger i = 0; i < [node.children count]; i++) {
+			NSXMLElement *entry = WFElement(@"camunda:entry");
+			WFSet(entry, @"key", [node.names objectAtIndex:i]);
+			[self value:[node.children objectAtIndex:i] into:entry];
+			[map addChild:entry];
+		}
+		[element addChild:map];
+		return;
+	}
+	if (node.kind == WFFeelNodeLiteral && [node.value isKindOfClass:[NSString class]]) {
+		[element setStringValue:node.value];
+		return;
+	}
+	[element setStringValue:[@"=" stringByAppendingString:[node description]]];
+}
+
++ (NSXMLElement *)parameter:(WFParameter *)parameter named:(NSString *)name
+{
+	NSXMLElement *element = WFElement(name);
+	WFSet(element, @"name", parameter.name);
+	[self value:[parameter.expression root] into:element];
+	return element;
+}
+
 + (NSXMLElement *)mapping:(WFVariableMapping *)mapping named:(NSString *)name
 {
 	NSXMLElement *element = WFElement(name);
@@ -379,7 +423,21 @@ WFCaughtCode(NSString *code)
 		WFTask *task = (WFTask *)node;
 		if (task.kind == WFTaskKindUser) {
 			tag = @"bpmn:userTask";
-			[attributes addObject:@[ @"camunda:assignee", task.assignee ?: @"" ]];
+			NSArray *assignment = @[
+				@[ @"camunda:assignee", task.assigneeExpression ?: [NSNull null], @(WFAttributeKindString) ],
+				@[ @"camunda:candidateUsers", task.candidateUsers ?: [NSNull null], @(WFAttributeKindList) ],
+				@[ @"camunda:candidateGroups", task.candidateGroups ?: [NSNull null], @(WFAttributeKindList) ],
+				@[ @"camunda:dueDate", task.dueDate ?: [NSNull null], @(WFAttributeKindDate) ],
+				@[ @"camunda:followUpDate", task.followUpDate ?: [NSNull null], @(WFAttributeKindDate) ],
+				@[ @"camunda:priority", task.priority ?: [NSNull null], @(WFAttributeKindNumber) ],
+			];
+			for (NSArray *attribute in assignment) {
+				id expression = [attribute objectAtIndex:1];
+				if (expression != [NSNull null]) {
+					[attributes addObject:@[ [attribute objectAtIndex:0],
+						WFAttributeText(expression, (WFAttributeKind)[[attribute objectAtIndex:2] integerValue]) ]];
+				}
+			}
 		} else if (task.kind == WFTaskKindService) {
 			tag = @"bpmn:serviceTask";
 			[attributes addObject:@[ @"camunda:type", @"external" ]];
@@ -454,6 +512,16 @@ WFCaughtCode(NSString *code)
 		NSXMLElement *cycle = WFElement(@"camunda:failedJobRetryTimeCycle");
 		[cycle setStringValue:node.retryTimeCycle];
 		[extensions addChild:cycle];
+	}
+	if ([node.inputParameters count] > 0 || [node.outputParameters count] > 0) {
+		NSXMLElement *inputOutput = WFElement(@"camunda:inputOutput");
+		for (WFParameter *parameter in node.inputParameters) {
+			[inputOutput addChild:[self parameter:parameter named:@"camunda:inputParameter"]];
+		}
+		for (WFParameter *parameter in node.outputParameters) {
+			[inputOutput addChild:[self parameter:parameter named:@"camunda:outputParameter"]];
+		}
+		[extensions addChild:inputOutput];
 	}
 	if ([node isKindOfClass:[WFCallActivity class]]) {
 		WFCallActivity *call = (WFCallActivity *)node;
@@ -896,11 +964,100 @@ WFIgnoredElements(void)
 	}
 	NSXMLElement *extensions = [self child:element named:@"extensionElements"];
 	for (NSXMLElement *extension in [self children:extensions of:WFCamundaNamespace]) {
+		if ([[extension localName] isEqualToString:@"inputOutput"]) {
+			[self readInputOutput:extension id:elementId into:builder context:context];
+		}
 		if ([[extension localName] isEqualToString:@"failedJobRetryTimeCycle"]) {
 			NSString *cycle = [self trimmed:[extension stringValue]];
 			if ([cycle length] > 0) {
 				[builder setRetryTimeCycle:cycle forElement:elementId];
 			}
+		}
+	}
+}
+
+/* A parameter's value as FEEL text: a camunda:list or camunda:map, or the
+ * element's text (literal, ${...} or =FEEL); nil for none, and nil with
+ * the read failed for one the engine does not take. */
++ (NSString *)valueOf:(NSXMLElement *)element
+                   id:(NSString *)elementId
+              context:(WFBpmnReadContext *)context
+               isNull:(BOOL *)isNull
+{
+	*isNull = NO;
+	NSArray *children = [self children:element of:WFCamundaNamespace];
+	NSXMLElement *structured = [children firstObject];
+	if (structured != nil && [[structured localName] isEqualToString:@"list"]) {
+		NSMutableArray *items = [NSMutableArray array];
+		for (NSXMLElement *value in [self children:structured of:WFCamundaNamespace]) {
+			BOOL none = NO;
+			NSString *item = [self valueOf:value id:elementId context:context isNull:&none];
+			if (item == nil && !none) {
+				return nil;
+			}
+			[items addObject:none ? @"null" : item];
+		}
+		return [NSString stringWithFormat:@"[%@]", [items componentsJoinedByString:@", "]];
+	}
+	if (structured != nil && [[structured localName] isEqualToString:@"map"]) {
+		NSMutableArray *entries = [NSMutableArray array];
+		for (NSXMLElement *entry in [self children:structured of:WFCamundaNamespace]) {
+			BOOL none = NO;
+			NSString *value = [self valueOf:entry id:elementId context:context isNull:&none];
+			if (value == nil && !none) {
+				return nil;
+			}
+			[entries addObject:[NSString stringWithFormat:@"%@: %@",
+				WFFeelLiteralText([self attr:@"key" of:entry] ?: @""), none ? @"null" : value]];
+		}
+		return [NSString stringWithFormat:@"{%@}", [entries componentsJoinedByString:@", "]];
+	}
+	if (structured != nil) {
+		[self fail:context error:WFBpmnError(@"%@: camunda:%@ parameters are not supported; use an expression",
+			elementId, [structured localName])];
+		return nil;
+	}
+	NSString *text = [self trimmed:[element stringValue]];
+	if ([text length] == 0) {
+		*isNull = YES;
+		return nil;
+	}
+	NSError *error = nil;
+	WFFeelExpression *expression = WFAttributeExpression(text, WFAttributeKindString, &error);
+	if (expression == nil) {
+		[self fail:context error:WFBpmnError(@"%@: %@", elementId, [error localizedDescription])];
+		return nil;
+	}
+	return [expression expressionString];
+}
+
++ (void)readInputOutput:(NSXMLElement *)inputOutput
+                     id:(NSString *)elementId
+                   into:(WFDefinitionBuilder *)builder
+                context:(WFBpmnReadContext *)context
+{
+	for (NSXMLElement *parameter in [self children:inputOutput of:WFCamundaNamespace]) {
+		BOOL input = [[parameter localName] isEqualToString:@"inputParameter"];
+		if (!input && ![[parameter localName] isEqualToString:@"outputParameter"]) {
+			continue;
+		}
+		NSString *name = [self attr:@"name" of:parameter];
+		BOOL none = NO;
+		NSString *feel = [self valueOf:parameter id:elementId context:context isNull:&none];
+		if (context.error != nil) {
+			return;
+		}
+		NSError *error = nil;
+		WFFeelExpression *expression = none ? nil : [WFFeelExpression expressionWithString:feel error:&error];
+		if (!none && expression == nil) {
+			[self fail:context error:WFBpmnError(@"%@: parameter %@: %@", elementId, name,
+				[error localizedDescription])];
+			return;
+		}
+		if (input) {
+			[builder addInputParameter:name expression:expression forElement:elementId];
+		} else {
+			[builder addOutputParameter:name expression:expression forElement:elementId];
 		}
 	}
 }
@@ -1267,9 +1424,18 @@ WFIgnoredElements(void)
 				elementId)];
 		}
 	} else if ([name isEqualToString:@"userTask"]) {
-		[builder addUserTask:elementId
-		                name:[self attr:@"name" of:element] ?: elementId
-		            assignee:[self attr:@"assignee" namespace:WFCamundaNamespace of:element]];
+		[builder addUserTask:elementId name:[self attr:@"name" of:element] ?: elementId assignee:nil];
+		NSMutableDictionary *assignment = [NSMutableDictionary dictionary];
+		for (NSString *key in @[ @"assignee", @"candidateUsers", @"candidateGroups", @"dueDate",
+		                         @"followUpDate", @"priority" ]) {
+			NSString *value = [self attr:key namespace:WFCamundaNamespace of:element];
+			if (value != nil) {
+				[assignment setObject:value forKey:key];
+			}
+		}
+		if ([assignment count] > 0) {
+			[builder setAssignment:assignment forElement:elementId];
+		}
 	} else if ([name isEqualToString:@"serviceTask"]) {
 		NSString *type = [self attr:@"type" namespace:WFCamundaNamespace of:element];
 		NSString *topic = [self attr:@"topic" namespace:WFCamundaNamespace of:element];

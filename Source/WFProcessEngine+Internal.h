@@ -49,6 +49,8 @@
 /* Called after each stored deployment: a timer start event may have added
  * a job. */
 @property (nonatomic, copy) void (^didStoreDeployment)(void);
+/* The engine whose commands suspend and activate definitions. */
+- (void)wf_setEngine:(WFProcessEngine *)engine;
 @end
 
 @interface WFWorkItem (WFInternal)

@@ -48,6 +48,7 @@ WFIsConflict(NSError *error)
 	}
 	_store = store;
 	_repositoryService = [[WFRepositoryService alloc] initWithStore:store];
+	[_repositoryService wf_setEngine:self];
 	_runtimeService = [[WFRuntimeService alloc] initWithProcessEngine:self];
 	_taskService = [[WFTaskService alloc] initWithProcessEngine:self];
 	_historyService = [[WFHistoryService alloc] initWithProcessEngine:self];
@@ -394,6 +395,9 @@ WFIsConflict(NSError *error)
 		if (job == nil) {
 			return YES;
 		}
+		if (job.suspended) {
+			return YES;
+		}
 		if (!force && (job.retries <= 0 || [job.dueDate timeIntervalSinceNow] > 0
 		               || (job.lockOwner != nil && ![job.lockOwner isEqualToString:owner]
 		                   && [job.lockExpiration timeIntervalSinceNow] > 0))) {
@@ -476,7 +480,7 @@ WFIsConflict(NSError *error)
 		 * scheduler must not aim at ones it will not run. */
 		WFJobEntity *job = !runJobs ? nil : [[command fetch:@"WFJob"
 		                         predicate:[NSPredicate predicateWithFormat:
-		                             @"retries > 0 AND (lockExpiration == nil OR lockExpiration < %@)", now]
+		                             @"retries > 0 AND suspended == NO AND (lockExpiration == nil OR lockExpiration < %@)", now]
 		                              sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"dueDate"
 		                                                                      ascending:YES] ]
 		                             limit:1] lastObject];

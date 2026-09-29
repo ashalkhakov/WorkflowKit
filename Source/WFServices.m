@@ -7,6 +7,7 @@
 NSString * const WFProcessInstanceStateActive = @"ACTIVE";
 NSString * const WFProcessInstanceStateCompleted = @"COMPLETED";
 NSString * const WFProcessInstanceStateInternallyTerminated = @"INTERNALLY_TERMINATED";
+NSString * const WFProcessInstanceStateExternallyTerminated = @"EXTERNALLY_TERMINATED";
 NSString * const WFTaskDeleteReasonCompleted = @"completed";
 NSString * const WFTaskDeleteReasonDeleted = @"deleted";
 NSString * const WFIncidentStateOpen = @"open";
@@ -34,6 +35,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 @property (nonatomic, readwrite, copy) NSString *definitionKey;
 @property (nonatomic, readwrite, copy) NSString *superProcessInstanceId;
 @property (nonatomic, readwrite, getter=isEnded) BOOL ended;
+@property (nonatomic, readwrite, getter=isSuspended) BOOL suspended;
 @end
 
 @implementation WFProcessInstance
@@ -48,6 +50,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 	instance.definitionId = root.definitionId;
 	instance.definitionKey = definition.processId;
 	instance.superProcessInstanceId = root.superProcessInstanceId;
+	instance.suspended = root.suspended;
 	instance.ended = ended;
 	return instance;
 }
@@ -95,6 +98,10 @@ WFServiceError(WFErrorCode code, NSString *message)
 @property (nonatomic, readwrite, copy) NSDate *createdAt;
 @property (nonatomic, readwrite, copy) NSDate *dueDate;
 @property (nonatomic, readwrite) NSInteger priority;
+@property (nonatomic, readwrite, getter=isSuspended) BOOL suspended;
+@property (nonatomic, readwrite, copy) NSDate *followUpDate;
+@property (nonatomic, readwrite, copy) NSArray<NSString *> *candidateUsers;
+@property (nonatomic, readwrite, copy) NSArray<NSString *> *candidateGroups;
 @end
 
 @implementation WFWorkItem
@@ -111,6 +118,23 @@ WFServiceError(WFErrorCode code, NSString *message)
 	task.createdAt = entity.createdAt;
 	task.dueDate = entity.dueDate;
 	task.priority = entity.priority;
+	task.suspended = entity.suspended;
+	task.followUpDate = entity.followUpDate;
+	NSMutableArray *users = [NSMutableArray array];
+	NSMutableArray *groups = [NSMutableArray array];
+	for (WFIdentityLinkEntity *link in entity.identityLinks) {
+		if ([link isDeleted] || ![link.type isEqualToString:WFIdentityLinkCandidate]) {
+			continue;
+		}
+		if (link.userId != nil) {
+			[users addObject:link.userId];
+		}
+		if (link.groupId != nil) {
+			[groups addObject:link.groupId];
+		}
+	}
+	task.candidateUsers = [users sortedArrayUsingSelector:@selector(compare:)];
+	task.candidateGroups = [groups sortedArrayUsingSelector:@selector(compare:)];
 	return task;
 }
 
@@ -130,6 +154,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 @property (nonatomic, readwrite, copy) NSDate *endTime;
 @property (nonatomic, readwrite, copy) NSString *state;
 @property (nonatomic, readwrite, copy) NSString *superProcessInstanceId;
+@property (nonatomic, readwrite, copy) NSString *deleteReason;
 @end
 
 @implementation WFHistoricProcessInstance
@@ -145,6 +170,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 	instance.endTime = entity.endTime;
 	instance.state = entity.state;
 	instance.superProcessInstanceId = entity.superProcessInstanceId;
+	instance.deleteReason = entity.deleteReason;
 	return instance;
 }
 
@@ -263,6 +289,60 @@ WFServiceError(WFErrorCode code, NSString *message)
 	return instance;
 }
 
+- (BOOL)deleteProcessInstance:(NSString *)processInstanceId
+                       reason:(NSString *)reason
+                        error:(NSError **)error
+{
+	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		WFExecutionEntity *root = [self root:processInstanceId in:command];
+		if (root == nil) {
+			if (commandError != NULL) {
+				*commandError = [self notRunning:processInstanceId];
+			}
+			return NO;
+		}
+		if (root.superProcessInstanceId != nil) {
+			if (commandError != NULL) {
+				*commandError = WFServiceError(WFErrorInvalidState, [NSString stringWithFormat:
+					@"%@ was started by a call activity of %@; delete that instance",
+					processInstanceId, root.superProcessInstanceId]);
+			}
+			return NO;
+		}
+		[command deleteProcessInstance:root reason:reason];
+		return YES;
+	} error:error];
+}
+
+- (BOOL)setSuspended:(BOOL)suspended processInstance:(NSString *)processInstanceId error:(NSError **)error
+{
+	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		if ([self root:processInstanceId in:command] == nil) {
+			if (commandError != NULL) {
+				*commandError = [self notRunning:processInstanceId];
+			}
+			return NO;
+		}
+		[command setSuspended:suspended processInstance:processInstanceId];
+		return YES;
+	} error:error];
+}
+
+- (BOOL)suspendProcessInstance:(NSString *)processInstanceId error:(NSError **)error
+{
+	return [self setSuspended:YES processInstance:processInstanceId error:error];
+}
+
+- (BOOL)activateProcessInstance:(NSString *)processInstanceId error:(NSError **)error
+{
+	BOOL ok = [self setSuspended:NO processInstance:processInstanceId error:error];
+	if (ok) {
+		/* Its jobs and external tasks are there to be taken again. */
+		[_engine wf_reschedule];
+	}
+	return ok;
+}
+
 - (NSArray<WFProcessInstance *> *)subProcessInstancesOf:(NSString *)processInstanceId
                                                   error:(NSError **)error
 {
@@ -375,9 +455,14 @@ WFServiceError(WFErrorCode code, NSString *message)
 	                                  limit:0];
 	for (WFEventSubscriptionEntity *subscription in subscriptions) {
 		if (subscription.execution == nil) {
-			if (processInstanceId == nil && [correlationKeys count] == 0) {
+			if (processInstanceId == nil && [correlationKeys count] == 0
+			    && ![command isDefinitionSuspended:subscription.definitionId]) {
 				[recipients addObject:subscription];
 			}
+			continue;
+		}
+		if (subscription.execution.suspended) {
+			/* A suspended instance is passed by. */
 			continue;
 		}
 		WFExecutionEntity *root = [subscription.execution processInstance];
@@ -579,6 +664,92 @@ processInstanceId:(NSString *)processInstanceId
 	return [self tasksMatching:[NSPredicate predicateWithFormat:@"assignee == %@", assignee]];
 }
 
+/* Unclaimed tasks with a candidate link matching the predicate. */
+- (NSArray<WFWorkItem *> *)unclaimedTasksLinked:(NSPredicate *)links
+{
+	NSMutableArray *tasks = [NSMutableArray array];
+	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+		(void)error;
+		NSMutableSet *taskIds = [NSMutableSet set];
+		for (WFIdentityLinkEntity *link in [command fetch:@"WFIdentityLink" predicate:links sort:nil limit:0]) {
+			if (link.task.taskId != nil) {
+				[taskIds addObject:link.task.taskId];
+			}
+		}
+		if ([taskIds count] == 0) {
+			return YES;
+		}
+		for (WFTaskEntity *entity in [command fetch:@"WFTask"
+		                                  predicate:[NSPredicate predicateWithFormat:
+		                                      @"taskId IN %@ AND assignee == nil", [taskIds allObjects]]
+		                                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"createdAt"
+		                                                                               ascending:YES] ]
+		                                      limit:0]) {
+			[tasks addObject:[WFWorkItem wf_workItemWithEntity:entity]];
+		}
+		return YES;
+	} error:NULL];
+	return tasks;
+}
+
+- (NSArray<WFWorkItem *> *)tasksForCandidateUser:(NSString *)userId groups:(NSArray<NSString *> *)groupIds
+{
+	return [self unclaimedTasksLinked:[NSPredicate predicateWithFormat:
+		@"type == %@ AND (userId == %@ OR groupId IN %@)", WFIdentityLinkCandidate, userId ?: @"",
+		groupIds ?: @[]]];
+}
+
+- (NSArray<WFWorkItem *> *)tasksForCandidateGroup:(NSString *)groupId
+{
+	return [self unclaimedTasksLinked:[NSPredicate predicateWithFormat:
+		@"type == %@ AND groupId == %@", WFIdentityLinkCandidate, groupId ?: @""]];
+}
+
+/* Changes who has the open task; claiming fails when someone else does. */
+- (BOOL)assign:(NSString *)userId task:(NSString *)taskId claim:(BOOL)claim error:(NSError **)error
+{
+	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		WFTaskEntity *task = [[command fetch:@"WFTask"
+		                           predicate:[NSPredicate predicateWithFormat:@"taskId == %@", taskId ?: @""]
+		                                sort:nil
+		                               limit:1] lastObject];
+		NSError *problem = nil;
+		if (task == nil) {
+			problem = WFServiceError(WFErrorUnknownElement, [NSString stringWithFormat:@"no open task %@", taskId]);
+		} else if (task.suspended) {
+			problem = WFServiceError(WFErrorSuspended,
+				[NSString stringWithFormat:@"task %@ belongs to a suspended process instance", taskId]);
+		} else if (claim && task.assignee != nil && ![task.assignee isEqualToString:userId]) {
+			problem = WFServiceError(WFErrorInvalidState,
+				[NSString stringWithFormat:@"task %@ is claimed by %@", taskId, task.assignee]);
+		}
+		if (problem != nil) {
+			if (commandError != NULL) {
+				*commandError = problem;
+			}
+			return NO;
+		}
+		task.assignee = userId;
+		[command historyTask:task.taskId assignee:userId];
+		return YES;
+	} error:error];
+}
+
+- (BOOL)claimTask:(NSString *)taskId user:(NSString *)userId error:(NSError **)error
+{
+	return [self assign:userId task:taskId claim:YES error:error];
+}
+
+- (BOOL)unclaimTask:(NSString *)taskId error:(NSError **)error
+{
+	return [self assign:nil task:taskId claim:NO error:error];
+}
+
+- (BOOL)setAssignee:(NSString *)userId forTask:(NSString *)taskId error:(NSError **)error
+{
+	return [self assign:userId task:taskId claim:NO error:error];
+}
+
 - (BOOL)completeTask:(NSString *)taskId
            variables:(NSDictionary *)variables
                error:(NSError **)error
@@ -595,6 +766,13 @@ processInstanceId:(NSString *)processInstanceId
 			if (commandError != NULL) {
 				*commandError = WFServiceError(WFErrorUnknownElement,
 					[NSString stringWithFormat:@"no open task %@", taskId]);
+			}
+			return NO;
+		}
+		if (task.suspended) {
+			if (commandError != NULL) {
+				*commandError = WFServiceError(WFErrorSuspended,
+					[NSString stringWithFormat:@"task %@ belongs to a suspended process instance", taskId]);
 			}
 			return NO;
 		}
@@ -898,6 +1076,7 @@ processInstanceId:(NSString *)processInstanceId
 @property (nonatomic, readwrite) NSInteger retries;
 @property (nonatomic, readwrite, copy) NSString *exceptionMessage;
 @property (nonatomic, readwrite, getter=isExclusive) BOOL exclusive;
+@property (nonatomic, readwrite, getter=isSuspended) BOOL suspended;
 @end
 
 @implementation WFJob
@@ -914,6 +1093,7 @@ processInstanceId:(NSString *)processInstanceId
 	job.retries = entity.retries;
 	job.exceptionMessage = entity.exceptionMessage;
 	job.exclusive = entity.exclusive;
+	job.suspended = entity.suspended;
 	return job;
 }
 
@@ -1012,6 +1192,13 @@ processInstanceId:(NSString *)processInstanceId
 	if (job == nil) {
 		if (error != NULL) {
 			*error = [self noJob:jobId];
+		}
+		return NO;
+	}
+	if (job.isSuspended) {
+		if (error != NULL) {
+			*error = WFServiceError(WFErrorSuspended,
+				[NSString stringWithFormat:@"job %@ is suspended", jobId]);
 		}
 		return NO;
 	}

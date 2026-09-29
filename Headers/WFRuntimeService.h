@@ -10,6 +10,9 @@
 @property (nonatomic, readonly, copy) NSString *definitionKey;
 /* The instance whose call activity started this one; nil otherwise. */
 @property (nonatomic, readonly, copy) NSString *superProcessInstanceId;
+/* Suspended: its tasks cannot be completed, its jobs and external tasks
+ * wait, and messages and signals pass it by, until it is activated. */
+@property (nonatomic, readonly, getter=isSuspended) BOOL suspended;
 /* YES once the instance has reached its end: it is then only in history. */
 @property (nonatomic, readonly, getter=isEnded) BOOL ended;
 @end
@@ -41,6 +44,18 @@
 /* nil, with an error, for an instance that has ended or never existed. */
 - (WFProcessInstance *)processInstanceWithId:(NSString *)processInstanceId
                                        error:(NSError **)error;
+/* Ends the instance now: everything in it is canceled -- its tasks
+ * deleted, the instances it called terminated -- and its history ends as
+ * externally terminated, with the reason. An instance a call activity
+ * started is deleted by deleting the one that called it. */
+- (BOOL)deleteProcessInstance:(NSString *)processInstanceId
+                       reason:(NSString *)reason
+                        error:(NSError **)error;
+/* Suspends the instance and the instances it called, or activates them
+ * again. */
+- (BOOL)suspendProcessInstance:(NSString *)processInstanceId error:(NSError **)error;
+- (BOOL)activateProcessInstance:(NSString *)processInstanceId error:(NSError **)error;
+
 /* The running instances the instance's call activities started, in no
  * particular order. */
 - (NSArray<WFProcessInstance *> *)subProcessInstancesOf:(NSString *)processInstanceId

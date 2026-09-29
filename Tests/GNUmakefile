@@ -22,7 +22,10 @@ WorkflowKitTests_OBJC_FILES = \
 	WFEventSubProcessTests.m \
 	WFTimerTests.m \
 	WFEscalationTests.m \
-	WFCompensationTests.m
+	WFCompensationTests.m \
+	WFOperationsTests.m \
+	WFTaskAssignmentTests.m \
+	WFInputOutputTests.m
 WorkflowKitTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 WorkflowKitTests_INCLUDE_DIRS = -I../Headers
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)

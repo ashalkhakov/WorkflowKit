@@ -6,6 +6,7 @@
 #import "WFDuration.h"
 #import "WFTimers.h"
 #import "WFProcessEngine+Internal.h"
+#import "WFCommandContext.h"
 
 static NSError *
 WFRepositoryError(WFErrorCode code, NSString *message)
@@ -38,6 +39,48 @@ WFIsBpmnResource(NSString *name)
 	 * cached one never goes stale. */
 	NSMutableDictionary<NSString *, WFProcessDefinition *> *_cache;
 	void (^_didStoreDeployment)(void);
+	__weak WFProcessEngine *_engine;
+}
+
+- (void)wf_setEngine:(WFProcessEngine *)engine
+{
+	_engine = engine;
+}
+
+- (BOOL)setSuspended:(BOOL)suspended
+          definition:(NSString *)definitionId
+    includeInstances:(BOOL)includeInstances
+               error:(NSError **)error
+{
+	WFProcessEngine *engine = _engine;
+	BOOL ok = [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		[command setSuspended:suspended definition:definitionId includeInstances:includeInstances];
+		return YES;
+	} error:error];
+	if (ok && !suspended) {
+		[engine wf_reschedule];
+	}
+	return ok;
+}
+
+- (BOOL)suspendDefinition:(NSString *)definitionId
+         includeInstances:(BOOL)includeInstances
+                    error:(NSError **)error
+{
+	return [self setSuspended:YES definition:definitionId includeInstances:includeInstances error:error];
+}
+
+- (BOOL)activateDefinition:(NSString *)definitionId
+          includeInstances:(BOOL)includeInstances
+                     error:(NSError **)error
+{
+	return [self setSuspended:NO definition:definitionId includeInstances:includeInstances error:error];
+}
+
+- (BOOL)isDefinitionSuspended:(NSString *)definitionId
+{
+	return [_store definitionRecordWithId:definitionId].suspended;
 }
 
 - (void (^)(void))didStoreDeployment

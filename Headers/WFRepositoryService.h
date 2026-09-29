@@ -48,4 +48,15 @@
                                     error:(NSError **)error;
 - (WFProcessDefinition *)definitionWithId:(NSString *)definitionId error:(NSError **)error;
 
+/* A suspended definition starts no instances -- by the API, a message, a
+ * signal, its timer or a call activity. With includeInstances its running
+ * instances are suspended, or activated, with it. */
+- (BOOL)suspendDefinition:(NSString *)definitionId
+         includeInstances:(BOOL)includeInstances
+                    error:(NSError **)error;
+- (BOOL)activateDefinition:(NSString *)definitionId
+          includeInstances:(BOOL)includeInstances
+                     error:(NSError **)error;
+- (BOOL)isDefinitionSuspended:(NSString *)definitionId;
+
 @end

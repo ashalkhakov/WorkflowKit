@@ -2,6 +2,7 @@
 #import "WFProcessDefinition+Repository.h"
 #import "WFFlowElements.h"
 #import "WFDuration.h"
+#import "WFFeelInternal.h"
 
 @interface WFFlowNode (WFBuilderAccess)
 - (void)addIncomingFlowId:(NSString *)flowId;
@@ -14,6 +15,17 @@
 - (void)setTaskPriority:(NSNumber *)priority;
 - (void)setMultiInstance:(WFMultiInstance *)multiInstance;
 - (void)setForCompensation:(BOOL)forCompensation;
+- (void)addInputParameter:(WFParameter *)parameter;
+- (void)addOutputParameter:(WFParameter *)parameter;
+@end
+
+@interface WFTask (WFBuilderAccess)
+- (void)setAssigneeExpression:(WFFeelExpression *)expression;
+- (void)setCandidateUsers:(WFFeelExpression *)expression;
+- (void)setCandidateGroups:(WFFeelExpression *)expression;
+- (void)setDueDate:(WFFeelExpression *)expression;
+- (void)setFollowUpDate:(WFFeelExpression *)expression;
+- (void)setPriority:(WFFeelExpression *)expression;
 @end
 
 @interface WFEvent (WFBuilderAccess)
@@ -506,6 +518,79 @@
 	          messageName:nil timer:nil attachedToId:nil errorRef:errorRef interrupting:YES];
 }
 
+- (instancetype)setAssignment:(NSDictionary<NSString *, NSString *> *)attributes
+                   forElement:(NSString *)elementId
+{
+	WFFlowNode *node = [self.nodes objectForKey:elementId];
+	if (![node isKindOfClass:[WFTask class]] || [(WFTask *)node kind] != WFTaskKindUser) {
+		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+			code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
+				[NSString stringWithFormat:@"%@: only a user task has an assignment", elementId] }];
+		return self;
+	}
+	WFTask *task = (WFTask *)node;
+	NSDictionary *kinds = @{ @"assignee": @(WFAttributeKindString), @"candidateUsers": @(WFAttributeKindList),
+		@"candidateGroups": @(WFAttributeKindList), @"dueDate": @(WFAttributeKindDate),
+		@"followUpDate": @(WFAttributeKindDate), @"priority": @(WFAttributeKindNumber) };
+	for (NSString *key in attributes) {
+		NSNumber *kind = [kinds objectForKey:key];
+		NSError *error = nil;
+		WFFeelExpression *expression = kind != nil
+			? WFAttributeExpression([attributes objectForKey:key], (WFAttributeKind)[kind integerValue], &error)
+			: nil;
+		if (expression == nil) {
+			self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+				code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
+					[NSString stringWithFormat:@"%@: %@: %@", elementId, key,
+						kind == nil ? @"not an assignment attribute" : [error localizedDescription]] }];
+			continue;
+		}
+		[task setValue:expression forKey:[key isEqualToString:@"assignee"] ? @"assigneeExpression" : key];
+	}
+	return self;
+}
+
+- (WFFeelExpression *)parameterValue:(NSString *)value name:(NSString *)name element:(NSString *)elementId
+{
+	NSError *error = nil;
+	WFFeelExpression *expression = WFAttributeExpression(value, WFAttributeKindString, &error);
+	if (expression == nil && value != nil) {
+		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+			code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
+				[NSString stringWithFormat:@"%@: parameter %@: %@", elementId, name,
+					[error localizedDescription]] }];
+	}
+	return expression;
+}
+
+- (instancetype)addInputParameter:(NSString *)name value:(NSString *)value forElement:(NSString *)elementId
+{
+	return [self addInputParameter:name expression:[self parameterValue:value name:name element:elementId]
+	                    forElement:elementId];
+}
+
+- (instancetype)addOutputParameter:(NSString *)name value:(NSString *)value forElement:(NSString *)elementId
+{
+	return [self addOutputParameter:name expression:[self parameterValue:value name:name element:elementId]
+	                     forElement:elementId];
+}
+
+- (instancetype)addInputParameter:(NSString *)name
+                       expression:(WFFeelExpression *)expression
+                       forElement:(NSString *)elementId
+{
+	[[self.nodes objectForKey:elementId] addInputParameter:[WFParameter parameter:name expression:expression]];
+	return self;
+}
+
+- (instancetype)addOutputParameter:(NSString *)name
+                        expression:(WFFeelExpression *)expression
+                        forElement:(NSString *)elementId
+{
+	[[self.nodes objectForKey:elementId] addOutputParameter:[WFParameter parameter:name expression:expression]];
+	return self;
+}
+
 - (instancetype)setTimer:(WFTimer *)timer forElement:(NSString *)elementId
 {
 	WFFlowNode *node = [self.nodes objectForKey:elementId];
@@ -945,6 +1030,12 @@
 		}
 		if (node.multiInstance != nil && ![self validateMultiInstance:node error:error]) {
 			return NO;
+		}
+		if (([node.inputParameters count] > 0 || [node.outputParameters count] > 0)
+		    && ![node isKindOfClass:[WFTask class]] && ![node isKindOfClass:[WFSubProcess class]]
+		    && ![node isKindOfClass:[WFCallActivity class]]) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: only tasks, subprocesses and call activities map inputs and outputs", node.elementId]];
 		}
 		if ([node isKindOfClass:[WFSubProcess class]] && ![self validateSubProcess:(WFSubProcess *)node error:error]) {
 			return NO;

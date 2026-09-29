@@ -193,6 +193,23 @@ id WFFeelArithmetic(WFFeelOperator op, id a, id b);
 /* The decimal, or NSNull when it is not a number. */
 id WFFeelNumberResult(NSDecimalNumber *number);
 
+/* What a Camunda attribute's literal text is: a user, users or groups
+ * separated by commas, a date, a number. */
+typedef NS_ENUM(NSInteger, WFAttributeKind) {
+	WFAttributeKindString = 0,
+	WFAttributeKindList,
+	WFAttributeKindDate,
+	WFAttributeKindNumber
+};
+
+/* A Camunda attribute's value as an expression: ${...} or #{...} is the
+ * Camunda 7 subset, =... FEEL, and anything else literal text of the
+ * kind. nil, with an error, for text that is none of these. */
+WFFeelExpression *WFAttributeExpression(NSString *text, WFAttributeKind kind, NSError **error);
+/* The expression back as attribute text: a literal as its plain text, a
+ * computed value as =FEEL. */
+NSString *WFAttributeText(WFFeelExpression *expression, WFAttributeKind kind);
+
 /* FEEL's view of a value. */
 BOOL WFFeelIsNull(id value);
 BOOL WFFeelIsBoolean(id value);

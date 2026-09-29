@@ -6,6 +6,8 @@
 #import "WFCondition.h"
 #import "WFDuration.h"
 #import "WFTimers.h"
+#import "WFFeelInternal.h"
+#include <math.h>
 
 static NSString * const WFExecutionName = @"WFExecution";
 static NSString * const WFVariableName = @"WFVariable";
@@ -21,6 +23,8 @@ static NSString * const WFHistoricTaskName = @"WFHistoricTaskInstance";
 static NSString * const WFHistoricUpdateName = @"WFHistoricVariableUpdate";
 static NSString * const WFHistoricIncidentName = @"WFHistoricIncident";
 static NSString * const WFHistoricJobLogName = @"WFHistoricJobLog";
+static NSString * const WFDefinitionRecordName = @"WFDefinitionRecord";
+static NSString * const WFIdentityLinkName = @"WFIdentityLink";
 
 /* The BPMN element a node is, as history names activity types. */
 static NSString *
@@ -329,6 +333,13 @@ WFGone(NSManagedObject *object)
 			@"the definition has no start event")];
 		return nil;
 	}
+	/* However it is started -- by the API, a message, a signal, a timer or
+	 * a call activity -- a suspended definition starts nothing. */
+	if ([self isDefinitionSuspended:definition.definitionId]) {
+		[self fail:WFCommandError(WFErrorSuspended, [NSString stringWithFormat:
+			@"%@ version %ld is suspended", definition.processId, (long)definition.version])];
+		return nil;
+	}
 	[_definitions setObject:definition forKey:definition.definitionId];
 	WFExecutionEntity *root = [self insert:WFExecutionName];
 	root.executionId = [WFCommandContext newId];
@@ -367,8 +378,13 @@ WFGone(NSManagedObject *object)
 	if ([node isKindOfClass:[WFSubProcess class]]) {
 		return YES;
 	}
-	return ([node isKindOfClass:[WFTask class]] || [node isKindOfClass:[WFCallActivity class]])
-		&& [[scope boundaryEventsAttachedTo:node.elementId] count] > 0;
+	if (![node isKindOfClass:[WFTask class]] && ![node isKindOfClass:[WFCallActivity class]]) {
+		return NO;
+	}
+	/* Boundary events wait on the activity's own scope, and its mapped
+	 * inputs are variables of it. */
+	return [[scope boundaryEventsAttachedTo:node.elementId] count] > 0
+		|| [node.inputParameters count] > 0 || [node.outputParameters count] > 0;
 }
 
 /* Is this the scope execution created for a task with boundary events? */
@@ -426,6 +442,9 @@ WFGone(NSManagedObject *object)
 	 * exactly that subtree. */
 	WFExecutionEntity *inner = [self newChildOf:execution concurrent:NO];
 	execution.isActive = NO;
+	if (![self mapInputsOf:node from:execution into:inner]) {
+		return;
+	}
 	[self armBoundaryEventsOf:node scope:scope on:inner];
 	if ([node isKindOfClass:[WFSubProcess class]]) {
 		WFProcessDefinition *innerDefinition = [(WFSubProcess *)node innerDefinition];
@@ -1414,6 +1433,9 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	instance.activityInstanceId = [WFCommandContext newId];
 	instance.isActive = YES;
 	[self activityStarted:node execution:instance];
+	if (![self mapInputsOf:node from:instance into:instance]) {
+		return;
+	}
 	if ([node isKindOfClass:[WFSubProcess class]]) {
 		WFExecutionEntity *inner = [self newChildOf:instance concurrent:NO];
 		instance.isActive = NO;
@@ -1437,6 +1459,9 @@ static NSString * const WFLoopCounter = @"loopCounter";
 {
 	WFExecutionEntity *body = instance.parent;
 	[self activityEnded:instance.activityInstanceId canceled:NO];
+	if (![self mapOutputsOf:node from:instance to:body]) {
+		return;
+	}
 	[self remove:instance];
 	/* Two instances finishing at once both update the body's counts, so
 	 * their commands conflict rather than each missing the other. */
@@ -1686,6 +1711,87 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	return [self newChildOf:scopeExecution concurrent:YES];
 }
 
+#pragma mark - Suspending and deleting
+
+- (BOOL)isDefinitionSuspended:(NSString *)definitionId
+{
+	if (definitionId == nil) {
+		return NO;
+	}
+	NSManagedObject *record = [[self fetch:WFDefinitionRecordName
+	                             predicate:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId]
+	                                  sort:nil
+	                                 limit:1] lastObject];
+	return [[record valueForKey:@"suspended"] boolValue];
+}
+
+/* The instance and the instances its call activities started, and theirs:
+ * every execution, task, job and external task. */
+- (void)setSuspended:(BOOL)suspended processInstance:(NSString *)processInstanceId
+{
+	NSPredicate *mine = [NSPredicate predicateWithFormat:@"processInstanceId == %@", processInstanceId];
+	for (NSString *entity in @[ WFExecutionName, WFTaskName, WFJobName, WFExternalTaskName ]) {
+		for (NSManagedObject *row in [self fetch:entity predicate:mine sort:nil limit:0]) {
+			[row setValue:[NSNumber numberWithBool:suspended] forKey:@"suspended"];
+		}
+	}
+	for (WFExecutionEntity *called in [self fetch:WFExecutionName
+	                                    predicate:[NSPredicate predicateWithFormat:
+	                                        @"superProcessInstanceId == %@ AND parent == nil", processInstanceId]
+	                                         sort:nil
+	                                        limit:0]) {
+		[self setSuspended:suspended processInstance:called.processInstanceId];
+	}
+}
+
+- (void)setSuspended:(BOOL)suspended definition:(NSString *)definitionId includeInstances:(BOOL)instances
+{
+	NSManagedObject *record = [[self fetch:WFDefinitionRecordName
+	                             predicate:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId]
+	                                  sort:nil
+	                                 limit:1] lastObject];
+	if (record == nil) {
+		[self fail:WFCommandError(WFErrorUnknownElement,
+			[NSString stringWithFormat:@"no definition %@", definitionId])];
+		return;
+	}
+	[record setValue:[NSNumber numberWithBool:suspended] forKey:@"suspended"];
+	/* Its timer start event waits too. */
+	for (WFJobEntity *job in [self fetch:WFJobName
+	                           predicate:[NSPredicate predicateWithFormat:
+	                               @"jobType == %@ AND definitionId == %@", WFJobTypeTimerStart, definitionId]
+	                                sort:nil
+	                               limit:0]) {
+		job.suspended = suspended;
+	}
+	if (instances) {
+		for (WFExecutionEntity *root in [self fetch:WFExecutionName
+		                                  predicate:[NSPredicate predicateWithFormat:
+		                                      @"definitionId == %@ AND parent == nil", definitionId]
+		                                       sort:nil
+		                                      limit:0]) {
+			[self setSuspended:suspended processInstance:root.processInstanceId];
+		}
+	}
+}
+
+/* Everything in the instance is canceled -- its tasks deleted, the
+ * instances it called terminated -- and its history ends as externally
+ * terminated, with the reason. */
+- (void)deleteProcessInstance:(WFExecutionEntity *)root reason:(NSString *)reason
+{
+	[self cancelSubtree:root];
+	WFHistoricProcessInstanceEntity *history = [[self fetch:WFHistoricInstanceName
+	                                              predicate:[NSPredicate predicateWithFormat:
+	                                                  @"processInstanceId == %@", root.processInstanceId]
+	                                                   sort:nil
+	                                                  limit:1] lastObject];
+	history.endTime = [NSDate date];
+	history.state = WFHistoricStateExternallyTerminated;
+	history.deleteReason = reason;
+	[self remove:root];
+}
+
 #pragma mark - Signals and terminate
 
 - (NSUInteger)broadcastSignal:(NSString *)signalName
@@ -1706,8 +1812,11 @@ static NSString * const WFLoopCounter = @"loopCounter";
 		if ([subscription isDeleted] || _failure != nil) {
 			continue;
 		}
+		if (subscription.execution.suspended) {
+			continue;
+		}
 		if (subscription.execution == nil) {
-			if (processInstanceId != nil) {
+			if (processInstanceId != nil || [self isDefinitionSuspended:subscription.definitionId]) {
 				continue;
 			}
 			NSError *error = nil;
@@ -1758,7 +1867,155 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	[self scopeEnded:scope];
 }
 
+#pragma mark - Input and output parameters
+
+/* The activity's inputs, evaluated where the path arrives, become local
+ * variables of its scope. */
+- (BOOL)mapInputsOf:(WFFlowNode *)node from:(WFExecutionEntity *)outer into:(WFExecutionEntity *)scope
+{
+	if ([node.inputParameters count] == 0) {
+		return YES;
+	}
+	NSDictionary *variables = [self visibleVariables:outer];
+	for (WFParameter *parameter in node.inputParameters) {
+		id value = parameter.expression != nil ? [parameter.expression valueWithVariables:variables]
+			: [NSNull null];
+		if (![self setLocal:parameter.name value:value on:scope]) {
+			return NO;
+		}
+	}
+	return YES;
+}
+
+/* The activity's outputs, evaluated in its scope as it completes, are set
+ * where it is. */
+- (BOOL)mapOutputsOf:(WFFlowNode *)node from:(WFExecutionEntity *)scope to:(WFExecutionEntity *)outer
+{
+	if ([node.outputParameters count] == 0) {
+		return YES;
+	}
+	NSDictionary *variables = [self visibleVariables:scope];
+	NSMutableDictionary *outputs = [NSMutableDictionary dictionary];
+	for (WFParameter *parameter in node.outputParameters) {
+		[outputs setObject:parameter.expression != nil ? [parameter.expression valueWithVariables:variables]
+			: [NSNull null] forKey:parameter.name];
+	}
+	return [self setVariables:outputs from:outer];
+}
+
 #pragma mark - Tasks
+
+/* One of a user task's assignment attributes evaluated, or nil with the
+ * command failed when its value is not what the attribute takes. */
+- (id)evaluate:(WFFeelExpression *)expression
+      variables:(NSDictionary *)variables
+           task:(WFTask *)task
+      attribute:(NSString *)attribute
+          check:(id (^)(id value))check
+{
+	id value = [expression valueWithVariables:variables];
+	if (value == [NSNull null]) {
+		return [NSNull null];
+	}
+	id checked = check(value);
+	if (checked == nil) {
+		[self fail:WFCommandError(WFErrorInvalidState, [NSString stringWithFormat:@"%@: %@ %@ is %@",
+			task.elementId, attribute, [expression expressionString], value])];
+	}
+	return checked;
+}
+
+- (NSArray *)names:(id)value
+{
+	if ([value isKindOfClass:[NSString class]]) {
+		NSMutableArray *names = [NSMutableArray array];
+		for (NSString *part in [value componentsSeparatedByString:@","]) {
+			NSString *name = [part stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+			if ([name length] > 0) {
+				[names addObject:name];
+			}
+		}
+		return names;
+	}
+	if ([value isKindOfClass:[NSArray class]]) {
+		for (id item in value) {
+			if (![item isKindOfClass:[NSString class]]) {
+				return nil;
+			}
+		}
+		return value;
+	}
+	return nil;
+}
+
+/* A user task's assignee, candidates, dates and priority, worked out over
+ * the variables visible where it is created. */
+- (BOOL)assign:(WFTask *)task to:(WFTaskEntity *)row
+{
+	NSDictionary *variables = [self visibleVariables:row.execution];
+	id (^date)(id) = ^id(id value) {
+		if ([value isKindOfClass:[NSDate class]]) {
+			return value;
+		}
+		return [value isKindOfClass:[NSString class]] ? WFFeelParseDateTime(value) : nil;
+	};
+	if (task.assigneeExpression != nil) {
+		id assignee = [self evaluate:task.assigneeExpression variables:variables task:task attribute:@"assignee"
+		                       check:^id(id value) {
+			return [value isKindOfClass:[NSString class]] ? value : nil;
+		}];
+		if (assignee == nil) {
+			return NO;
+		}
+		row.assignee = assignee == [NSNull null] ? nil : assignee;
+	}
+	NSArray *kinds = @[ @[ @"candidateUsers", task.candidateUsers ?: [NSNull null], @"userId" ],
+	                    @[ @"candidateGroups", task.candidateGroups ?: [NSNull null], @"groupId" ] ];
+	for (NSArray *kind in kinds) {
+		if ([kind objectAtIndex:1] == [NSNull null]) {
+			continue;
+		}
+		id names = [self evaluate:[kind objectAtIndex:1] variables:variables task:task
+		                attribute:[kind objectAtIndex:0] check:^id(id value) { return [self names:value]; }];
+		if (names == nil) {
+			return NO;
+		}
+		for (NSString *name in names == [NSNull null] ? @[] : names) {
+			WFIdentityLinkEntity *link = [self insert:WFIdentityLinkName];
+			link.type = WFIdentityLinkCandidate;
+			[link setValue:name forKey:[kind objectAtIndex:2]];
+			link.processInstanceId = row.processInstanceId;
+			link.task = row;
+		}
+	}
+	if (task.dueDate != nil) {
+		id due = [self evaluate:task.dueDate variables:variables task:task attribute:@"dueDate" check:date];
+		if (due == nil) {
+			return NO;
+		}
+		row.dueDate = due == [NSNull null] ? nil : due;
+	}
+	if (task.followUpDate != nil) {
+		id followUp = [self evaluate:task.followUpDate variables:variables task:task attribute:@"followUpDate"
+		                       check:date];
+		if (followUp == nil) {
+			return NO;
+		}
+		row.followUpDate = followUp == [NSNull null] ? nil : followUp;
+	}
+	if (task.priority != nil) {
+		id priority = [self evaluate:task.priority variables:variables task:task attribute:@"priority"
+		                       check:^id(id value) {
+			return [value isKindOfClass:[NSNumber class]] && [value doubleValue] == floor([value doubleValue])
+				? value : nil;
+		}];
+		if (priority == nil) {
+			return NO;
+		}
+		row.priority = priority == [NSNull null] ? 50 : (int32_t)[priority intValue];
+	}
+	return YES;
+}
 
 - (void)executeTask:(WFTask *)task execution:(WFExecutionEntity *)execution
 {
@@ -1774,6 +2031,9 @@ static NSString * const WFLoopCounter = @"loopCounter";
 		row.createdAt = [NSDate date];
 		row.priority = 50;
 		row.execution = execution;
+		if (![self assign:task to:row]) {
+			return;
+		}
 		[self taskStarted:row];
 		WFWorkItem *value = [WFWorkItem wf_workItemWithEntity:row];
 		WFProcessEngine *engine = self.engine;
@@ -1812,6 +2072,9 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	}
 	if ([self isActivityScope:execution node:node]) {
 		WFExecutionEntity *host = execution.parent;
+		if (![self mapOutputsOf:node from:execution to:host]) {
+			return;
+		}
 		[self remove:execution];
 		host.isActive = YES;
 		[self leave:node execution:host];
@@ -1995,6 +2258,9 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	WFExecutionEntity *host = scopeExecution.parent;
 	WFFlowNode *node = [self node:host.activityId of:host];
 	if (node != nil) {
+		if (![self mapOutputsOf:node from:scopeExecution to:host]) {
+			return;
+		}
 		[self carryCompensationsOutOf:scopeExecution node:node host:host];
 	}
 	[self remove:scopeExecution];
@@ -2418,6 +2684,13 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	if (row != nil && row.endTime == nil) {
 		row.endTime = [NSDate date];
 		row.deleteReason = reason;
+	}
+}
+
+- (void)historyTask:(NSString *)taskId assignee:(NSString *)assignee
+{
+	if ([self records:WFHistoryLevelActivity]) {
+		[self historicTask:taskId].assignee = assignee;
 	}
 }
 
