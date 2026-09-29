@@ -18,6 +18,14 @@ If a bug here turns out to be GNUstep's, work in that repository and read its
 `CLAUDE.md` first: reproduce in the docker container, fix, turn the
 reproduction into a test in GNUstep's own suite, and push it there.
 
+## Design reference and the clean-room rule
+
+The engine follows Camunda 7's execution model: `docs/execution-model.md`
+is the design, and Camunda's documented behaviour settles open questions.
+UDWorkflow is meant to be LGPL-licensed and Camunda 7 is Apache-2.0, so work
+from its public documentation and the BPMN spec only. Never read, copy or
+paraphrase its source code, SQL or documentation text into this repository.
+
 ## Building and testing
 
 ```sh

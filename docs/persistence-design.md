@@ -1,5 +1,9 @@
 # Durable execution on Core Data — design
 
+> **Superseded** by [execution-model.md](execution-model.md): UDWorkflow now
+> follows Camunda 7's execution model. This page describes the token-marking
+> engine as currently implemented, until the new core replaces it.
+
 Status: steps 1–3 implemented (see "Build order"); retries and incidents are
 next. Scope: phase 1 of the roadmap, an embeddable single-node engine whose
 state lives in FreeCoreData (Apple's Core Data on macOS), and nothing that
