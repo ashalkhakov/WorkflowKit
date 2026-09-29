@@ -18,6 +18,17 @@
 @property (nonatomic) double boundsY;
 @property (nonatomic) double boundsWidth;
 @property (nonatomic) double boundsHeight;
+/* Transaction boundaries, as camunda:asyncBefore and camunda:asyncAfter:
+ * the command stops before entering, or after leaving, the node, and a job
+ * carries on from there. */
+@property (nonatomic, readonly, getter=isAsyncBefore) BOOL asyncBefore;
+@property (nonatomic, readonly, getter=isAsyncAfter) BOOL asyncAfter;
+/* camunda:exclusive: whether the node's jobs run one after another with the
+ * instance's other work. YES unless set otherwise. */
+@property (nonatomic, readonly, getter=isExclusive) BOOL exclusive;
+/* camunda:failedJobRetryTimeCycle: "R5/PT5M", or a list of ISO-8601
+ * durations, one per retry. nil for the default of three attempts. */
+@property (nonatomic, readonly, copy) NSString *retryTimeCycle;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId

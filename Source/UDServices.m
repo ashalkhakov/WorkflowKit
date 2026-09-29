@@ -590,3 +590,197 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 }
 
 @end
+
+#pragma mark - Management service
+
+@interface UDJob ()
+@property (nonatomic, readwrite, copy) NSString *jobId;
+@property (nonatomic, readwrite, copy) NSString *jobType;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSString *definitionId;
+@property (nonatomic, readwrite, copy) NSDate *dueDate;
+@property (nonatomic, readwrite) NSInteger retries;
+@property (nonatomic, readwrite, copy) NSString *exceptionMessage;
+@property (nonatomic, readwrite, getter=isExclusive) BOOL exclusive;
+@end
+
+@implementation UDJob
+
++ (instancetype)ud_jobWithEntity:(UDJobEntity *)entity
+{
+	UDJob *job = [[UDJob alloc] init];
+	job.jobId = entity.jobId;
+	job.jobType = entity.jobType;
+	job.activityId = entity.activityId;
+	job.processInstanceId = entity.processInstanceId;
+	job.definitionId = entity.definitionId ?: entity.execution.definitionId;
+	job.dueDate = entity.dueDate;
+	job.retries = entity.retries;
+	job.exceptionMessage = entity.exceptionMessage;
+	job.exclusive = entity.exclusive;
+	return job;
+}
+
+- (NSString *)description
+{
+	return [NSString stringWithFormat:@"<UDJob %@ %@ at %@, %ld left>",
+		self.jobType, self.jobId, self.activityId, (long)self.retries];
+}
+
+@end
+
+@interface UDIncident ()
+@property (nonatomic, readwrite, copy) NSString *incidentId;
+@property (nonatomic, readwrite, copy) NSString *incidentType;
+@property (nonatomic, readwrite, copy) NSString *message;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSString *configuration;
+@property (nonatomic, readwrite, copy) NSDate *createdAt;
+@end
+
+@implementation UDIncident
+
++ (instancetype)ud_incidentWithEntity:(UDIncidentEntity *)entity
+{
+	UDIncident *incident = [[UDIncident alloc] init];
+	incident.incidentId = entity.incidentId;
+	incident.incidentType = entity.incidentType;
+	incident.message = entity.message;
+	incident.activityId = entity.activityId;
+	incident.processInstanceId = entity.processInstanceId;
+	incident.configuration = entity.configuration;
+	incident.createdAt = entity.createdAt;
+	return incident;
+}
+
+@end
+
+@implementation UDManagementService
+{
+	__weak UDProcessEngine *_engine;
+}
+
+- (instancetype)initWithProcessEngine:(UDProcessEngine *)engine
+{
+	self = [super init];
+	if (self) {
+		_engine = engine;
+	}
+	return self;
+}
+
+- (NSArray<UDJob *> *)jobsMatching:(NSPredicate *)predicate
+{
+	NSMutableArray *jobs = [NSMutableArray array];
+	[_engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **error) {
+		(void)error;
+		for (UDJobEntity *entity in [command fetch:@"UDJob"
+		                                 predicate:predicate
+		                                      sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"dueDate"
+		                                                                              ascending:YES] ]
+		                                     limit:0]) {
+			[jobs addObject:[UDJob ud_jobWithEntity:entity]];
+		}
+		return YES;
+	} error:NULL];
+	return jobs;
+}
+
+- (NSArray<UDJob *> *)jobsForProcessInstance:(NSString *)processInstanceId
+{
+	return [self jobsMatching:[NSPredicate predicateWithFormat:@"processInstanceId == %@",
+		processInstanceId]];
+}
+
+- (NSArray<UDJob *> *)jobsForDefinition:(NSString *)definitionId
+{
+	return [self jobsMatching:[NSPredicate predicateWithFormat:@"definitionId == %@",
+		definitionId]];
+}
+
+- (UDJob *)jobWithId:(NSString *)jobId
+{
+	return [[self jobsMatching:[NSPredicate predicateWithFormat:@"jobId == %@", jobId]] lastObject];
+}
+
+- (NSError *)noJob:(NSString *)jobId
+{
+	return UDServiceError(UDWorkflowErrorUnknownElement,
+		[NSString stringWithFormat:@"no job %@", jobId]);
+}
+
+- (BOOL)executeJob:(NSString *)jobId error:(NSError **)error
+{
+	UDJob *job = jobId == nil ? nil : [self jobWithId:jobId];
+	if (job == nil) {
+		if (error != NULL) {
+			*error = [self noJob:jobId];
+		}
+		return NO;
+	}
+	UDProcessEngine *engine = _engine;
+	__block BOOL ok = NO;
+	__block NSError *localError = nil;
+	/* On the instance's queue, so it does not run beside the instance's
+	 * other work. */
+	dispatch_sync([engine ud_queueFor:job.processInstanceId ?: job.jobId], ^{
+		NSError *jobError = nil;
+		ok = [engine ud_runJob:jobId force:YES error:&jobError];
+		localError = jobError;
+	});
+	if (!ok && error != NULL) {
+		*error = localError;
+	}
+	return ok;
+}
+
+- (BOOL)setRetries:(NSInteger)retries forJob:(NSString *)jobId error:(NSError **)error
+{
+	UDProcessEngine *engine = _engine;
+	return [engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **commandError) {
+		UDJobEntity *job = [[command fetch:@"UDJob"
+		                         predicate:[NSPredicate predicateWithFormat:@"jobId == %@", jobId ?: @""]
+		                              sort:nil
+		                             limit:1] lastObject];
+		if (job == nil) {
+			if (commandError != NULL) {
+				*commandError = [self noJob:jobId];
+			}
+			return NO;
+		}
+		job.retries = (int32_t)MAX(retries, 0);
+		if (retries > 0) {
+			[command resolveIncidentsFor:jobId];
+		}
+		NSString *processInstanceId = job.processInstanceId;
+		NSDate *due = job.dueDate;
+		BOOL exclusive = job.exclusive;
+		[command afterCommit:^{
+			[engine ud_jobCreated:jobId processInstanceId:processInstanceId
+			              dueDate:due exclusive:exclusive];
+		}];
+		return YES;
+	} error:error];
+}
+
+- (NSArray<UDIncident *> *)incidentsForProcessInstance:(NSString *)processInstanceId
+{
+	NSMutableArray *incidents = [NSMutableArray array];
+	[_engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **error) {
+		(void)error;
+		for (UDIncidentEntity *entity in [command fetch:@"UDIncident"
+		                                      predicate:[NSPredicate predicateWithFormat:
+		                                          @"processInstanceId == %@", processInstanceId]
+		                                           sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"createdAt"
+		                                                                                   ascending:YES] ]
+		                                          limit:0]) {
+			[incidents addObject:[UDIncident ud_incidentWithEntity:entity]];
+		}
+		return YES;
+	} error:NULL];
+	return incidents;
+}
+
+@end

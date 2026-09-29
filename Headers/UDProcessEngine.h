@@ -7,6 +7,7 @@
 #import "UDRuntimeService.h"
 #import "UDTaskService.h"
 #import "UDHistoryService.h"
+#import "UDManagementService.h"
 #import <dispatch/dispatch.h>
 
 @class UDProcessEngine;
@@ -41,12 +42,17 @@ processInstanceEnded:(UDProcessInstance *)instance;
 @property (nonatomic, readonly, strong) UDRuntimeService *runtimeService;
 @property (nonatomic, readonly, strong) UDTaskService *taskService;
 @property (nonatomic, readonly, strong) UDHistoryService *historyService;
+@property (nonatomic, readonly, strong) UDManagementService *managementService;
 
 /* Owner of the engine's job locks and worker id of its in-process worker.
  * Stable across restarts on one host by default, so an engine that
  * restarts takes back what it held. Engines sharing a store need distinct
  * identifiers. */
 @property (nonatomic, copy) NSString *identifier;
+/* Whether the job executor runs jobs by itself. With NO, jobs wait until
+ * managementService runs them -- for tests that step through async
+ * continuations and timers. Default YES. */
+@property (nonatomic) BOOL jobExecutorActive;
 /* How long a fetched external task or acquired job stays locked. Default
  * five minutes. */
 @property (nonatomic) NSTimeInterval lockDuration;

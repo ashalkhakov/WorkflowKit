@@ -79,6 +79,12 @@
                           onTask:(NSString *)taskId
                         errorRef:(NSString *)errorRef
                     interrupting:(BOOL)interrupting;
+/* Transaction boundaries and job settings of a node already added. */
+- (instancetype)setAsyncBefore:(BOOL)asyncBefore
+                    asyncAfter:(BOOL)asyncAfter
+                     exclusive:(BOOL)exclusive
+                    forElement:(NSString *)elementId;
+- (instancetype)setRetryTimeCycle:(NSString *)cycle forElement:(NSString *)elementId;
 /* Names a node or a sequence flow already added. */
 - (instancetype)setName:(NSString *)name forElement:(NSString *)elementId;
 - (instancetype)setBoundsFor:(NSString *)elementId

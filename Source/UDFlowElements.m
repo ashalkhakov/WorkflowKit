@@ -7,6 +7,10 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 @interface UDFlowNode ()
 @property (nonatomic, copy, readwrite) NSString *elementId;
 @property (nonatomic, copy, readwrite) NSString *name;
+@property (nonatomic, readwrite, getter=isAsyncBefore) BOOL asyncBefore;
+@property (nonatomic, readwrite, getter=isAsyncAfter) BOOL asyncAfter;
+@property (nonatomic, readwrite, getter=isExclusive) BOOL exclusive;
+@property (nonatomic, readwrite, copy) NSString *retryTimeCycle;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableIncoming;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableOutgoing;
 - (void)addIncomingFlowId:(NSString *)flowId;
@@ -23,6 +27,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 	if (self) {
 		_elementId = [elementId copy];
 		_name = [name copy];
+		_exclusive = YES;
 		_mutableIncoming = [NSMutableArray array];
 		_mutableOutgoing = [NSMutableArray array];
 	}

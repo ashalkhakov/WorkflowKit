@@ -23,7 +23,23 @@
              processInstanceId:(NSString *)processInstanceId;
 - (void)ud_jobCreated:(NSString *)jobId
     processInstanceId:(NSString *)processInstanceId
-              dueDate:(NSDate *)dueDate;
+              dueDate:(NSDate *)dueDate
+            exclusive:(BOOL)exclusive;
+/* Runs one job on the calling thread: acquire, then run, then on failure
+ * record it. force ignores the due date, retries and other owners' locks. */
+- (BOOL)ud_runJob:(NSString *)jobId force:(BOOL)force error:(NSError **)error;
+/* The serial queue a process instance's work runs on. */
+- (dispatch_queue_t)ud_queueFor:(NSString *)key;
+@end
+
+@interface UDManagementService (UDInternal)
+- (instancetype)initWithProcessEngine:(UDProcessEngine *)engine;
+@end
+
+@interface UDRepositoryService (UDInternal)
+/* Called after each stored deployment: a timer start event may have added
+ * a job. */
+@property (nonatomic, copy) void (^didStoreDeployment)(void);
 @end
 
 @interface UDWorkItem (UDInternal)

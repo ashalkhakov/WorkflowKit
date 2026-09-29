@@ -533,6 +533,10 @@
 	NSDictionary *task = [[self rows:@"UDExternalTask" engine:engine] lastObject];
 	XCTAssertEqualObjects([task objectForKey:@"retries"], @0);
 	XCTAssertEqualObjects([task objectForKey:@"errorMessage"], @"down");
+	UDIncident *incident = [[engine.managementService incidentsForProcessInstance:pid] lastObject];
+	XCTAssertEqualObjects(incident.incidentType, UDIncidentTypeFailedExternalTaskName);
+	XCTAssertEqualObjects(incident.configuration, [task objectForKey:@"externalTaskId"]);
+	XCTAssertEqualObjects(incident.activityId, @"work");
 }
 
 #pragma mark - Subprocesses and variables
@@ -831,6 +835,213 @@
 	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"byDelegate"], @YES);
 }
 
+#pragma mark - Jobs
+
+- (void)testAsyncBeforeWaitsForItsJob
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"later"];
+	[[[b addStart:@"start"] addServiceTask:@"book" action:@"book"] addEnd:@"end"];
+	[[b connect:@"start" to:@"book"] connect:@"book" to:@"end"];
+	[b setAsyncBefore:YES asyncAfter:NO exclusive:YES forElement:@"book"];
+	UDMapHandler *h = [[UDMapHandler alloc] init];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	engine.jobExecutorActive = NO;
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	/* The start command stopped before the task: no call yet, one job. */
+	XCTAssertEqual([h calls], (NSUInteger)0);
+	NSArray *jobs = [engine.managementService jobsForProcessInstance:pid];
+	XCTAssertEqual([jobs count], (NSUInteger)1);
+	UDJob *job = [jobs lastObject];
+	XCTAssertEqualObjects(job.jobType, UDJobTypeAsyncBeforeName);
+	XCTAssertEqualObjects(job.activityId, @"book");
+	XCTAssertTrue([engine.managementService executeJob:job.jobId error:&error], @"%@", error);
+	XCTAssertTrue([engine waitUntilSettled:pid timeout:10.0]);
+	XCTAssertEqual([h calls], (NSUInteger)1);
+	XCTAssertTrue([self ended:pid engine:engine]);
+}
+
+- (void)testAsyncAfterWaitsForItsJob
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"thenLater"];
+	[[[b addStart:@"start"] addUserTask:@"approve" name:@"Approve" assignee:@"boss"] addEnd:@"end"];
+	[[b connect:@"start" to:@"approve"] connect:@"approve" to:@"end"];
+	[b setAsyncBefore:NO asyncAfter:YES exclusive:YES forElement:@"approve"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	engine.jobExecutorActive = NO;
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	[self complete:@"approve" of:pid engine:engine variables:@{ @"ok": @YES }];
+	/* The task is done and its variables committed; leaving waits. */
+	XCTAssertFalse([self ended:pid engine:engine]);
+	XCTAssertNil([self task:@"approve" of:pid engine:engine]);
+	UDJob *job = [[engine.managementService jobsForProcessInstance:pid] lastObject];
+	XCTAssertEqualObjects(job.jobType, UDJobTypeAsyncAfterName);
+	XCTAssertTrue([engine.managementService executeJob:job.jobId error:&error], @"%@", error);
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"ok"], @YES);
+}
+
+/* An exclusive gateway behind an async continuation, with no default: it
+ * fails until "amount" is set. */
+- (UDProcessDefinition *)fragileDefinition:(NSString *)cycle
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"fragile"];
+	[[[[b addStart:@"start"] addExclusive:@"route" defaultFlow:nil] addEnd:@"big"] addEnd:@"small"];
+	[b connect:@"start" to:@"route"];
+	[b connect:@"route" to:@"big" key:@"amount" op:UDComparisonOpGreater value:@100];
+	[b connect:@"route" to:@"small" key:@"amount" op:UDComparisonOpLessOrEqual value:@100];
+	[b setAsyncBefore:YES asyncAfter:NO exclusive:YES forElement:@"route"];
+	if (cycle != nil) {
+		[b setRetryTimeCycle:cycle forElement:@"route"];
+	}
+	UDProcessDefinition *def = [b build:&error];
+	XCTAssertNotNil(def, @"%@", error);
+	return def;
+}
+
+- (void)testFailingJobRaisesAnIncidentUntilFixed
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	engine.jobExecutorActive = NO;
+	NSString *pid = [self run:[self fragileDefinition:nil] engine:engine variables:nil];
+	UDManagementService *management = engine.managementService;
+	NSString *jobId = [[[management jobsForProcessInstance:pid] lastObject] jobId];
+	for (NSInteger left = 2; left >= 0; left--) {
+		XCTAssertFalse([management executeJob:jobId error:&error]);
+		XCTAssertEqual([error code], (NSInteger)UDWorkflowErrorNoPath);
+		XCTAssertEqual([[management jobWithId:jobId] retries], left);
+	}
+	UDIncident *incident = [[management incidentsForProcessInstance:pid] lastObject];
+	XCTAssertEqualObjects(incident.incidentType, UDIncidentTypeFailedJobName);
+	XCTAssertEqualObjects(incident.configuration, jobId);
+	XCTAssertEqualObjects(incident.activityId, @"route");
+	XCTAssertNotNil([[management jobWithId:jobId] exceptionMessage]);
+
+	/* Fix the data, give the job an attempt: the incident goes, the job
+	 * runs, the instance ends. */
+	XCTAssertTrue([engine.runtimeService setVariables:@{ @"amount": @500 }
+	                                processInstanceId:pid error:&error], @"%@", error);
+	XCTAssertTrue([management setRetries:1 forJob:jobId error:&error], @"%@", error);
+	XCTAssertEqual([[management incidentsForProcessInstance:pid] count], (NSUInteger)0);
+	XCTAssertTrue([management executeJob:jobId error:&error], @"%@", error);
+	XCTAssertTrue([self ended:pid engine:engine]);
+}
+
+- (void)testRetryTimeCycleDelaysTheRetry
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	engine.jobExecutorActive = NO;
+	NSString *pid = [self run:[self fragileDefinition:@"R4/PT10M"] engine:engine variables:nil];
+	UDJob *job = [[engine.managementService jobsForProcessInstance:pid] lastObject];
+	XCTAssertEqual(job.retries, (NSInteger)5, @"the first attempt and four retries");
+	XCTAssertFalse([engine.managementService executeJob:job.jobId error:&error]);
+	UDJob *after = [engine.managementService jobWithId:job.jobId];
+	XCTAssertEqual(after.retries, (NSInteger)4);
+	XCTAssertEqualWithAccuracy([after.dueDate timeIntervalSinceNow], 600.0, 5.0);
+}
+
+- (void)testJobExecutorRetriesByItself
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	XCTAssertTrue([engine openWithError:&error], @"%@", error);
+	NSString *pid = [self run:[self fragileDefinition:nil] engine:engine variables:nil];
+	/* Three attempts in the background, then an incident. */
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
+	while ([deadline timeIntervalSinceNow] > 0
+	       && [[engine.managementService incidentsForProcessInstance:pid] count] == 0) {
+		[NSThread sleepForTimeInterval:0.02];
+	}
+	XCTAssertEqual([[engine.managementService incidentsForProcessInstance:pid] count], (NSUInteger)1);
+}
+
+- (void)testTimerStartEvent
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"nightly"];
+	[[[b addTimerStart:@"tick" duration:0.2] addUserTask:@"report" name:@"Report" assignee:@"ops"]
+		addEnd:@"end"];
+	[[b connect:@"tick" to:@"report"] connect:@"report" to:@"end"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	XCTAssertTrue([engine openWithError:&error], @"%@", error);
+	UDDeployment *deployment = [engine.repositoryService deployDefinition:[b build:&error] error:&error];
+	NSString *definitionId = [[deployment.definitions lastObject] definitionId];
+	XCTAssertEqual([[engine.managementService jobsForDefinition:definitionId] count], (NSUInteger)1);
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
+	while ([deadline timeIntervalSinceNow] > 0
+	       && [[engine.taskService tasksForAssignee:@"ops"] count] == 0) {
+		[NSThread sleepForTimeInterval:0.02];
+	}
+	XCTAssertEqual([[engine.taskService tasksForAssignee:@"ops"] count], (NSUInteger)1);
+	XCTAssertEqual([[engine.managementService jobsForDefinition:definitionId] count], (NSUInteger)0);
+}
+
+- (void)testNewVersionReplacesTheTimerStart
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	engine.jobExecutorActive = NO;
+	NSString *ids[2];
+	for (int version = 0; version < 2; version++) {
+		UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"weekly"];
+		[[[b addTimerStart:@"tick" duration:3600] addUserTask:@"report" name:@"Report" assignee:@"ops"]
+			addEnd:version == 0 ? @"end" : @"done"];
+		[[b connect:@"tick" to:@"report"] connect:@"report" to:version == 0 ? @"end" : @"done"];
+		ids[version] = [[[engine.repositoryService deployDefinition:[b build:&error] error:&error]
+			definitions] lastObject].definitionId;
+	}
+	XCTAssertEqual([[engine.managementService jobsForDefinition:ids[0]] count], (NSUInteger)0);
+	XCTAssertEqual([[engine.managementService jobsForDefinition:ids[1]] count], (NSUInteger)1);
+}
+
+- (void)testConcurrentCompletionsJoinOnce
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"race"];
+	[[[[b addStart:@"start"] addParallel:@"fork"]
+		addUserTask:@"left" name:@"Left" assignee:@"a"] addUserTask:@"right" name:@"Right" assignee:@"b"];
+	[[[b addParallel:@"join"] addUserTask:@"after" name:@"After" assignee:@"c"] addEnd:@"end"];
+	[b connect:@"start" to:@"fork"];
+	[[b connect:@"fork" to:@"left"] connect:@"fork" to:@"right"];
+	[[b connect:@"left" to:@"join"] connect:@"right" to:@"join"];
+	[[b connect:@"join" to:@"after"] connect:@"after" to:@"end"];
+	UDProcessDefinition *definition = [b build:&error];
+	UDProcessEngine *engine = [self SQLiteEngineAtURL:[self temporarySQLiteURL] handler:nil];
+	[self deploy:definition engine:engine];
+	__block NSUInteger conflicts = 0;
+	for (int round = 0; round < 20; round++) {
+		NSString *pid = [engine.runtimeService startProcessInstanceByKey:@"race"
+		                                                        variables:nil error:&error].processInstanceId;
+		NSArray *tasks = [engine.taskService tasksForProcessInstance:pid];
+		XCTAssertEqual([tasks count], (NSUInteger)2);
+		dispatch_group_t group = dispatch_group_create();
+		for (UDWorkItem *task in tasks) {
+			dispatch_group_async(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+				NSError *completeError = nil;
+				/* A lost race changed nothing: the caller tries again. */
+				while (![engine.taskService completeTask:task.taskId variables:nil error:&completeError]) {
+					if ([completeError code] != UDWorkflowErrorConflict) {
+						break;
+					}
+					@synchronized (self) {
+						conflicts += 1;
+					}
+				}
+			});
+		}
+		dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+		UDDispatchRelease(group);
+		/* The join fired exactly once. */
+		XCTAssertEqualObjects([[engine.taskService tasksForProcessInstance:pid]
+			valueForKey:@"taskDefinitionKey"], @[ @"after" ], @"round %d", round);
+	}
+	NSLog(@"conflicts resolved by retrying: %lu", (unsigned long)conflicts);
+}
+
 #pragma mark - BPMN
 
 - (void)assertNode:(UDFlowNode *)a matches:(UDFlowNode *)b
@@ -845,6 +1056,10 @@
 	XCTAssertEqualWithAccuracy(a.boundsY, b.boundsY, 0.001, @"%@", a.elementId);
 	XCTAssertEqualWithAccuracy(a.boundsWidth, b.boundsWidth, 0.001, @"%@", a.elementId);
 	XCTAssertEqualWithAccuracy(a.boundsHeight, b.boundsHeight, 0.001, @"%@", a.elementId);
+	XCTAssertEqual(a.isAsyncBefore, b.isAsyncBefore, @"%@", a.elementId);
+	XCTAssertEqual(a.isAsyncAfter, b.isAsyncAfter, @"%@", a.elementId);
+	XCTAssertEqual(a.isExclusive, b.isExclusive, @"%@", a.elementId);
+	XCTAssertEqualObjects(a.retryTimeCycle, b.retryTimeCycle, @"%@", a.elementId);
 	if ([a isKindOfClass:[UDEvent class]]) {
 		UDEvent *x = (UDEvent *)a, *y = (UDEvent *)b;
 		XCTAssertEqual(x.kind, y.kind, @"%@", a.elementId);
@@ -951,6 +1166,10 @@
 		connect:@"onCancel" to:@"cancelled"];
 	[b setName:@"Request received" forElement:@"start"];
 	[b setName:@"needs review" forElement:@"toManual"];
+	[b setAsyncBefore:YES asyncAfter:NO exclusive:YES forElement:@"check"];
+	[b setAsyncBefore:NO asyncAfter:YES exclusive:NO forElement:@"audit"];
+	[b setRetryTimeCycle:@"R5/PT5M" forElement:@"check"];
+	[b setRetryTimeCycle:@"PT1M,PT10M" forElement:@"timeout"];
 	[b setBoundsFor:@"start" x:10 y:20 width:36 height:36];
 	[b setBoundsFor:@"fill" x:100 y:8 width:100 height:80];
 	[b setBoundsFor:@"manual" x:300 y:200 width:350.5 height:200];
@@ -968,6 +1187,7 @@
 	XCTAssertTrue([xml rangeOfString:@"<bpmn:timeDuration xsi:type=\"bpmn:tFormalExpression\">P7D</bpmn:timeDuration>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"PT1M30S"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"camunda:topic=\"credit.check\""].location != NSNotFound);
+	XCTAssertTrue([xml rangeOfString:@"<camunda:failedJobRetryTimeCycle>R5/PT5M</camunda:failedJobRetryTimeCycle>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmndi:BPMNShape"].location != NSNotFound);
 	UDProcessDefinition *again = [UDBpmnReader definitionFromXMLString:xml error:&error];
 	XCTAssertNotNil(again, @"%@\n%@", error, xml);

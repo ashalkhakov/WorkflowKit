@@ -1,6 +1,7 @@
 #import "UDBpmn.h"
 #import "UDFlowElements.h"
 #import "UDCondition.h"
+#import "UDDuration.h"
 #include <math.h>
 
 NSString * const UDBpmnNamespace =
@@ -116,54 +117,6 @@ UDISODuration(NSTimeInterval seconds)
 		}
 	}
 	return out;
-}
-
-/* Weeks, days, hours, minutes and seconds. Years and months are calendar
- * lengths, not durations, and are refused. Answers a negative number for
- * anything else. */
-static NSTimeInterval
-UDParseISODuration(NSString *text)
-{
-	NSString *s = [[text stringByTrimmingCharactersInSet:
-		[NSCharacterSet whitespaceAndNewlineCharacterSet]] uppercaseString];
-	if (![s hasPrefix:@"P"] || [s length] < 2) {
-		return -1;
-	}
-	NSScanner *scanner = [NSScanner scannerWithString:[s substringFromIndex:1]];
-	[scanner setCharactersToBeSkipped:nil];
-	NSTimeInterval total = 0;
-	BOOL inTime = NO;
-	BOOL any = NO;
-	while (![scanner isAtEnd]) {
-		if ([scanner scanString:@"T" intoString:NULL]) {
-			if (inTime) {
-				return -1;
-			}
-			inTime = YES;
-			continue;
-		}
-		double value = 0;
-		if (![scanner scanDouble:&value] || [scanner isAtEnd]) {
-			return -1;
-		}
-		unichar unit = [s characterAtIndex:[scanner scanLocation] + 1];
-		[scanner setScanLocation:[scanner scanLocation] + 1];
-		if (!inTime && unit == 'W') {
-			total += value * 7 * 86400;
-		} else if (!inTime && unit == 'D') {
-			total += value * 86400;
-		} else if (inTime && unit == 'H') {
-			total += value * 3600;
-		} else if (inTime && unit == 'M') {
-			total += value * 60;
-		} else if (inTime && unit == 'S') {
-			total += value;
-		} else {
-			return -1;
-		}
-		any = YES;
-	}
-	return any ? total : -1;
 }
 
 #pragma mark - Writer
@@ -390,7 +343,23 @@ UDParseISODuration(NSString *text)
 		return NO;
 	}
 
+	if (node.isAsyncBefore) {
+		[attrs appendString:@" camunda:asyncBefore=\"true\""];
+	}
+	if (node.isAsyncAfter) {
+		[attrs appendString:@" camunda:asyncAfter=\"true\""];
+	}
+	if (!node.isExclusive) {
+		[attrs appendString:@" camunda:exclusive=\"false\""];
+	}
 	NSMutableString *wiring = [NSMutableString string];
+	if (node.retryTimeCycle != nil) {
+		[wiring appendFormat:
+			@"%@<bpmn:extensionElements>\n"
+			 @"%@  <camunda:failedJobRetryTimeCycle>%@</camunda:failedJobRetryTimeCycle>\n"
+			 @"%@</bpmn:extensionElements>\n",
+			inner, inner, UDEscapeXML(node.retryTimeCycle), inner];
+	}
 	for (NSString *flowId in node.incomingFlowIds) {
 		[wiring appendFormat:@"%@<bpmn:incoming>%@</bpmn:incoming>\n",
 			inner, UDEscapeXML(flowId)];
@@ -399,7 +368,8 @@ UDParseISODuration(NSString *text)
 		[wiring appendFormat:@"%@<bpmn:outgoing>%@</bpmn:outgoing>\n",
 			inner, UDEscapeXML(flowId)];
 	}
-	/* BPMN puts incoming and outgoing before everything else. */
+	/* BPMN puts extension elements, then incoming and outgoing, before
+	 * everything else. */
 	[body insertString:wiring atIndex:0];
 	if ([body length] == 0) {
 		[out appendFormat:@"%@<bpmn:%@%@/>\n", indent, tag, attrs];
@@ -702,6 +672,7 @@ UDIgnoredElements(void)
 		if (label != nil) {
 			[builder setName:label forElement:elementId];
 		}
+		[self readJobSettings:element id:elementId into:builder];
 		NSXMLElement *bounds = [context.shapes objectForKey:elementId];
 		if (bounds != nil) {
 			[builder setBoundsFor:elementId
@@ -709,6 +680,32 @@ UDIgnoredElements(void)
 			                    y:[[self attr:@"y" of:bounds] doubleValue]
 			                width:[[self attr:@"width" of:bounds] doubleValue]
 			               height:[[self attr:@"height" of:bounds] doubleValue]];
+		}
+	}
+}
+
++ (void)readJobSettings:(NSXMLElement *)element
+                     id:(NSString *)elementId
+                   into:(UDDefinitionBuilder *)builder
+{
+	BOOL before = [[self attr:@"asyncBefore" namespace:UDCamundaNamespace of:element]
+		isEqualToString:@"true"];
+	BOOL after = [[self attr:@"asyncAfter" namespace:UDCamundaNamespace of:element]
+		isEqualToString:@"true"];
+	NSString *exclusive = [self attr:@"exclusive" namespace:UDCamundaNamespace of:element];
+	if (before || after || exclusive != nil) {
+		[builder setAsyncBefore:before
+		             asyncAfter:after
+		              exclusive:![exclusive isEqualToString:@"false"]
+		             forElement:elementId];
+	}
+	NSXMLElement *extensions = [self child:element named:@"extensionElements"];
+	for (NSXMLElement *extension in [self children:extensions of:UDCamundaNamespace]) {
+		if ([[extension localName] isEqualToString:@"failedJobRetryTimeCycle"]) {
+			NSString *cycle = [self trimmed:[extension stringValue]];
+			if ([cycle length] > 0) {
+				[builder setRetryTimeCycle:cycle forElement:elementId];
+			}
 		}
 	}
 }

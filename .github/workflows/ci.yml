@@ -35,9 +35,9 @@ jobs:
       # A commit, not a branch: it decides the recipe hash the stack is
       # cached under. The same pin as ODataStore.
       GNUSTEP_PATCHES_REF: b154b9f351b6413337cf57cc02827e634c05580f
-      # FreeCoreData, pinned to a commit like the stack. The same pin as
-      # ODataStore.
-      FREECOREDATA_REF: b612b0a90fcae0b0fabcd1ff71442988eb67b518
+      # FreeCoreData, pinned to a commit like the stack: #53, optimistic
+      # locking for the SQLite store, which the engine's joins rely on.
+      FREECOREDATA_REF: 07eaacc36a434811e706b002c44c1b7b63441c5f
     defaults:
       run:
         working-directory: ${{ github.workspace }}/source

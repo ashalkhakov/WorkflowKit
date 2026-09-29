@@ -3,6 +3,8 @@
 #import "UDStore.h"
 #import "UDBpmn.h"
 #import "UDFlowElements.h"
+#import "UDDuration.h"
+#import "UDProcessEngine+Internal.h"
 
 static NSError *
 UDRepositoryError(UDWorkflowErrorCode code, NSString *message)
@@ -34,6 +36,17 @@ UDIsBpmnResource(NSString *name)
 	/* Definition id to its definition. Definitions are immutable, so a
 	 * cached one never goes stale. */
 	NSMutableDictionary<NSString *, UDProcessDefinition *> *_cache;
+	void (^_didStoreDeployment)(void);
+}
+
+- (void (^)(void))didStoreDeployment
+{
+	return _didStoreDeployment;
+}
+
+- (void)setDidStoreDeployment:(void (^)(void))block
+{
+	_didStoreDeployment = [block copy];
 }
 
 - (instancetype)initWithStore:(UDStore *)store
@@ -202,6 +215,13 @@ UDIsBpmnResource(NSString *name)
 		UDEvent *start = [definition startEvent];
 		if (start.trigger == UDEventTriggerMessage) {
 			record.messageStartName = start.messageName;
+		} else if (start.trigger == UDEventTriggerTimer) {
+			NSInteger attempts = UD_DEFAULT_ATTEMPTS;
+			NSArray *delays = nil;
+			UDParseRetryCycle(start.retryTimeCycle, &attempts, &delays);
+			record.timerStartActivityId = start.elementId;
+			record.timerStartDelay = start.timerDuration;
+			record.timerStartAttempts = attempts;
 		}
 		[records addObject:record];
 	}
@@ -210,6 +230,9 @@ UDIsBpmnResource(NSString *name)
 	                                     error:error];
 	if (stored == nil) {
 		return nil;
+	}
+	if (_didStoreDeployment != nil) {
+		_didStoreDeployment();
 	}
 	NSMutableArray *definitions = [NSMutableArray array];
 	for (NSUInteger i = 0; i < [stored count]; i++) {

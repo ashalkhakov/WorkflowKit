@@ -1,6 +1,6 @@
 # Execution model
 
-Status: adopted; steps 1 (repository) and 2 (core) implemented. Replaces the token-marking model of
+Status: adopted; steps 1 (repository), 2 (core) and 3 (jobs) implemented. Replaces the token-marking model of
 `persistence-design.md`, which describes the code as it stands today.
 
 ## Reference, and the clean-room rule
@@ -320,8 +320,12 @@ macOS:
    Still to come in those steps: retry cycles and incidents, async
    continuations, the external task service, timer start events, and the
    rest of history.
-3. **Jobs.** Timers, async continuations, exclusive execution, retries,
-   retry cycles and incidents.
+3. ~~**Jobs.** Timers, async continuations, exclusive execution, retries,
+   retry cycles and incidents.~~ Done, with timer start events and
+   `managementService` (jobs, incidents, running a job, giving retries
+   back), and `jobExecutorActive` for stepping through jobs in tests. Not
+   yet: `asyncAfter` on gateways and async continuations on boundary
+   events, which the builder refuses rather than ignores.
 4. **External tasks.** Fetch-and-lock, the in-process worker behind
    `UDServiceTaskHandler`, and BPMN errors from workers.
 5. **History**, by level.

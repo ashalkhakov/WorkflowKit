@@ -1,6 +1,9 @@
 #import "UDProcessEngine+Internal.h"
 #import "UDCommandContext.h"
 #import "UDEntities.h"
+#import "UDFlowElements.h"
+#import "UDProcessDefinition.h"
+#import "UDDuration.h"
 #include <time.h>
 
 /* External-task results and jobs of one process instance run one after
@@ -46,6 +49,8 @@ UDIsConflict(NSError *error)
 	_runtimeService = [[UDRuntimeService alloc] initWithProcessEngine:self];
 	_taskService = [[UDTaskService alloc] initWithProcessEngine:self];
 	_historyService = [[UDHistoryService alloc] initWithProcessEngine:self];
+	_managementService = [[UDManagementService alloc] initWithProcessEngine:self];
+	_jobExecutorActive = YES;
 	_identifier = [NSString stringWithFormat:@"udworkflow@%@",
 		[[NSProcessInfo processInfo] hostName]];
 	_lockDuration = 300;
@@ -69,6 +74,9 @@ UDIsConflict(NSError *error)
 	});
 	dispatch_source_set_timer(_scheduler, DISPATCH_TIME_FOREVER, DISPATCH_TIME_FOREVER, 0);
 	dispatch_resume(_scheduler);
+	_repositoryService.didStoreDeployment = ^{
+		[weakSelf reschedule];
+	};
 	return self;
 }
 
@@ -119,6 +127,11 @@ UDIsConflict(NSError *error)
 - (dispatch_queue_t)stripeFor:(NSString *)processInstanceId
 {
 	return _stripes[[processInstanceId hash] % UD_STRIPES];
+}
+
+- (dispatch_queue_t)ud_queueFor:(NSString *)key
+{
+	return [self stripeFor:key];
 }
 
 #pragma mark - Commands
@@ -215,15 +228,31 @@ UDIsConflict(NSError *error)
 - (void)ud_jobCreated:(NSString *)jobId
     processInstanceId:(NSString *)processInstanceId
               dueDate:(NSDate *)dueDate
+            exclusive:(BOOL)exclusive
 {
-	if ([dueDate timeIntervalSinceNow] <= 0) {
-		[self beginWork:processInstanceId];
-		dispatch_async([self stripeFor:processInstanceId], ^{
-			[self executeJob:jobId processInstanceId:processInstanceId];
-		});
+	if (self.jobExecutorActive && [dueDate timeIntervalSinceNow] <= 0) {
+		[self dispatchJob:jobId processInstanceId:processInstanceId exclusive:exclusive];
 		return;
 	}
 	[self reschedule];
+}
+
+/* Exclusive jobs run on their instance's queue, one after another with
+ * its other work; the rest beside it. A timer start job has no instance:
+ * its own id keys it. */
+- (void)dispatchJob:(NSString *)jobId
+  processInstanceId:(NSString *)processInstanceId
+          exclusive:(BOOL)exclusive
+{
+	NSString *key = processInstanceId ?: jobId;
+	[self beginWork:key];
+	dispatch_queue_t queue = exclusive ? [self stripeFor:key]
+		: dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+	dispatch_async(queue, ^{
+		[self ud_runJob:jobId force:NO error:NULL];
+		[self reschedule];
+		[self endWork:key];
+	});
 }
 
 #pragma mark - The in-process worker
@@ -308,12 +337,34 @@ UDIsConflict(NSError *error)
 				[command throwBpmnError:errorCode fromExecution:execution];
 				return YES;
 			}
-			int left = (task.retries != nil ? [task.retries intValue] : 3) - 1;
-			task.retries = [NSNumber numberWithInt:left];
+			/* The in-process worker's policy: the activity's retry cycle, as
+			 * for a job, three attempts without one. */
+			NSString *cycle = [[[command definitionForExecution:execution]
+				flowNodeWithId:task.activityId] retryTimeCycle];
+			NSInteger attempts = UD_DEFAULT_ATTEMPTS;
+			NSArray *delays = nil;
+			UDParseRetryCycle(cycle, &attempts, &delays);
+			NSInteger before = task.retries != nil ? [task.retries integerValue] : attempts;
+			NSInteger left = before - 1;
+			NSTimeInterval delay = UDRetryDelay(cycle, before);
+			task.retries = [NSNumber numberWithInteger:left];
 			task.errorMessage = [failure localizedDescription];
 			task.workerId = nil;
-			task.lockExpiration = nil;
-			if (left > 0) {
+			/* Not offered again before the retry's delay is up. */
+			task.lockExpiration = delay > 0 && left > 0
+				? [NSDate dateWithTimeIntervalSinceNow:delay] : nil;
+			if (left <= 0) {
+				[command raiseIncident:UDIncidentTypeFailedExternalTask
+				         configuration:task.externalTaskId
+				               message:task.errorMessage
+				            activityId:task.activityId
+				     processInstanceId:task.processInstanceId
+				             execution:execution];
+			} else if (delay > 0) {
+				[command afterCommit:^{
+					[self reschedule];
+				}];
+			} else {
 				NSString *processInstanceId = task.processInstanceId;
 				[command afterCommit:^{
 					[self ud_externalTaskCreated:externalTaskId
@@ -333,22 +384,30 @@ UDIsConflict(NSError *error)
 
 #pragma mark - The job executor
 
-/* On the instance's stripe: acquire the job's lock, then run it, each in a
- * transaction of its own. The matching -endWork: is here. */
-- (void)executeJob:(NSString *)jobId processInstanceId:(NSString *)processInstanceId
+- (UDJobEntity *)job:(NSString *)jobId in:(UDCommandContext *)command
+{
+	return [[command fetch:@"UDJob"
+	             predicate:[NSPredicate predicateWithFormat:@"jobId == %@", jobId]
+	                  sort:nil
+	                 limit:1] lastObject];
+}
+
+/* Acquire the job's lock, run it, and on failure record that -- each in a
+ * transaction of its own, as the reference's job executor does. */
+- (BOOL)ud_runJob:(NSString *)jobId force:(BOOL)force error:(NSError **)error
 {
 	NSString *owner = self.identifier;
 	NSTimeInterval lockDuration = self.lockDuration;
 	__block BOOL acquired = NO;
-	[self runInternal:^BOOL(UDCommandContext *command, NSError **error) {
-		(void)error;
-		UDJobEntity *job = [[command fetch:@"UDJob"
-		                         predicate:[NSPredicate predicateWithFormat:@"jobId == %@", jobId]
-		                              sort:nil
-		                             limit:1] lastObject];
-		if (job == nil || job.retries <= 0 || [job.dueDate timeIntervalSinceNow] > 0
-		    || (job.lockOwner != nil && ![job.lockOwner isEqualToString:owner]
-		        && [job.lockExpiration timeIntervalSinceNow] > 0)) {
+	[self runInternal:^BOOL(UDCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		UDJobEntity *job = [self job:jobId in:command];
+		if (job == nil) {
+			return YES;
+		}
+		if (!force && (job.retries <= 0 || [job.dueDate timeIntervalSinceNow] > 0
+		               || (job.lockOwner != nil && ![job.lockOwner isEqualToString:owner]
+		                   && [job.lockExpiration timeIntervalSinceNow] > 0))) {
 			return YES;
 		}
 		job.lockOwner = owner;
@@ -356,39 +415,55 @@ UDIsConflict(NSError *error)
 		acquired = YES;
 		return YES;
 	} error:NULL];
-	if (acquired) {
-		NSError *failure = nil;
-		BOOL ran = [self runInternal:^BOOL(UDCommandContext *command, NSError **error) {
-			(void)error;
-			UDJobEntity *job = [[command fetch:@"UDJob"
-			                         predicate:[NSPredicate predicateWithFormat:@"jobId == %@", jobId]
-			                              sort:nil
-			                             limit:1] lastObject];
-			if (job == nil || ![job.lockOwner isEqualToString:owner]) {
-				return YES;
-			}
-			[command fireTimer:job];
-			return YES;
-		} error:&failure];
-		if (!ran) {
-			/* The job's own work rolled back; record the failure apart
-			 * from it. */
-			[self runInternal:^BOOL(UDCommandContext *command, NSError **error) {
-				(void)error;
-				UDJobEntity *job = [[command fetch:@"UDJob"
-				                         predicate:[NSPredicate predicateWithFormat:@"jobId == %@", jobId]
-				                              sort:nil
-				                             limit:1] lastObject];
-				job.retries -= 1;
-				job.exceptionMessage = [failure localizedDescription];
-				job.lockOwner = nil;
-				job.lockExpiration = nil;
-				return YES;
-			} error:NULL];
-		}
+	if (!acquired) {
+		return YES;
 	}
-	[self reschedule];
-	[self endWork:processInstanceId];
+	NSError *failure = nil;
+	BOOL ran = [self runInternal:^BOOL(UDCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		UDJobEntity *job = [self job:jobId in:command];
+		if (job == nil || ![job.lockOwner isEqualToString:owner]) {
+			return YES;
+		}
+		[command runJob:job];
+		return YES;
+	} error:&failure];
+	if (ran) {
+		return YES;
+	}
+	/* The job's own work rolled back; the failure is recorded apart from
+	 * it: an attempt fewer, the retry cycle's delay, an incident at none
+	 * left. */
+	[self runInternal:^BOOL(UDCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		UDJobEntity *job = [self job:jobId in:command];
+		if (job == nil) {
+			return YES;
+		}
+		NSString *definitionId = job.definitionId ?: job.execution.definitionId;
+		NSString *cycle = [[[self.repositoryService definitionWithId:definitionId error:NULL]
+			flowNodeWithId:job.activityId] retryTimeCycle];
+		NSTimeInterval delay = UDRetryDelay(cycle, job.retries);
+		job.retries = job.retries > 0 ? job.retries - 1 : 0;
+		job.exceptionMessage = [failure localizedDescription];
+		job.lockOwner = nil;
+		job.lockExpiration = nil;
+		if (job.retries == 0) {
+			[command raiseIncident:UDIncidentTypeFailedJob
+			         configuration:job.jobId
+			               message:job.exceptionMessage
+			            activityId:job.activityId
+			     processInstanceId:job.processInstanceId
+			             execution:job.execution];
+		} else if (delay > 0) {
+			job.dueDate = [NSDate dateWithTimeIntervalSinceNow:delay];
+		}
+		return YES;
+	} error:NULL];
+	if (error != NULL) {
+		*error = failure;
+	}
+	return NO;
 }
 
 - (void)reschedule
@@ -403,10 +478,13 @@ UDIsConflict(NSError *error)
 - (NSDate *)nextWakeUp
 {
 	__block NSDate *next = nil;
+	BOOL runJobs = self.jobExecutorActive;
 	[self ud_runCommand:^BOOL(UDCommandContext *command, NSError **error) {
 		(void)error;
 		NSDate *now = [NSDate date];
-		UDJobEntity *job = [[command fetch:@"UDJob"
+		/* With the job executor off, jobs wait for managementService: the
+		 * scheduler must not aim at ones it will not run. */
+		UDJobEntity *job = !runJobs ? nil : [[command fetch:@"UDJob"
 		                         predicate:[NSPredicate predicateWithFormat:
 		                             @"retries > 0 AND (lockExpiration == nil OR lockExpiration < %@)", now]
 		                              sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"dueDate"
@@ -414,11 +492,11 @@ UDIsConflict(NSError *error)
 		                             limit:1] lastObject];
 		next = job.dueDate;
 		NSArray *locked = @[
-			[[command fetch:@"UDJob"
+			(runJobs ? [[command fetch:@"UDJob"
 			      predicate:[NSPredicate predicateWithFormat:@"lockExpiration > %@", now]
 			           sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"lockExpiration"
 			                                                   ascending:YES] ]
-			          limit:1] lastObject] ?: [NSNull null],
+			          limit:1] lastObject] : nil) ?: [NSNull null],
 			[[command fetch:@"UDExternalTask"
 			      predicate:[NSPredicate predicateWithFormat:@"lockExpiration > %@", now]
 			           sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"lockExpiration"
@@ -467,17 +545,19 @@ UDIsConflict(NSError *error)
 	NSMutableArray *jobs = [NSMutableArray array];
 	NSMutableArray *tasks = [NSMutableArray array];
 	BOOL handler = self.serviceHandler != nil;
+	BOOL runJobs = self.jobExecutorActive;
 	[self ud_runCommand:^BOOL(UDCommandContext *command, NSError **error) {
 		(void)error;
 		NSDate *now = [NSDate date];
-		for (UDJobEntity *job in [command fetch:@"UDJob"
+		for (UDJobEntity *job in !runJobs ? @[] : [command fetch:@"UDJob"
 		                              predicate:[NSPredicate predicateWithFormat:
 		                                  @"dueDate <= %@ AND retries > 0 AND (lockExpiration == nil OR lockExpiration < %@)",
 		                                  now, now]
 		                                   sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"dueDate"
 		                                                                           ascending:YES] ]
 		                                  limit:UD_BATCH]) {
-			[jobs addObject:@[ job.jobId, job.processInstanceId ]];
+			[jobs addObject:@[ job.jobId, job.processInstanceId ?: [NSNull null],
+				[NSNumber numberWithBool:job.exclusive] ]];
 		}
 		if (handler) {
 			for (UDExternalTaskEntity *task in [command fetch:@"UDExternalTask"
@@ -492,10 +572,10 @@ UDIsConflict(NSError *error)
 		return YES;
 	} error:NULL];
 	for (NSArray *job in jobs) {
-		[self beginWork:[job objectAtIndex:1]];
-		dispatch_async([self stripeFor:[job objectAtIndex:1]], ^{
-			[self executeJob:[job objectAtIndex:0] processInstanceId:[job objectAtIndex:1]];
-		});
+		id processInstanceId = [job objectAtIndex:1];
+		[self dispatchJob:[job objectAtIndex:0]
+		processInstanceId:processInstanceId == [NSNull null] ? nil : processInstanceId
+		        exclusive:[[job objectAtIndex:2] boolValue]];
 	}
 	for (NSArray *task in tasks) {
 		[self ud_externalTaskCreated:[task objectAtIndex:0] processInstanceId:[task objectAtIndex:1]];

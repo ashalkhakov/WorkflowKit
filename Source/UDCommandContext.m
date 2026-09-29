@@ -4,6 +4,7 @@
 #import "UDFlowElements.h"
 #import "UDProcessDefinition.h"
 #import "UDCondition.h"
+#import "UDDuration.h"
 
 static NSString * const UDExecutionName = @"UDExecution";
 static NSString * const UDVariableName = @"UDVariable";
@@ -11,6 +12,7 @@ static NSString * const UDTaskName = @"UDTask";
 static NSString * const UDSubscriptionName = @"UDEventSubscription";
 static NSString * const UDJobName = @"UDJob";
 static NSString * const UDExternalTaskName = @"UDExternalTask";
+static NSString * const UDIncidentName = @"UDIncident";
 static NSString * const UDHistoricInstanceName = @"UDHistoricProcessInstance";
 static NSString * const UDHistoricVariableName = @"UDHistoricVariable";
 
@@ -309,6 +311,19 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 
 - (void)enter:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
+	if (node.isAsyncBefore) {
+		/* The command stops here; a job enters the node. */
+		execution.activityId = node.elementId;
+		execution.activityInstanceId = [UDCommandContext newId];
+		execution.isActive = YES;
+		[self job:UDJobTypeAsyncBefore execution:execution node:node due:[NSDate date]];
+		return;
+	}
+	[self enterNow:node execution:execution];
+}
+
+- (void)enterNow:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
 	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
 	execution.activityId = node.elementId;
 	execution.activityInstanceId = [UDCommandContext newId];
@@ -424,22 +439,41 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
      activity:(NSString *)activityId
      duration:(NSTimeInterval)duration
 {
+	[self job:UDJobTypeTimer
+	execution:execution
+	     node:[self node:activityId of:execution]
+	      due:[NSDate dateWithTimeIntervalSinceNow:duration > 0 ? duration : 0]];
+}
+
+/* A job on the node for the execution. Its attempts come from the node's
+ * retry cycle; the engine is told once the command commits. */
+- (void)job:(NSString *)type
+  execution:(UDExecutionEntity *)execution
+       node:(UDFlowNode *)node
+        due:(NSDate *)due
+{
+	NSInteger attempts = UD_DEFAULT_ATTEMPTS;
+	NSArray *delays = nil;
+	UDParseRetryCycle(node.retryTimeCycle, &attempts, &delays);
 	UDJobEntity *job = [self insert:UDJobName];
 	job.jobId = [UDCommandContext newId];
-	job.jobType = UDJobTypeTimer;
-	job.activityId = activityId;
+	job.jobType = type;
+	job.activityId = node.elementId;
 	job.processInstanceId = execution.processInstanceId;
-	job.dueDate = [NSDate dateWithTimeIntervalSinceNow:duration > 0 ? duration : 0];
+	job.dueDate = due;
 	job.createdAt = [NSDate date];
-	job.retries = 3;
-	job.exclusive = YES;
+	job.retries = (int32_t)attempts;
+	job.exclusive = node.isExclusive;
 	job.execution = execution;
 	NSString *jobId = job.jobId;
 	NSString *processInstanceId = job.processInstanceId;
-	NSDate *due = job.dueDate;
+	BOOL exclusive = job.exclusive;
 	UDProcessEngine *engine = self.engine;
 	[self afterCommit:^{
-		[engine ud_jobCreated:jobId processInstanceId:processInstanceId dueDate:due];
+		[engine ud_jobCreated:jobId
+		    processInstanceId:processInstanceId
+		              dueDate:due
+		            exclusive:exclusive];
 	}];
 }
 
@@ -454,13 +488,65 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	[self event:(UDEvent *)node triggeredOn:execution subscription:subscription];
 }
 
-- (void)fireTimer:(UDJobEntity *)job
+- (void)runJob:(UDJobEntity *)job
 {
+	NSString *type = job.jobType;
+	if ([type isEqualToString:UDJobTypeTimerStart]) {
+		NSError *error = nil;
+		UDProcessDefinition *definition =
+			[self.engine.repositoryService definitionWithId:job.definitionId error:&error];
+		UDFlowNode *start = [definition flowNodeWithId:job.activityId];
+		[self remove:job];
+		if (definition == nil || ![start isKindOfClass:[UDEvent class]]) {
+			[self fail:error ?: UDCommandError(UDWorkflowErrorInvalidDefinition,
+				@"the timer start event is gone from its definition")];
+			return;
+		}
+		[self startProcessInstance:definition businessKey:nil variables:nil
+		                startEvent:(UDEvent *)start];
+		return;
+	}
 	UDExecutionEntity *execution = job.execution;
 	UDFlowNode *node = [self node:job.activityId of:execution];
 	[self remove:job];
-	if (node != nil) {
+	if (node == nil) {
+		return;
+	}
+	if ([type isEqualToString:UDJobTypeAsyncBefore]) {
+		[self enterNow:node execution:execution];
+	} else if ([type isEqualToString:UDJobTypeAsyncAfter]) {
+		[self leaveNow:node execution:execution];
+	} else {
 		[self event:(UDEvent *)node triggeredOn:execution subscription:nil];
+	}
+}
+
+- (void)raiseIncident:(NSString *)type
+        configuration:(NSString *)configuration
+              message:(NSString *)message
+           activityId:(NSString *)activityId
+    processInstanceId:(NSString *)processInstanceId
+            execution:(UDExecutionEntity *)execution
+{
+	UDIncidentEntity *incident = [self insert:UDIncidentName];
+	incident.incidentId = [UDCommandContext newId];
+	incident.incidentType = type;
+	incident.configuration = configuration;
+	incident.message = message;
+	incident.activityId = activityId;
+	incident.processInstanceId = processInstanceId;
+	incident.createdAt = [NSDate date];
+	incident.execution = execution;
+}
+
+- (void)resolveIncidentsFor:(NSString *)configuration
+{
+	for (UDIncidentEntity *incident in [self fetch:UDIncidentName
+	                                     predicate:[NSPredicate predicateWithFormat:
+	                                         @"configuration == %@", configuration]
+	                                          sort:nil
+	                                         limit:0]) {
+		[self remove:incident];
 	}
 }
 
@@ -641,6 +727,16 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 /* Leaves an activity or event along every outgoing flow whose condition
  * holds; several flows are an implicit parallel split. */
 - (void)leave:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
+	if (node.isAsyncAfter && ![node isKindOfClass:[UDGateway class]]) {
+		/* The command stops here; a job takes the outgoing flows. */
+		[self job:UDJobTypeAsyncAfter execution:execution node:node due:[NSDate date]];
+		return;
+	}
+	[self leaveNow:node execution:execution];
+}
+
+- (void)leaveNow:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
 	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
 	NSMutableArray *flows = [NSMutableArray array];

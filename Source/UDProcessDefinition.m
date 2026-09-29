@@ -1,11 +1,16 @@
 #import "UDProcessDefinition.h"
 #import "UDProcessDefinition+Repository.h"
 #import "UDFlowElements.h"
+#import "UDDuration.h"
 
 @interface UDFlowNode (UDBuilderAccess)
 - (void)addIncomingFlowId:(NSString *)flowId;
 - (void)addOutgoingFlowId:(NSString *)flowId;
 - (void)setName:(NSString *)name;
+- (void)setAsyncBefore:(BOOL)asyncBefore;
+- (void)setAsyncAfter:(BOOL)asyncAfter;
+- (void)setExclusive:(BOOL)exclusive;
+- (void)setRetryTimeCycle:(NSString *)cycle;
 @end
 
 @interface UDProcessDefinition ()
@@ -380,6 +385,24 @@
 	         interrupting:interrupting];
 }
 
+- (instancetype)setAsyncBefore:(BOOL)asyncBefore
+                    asyncAfter:(BOOL)asyncAfter
+                     exclusive:(BOOL)exclusive
+                    forElement:(NSString *)elementId
+{
+	UDFlowNode *node = [self.nodes objectForKey:elementId];
+	[node setAsyncBefore:asyncBefore];
+	[node setAsyncAfter:asyncAfter];
+	[node setExclusive:exclusive];
+	return self;
+}
+
+- (instancetype)setRetryTimeCycle:(NSString *)cycle forElement:(NSString *)elementId
+{
+	[[self.nodes objectForKey:elementId] setRetryTimeCycle:cycle];
+	return self;
+}
+
 - (instancetype)setName:(NSString *)name forElement:(NSString *)elementId
 {
 	UDFlowNode *node = [self.nodes objectForKey:elementId];
@@ -536,6 +559,25 @@
 		BOOL isBoundary = [node isKindOfClass:[UDEvent class]]
 			&& [(UDEvent *)node kind] == UDEventKindBoundary;
 
+		if ((isBoundary && (node.isAsyncBefore || node.isAsyncAfter))
+		    || ([node isKindOfClass:[UDGateway class]] && node.isAsyncAfter)) {
+			return [self fail:error
+			          message:[NSString stringWithFormat:
+					@"%@: async continuations on boundary events and after gateways are not supported yet",
+					node.elementId]];
+		}
+
+		if (node.retryTimeCycle != nil) {
+			NSInteger attempts = 0;
+			NSArray *delays = nil;
+			if (!UDParseRetryCycle(node.retryTimeCycle, &attempts, &delays)) {
+				return [self fail:error
+				          message:[NSString stringWithFormat:
+						@"%@: retry time cycle \"%@\" is neither R<n>/<duration> nor a list of durations",
+						node.elementId, node.retryTimeCycle]];
+			}
+		}
+
 		if (isBoundary) {
 			UDEvent *boundary = (UDEvent *)node;
 			UDFlowNode *host = [self.nodes objectForKey:boundary.attachedToId];
@@ -561,31 +603,6 @@
 			return [self fail:error
 			          message:[NSString stringWithFormat:
 					@"node %@ has no outgoing flow", node.elementId]];
-		}
-
-		if ([node isKindOfClass:[UDGateway class]]) {
-			UDGateway *gw = (UDGateway *)node;
-			if (gw.kind == UDGatewayKindExclusive
-			    && [gw.outgoingFlowIds count] > 1) {
-				BOOL hasDefault = NO;
-				BOOL hasUnconditional = NO;
-				for (NSString *flowId in gw.outgoingFlowIds) {
-					UDSequenceFlow *flow = [self.flows objectForKey:flowId];
-					if (flow.isDefaultFlow
-					    || [flow.elementId isEqualToString:gw.defaultFlowId]) {
-						hasDefault = YES;
-					}
-					if (flow.condition == nil && !flow.isDefaultFlow) {
-						hasUnconditional = YES;
-					}
-				}
-				if (!hasDefault && !hasUnconditional) {
-					return [self fail:error
-					          message:[NSString stringWithFormat:
-							@"exclusive gateway %@ needs a default or open flow",
-							gw.elementId]];
-				}
-			}
 		}
 	}
 	return YES;

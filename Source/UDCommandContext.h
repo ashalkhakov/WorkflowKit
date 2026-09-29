@@ -59,8 +59,18 @@
 - (void)throwBpmnError:(NSString *)errorCode fromExecution:(UDExecutionEntity *)execution;
 - (void)deliverSubscription:(UDEventSubscriptionEntity *)subscription
                   variables:(NSDictionary *)variables;
-/* Deletes the job and triggers its timer event. */
-- (void)fireTimer:(UDJobEntity *)job;
+/* Deletes the job and does what it was for: triggers its timer event,
+ * starts an instance for a timer start event, or continues an async
+ * continuation. */
+- (void)runJob:(UDJobEntity *)job;
+/* A job or external task that ran out of retries. */
+- (void)raiseIncident:(NSString *)type
+        configuration:(NSString *)configuration
+              message:(NSString *)message
+           activityId:(NSString *)activityId
+    processInstanceId:(NSString *)processInstanceId
+            execution:(UDExecutionEntity *)execution;
+- (void)resolveIncidentsFor:(NSString *)configuration;
 
 /* Variables visible from the execution: its scope chain, nearest first. */
 - (NSDictionary *)visibleVariables:(UDExecutionEntity *)execution;

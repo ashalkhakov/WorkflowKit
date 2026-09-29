@@ -21,15 +21,24 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Construct | BPMN | Notes |
 |---|---|---|
 | User task | `userTask` | Wait state; a task in `taskService`, completed with `completeTask:`. `camunda:assignee`. |
-| Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`. The in-process worker hands it to the service handler; three attempts, then it waits with no retries left. |
+| Service task | `serviceTask` | External task: `camunda:type="external"` with `camunda:topic`. The in-process worker hands it to the service handler, with the activity's retry cycle (default three attempts); none left raises an incident. |
 | Script task | `scriptTask` | Same handler path as service, action key in `ud:action`. No script text. |
 | Embedded subprocess | `subProcess` | A scope execution of its own; it sees its parents' variables, and new variables land on the process instance. |
+
+### Transactions
+
+| Construct | BPMN | Behaviour |
+|---|---|---|
+| Async before | `camunda:asyncBefore="true"` | The command stops before the node; a job enters it. Any node but a boundary event. |
+| Async after | `camunda:asyncAfter="true"` | The command stops after the node; a job takes its outgoing flows. Not on gateways or boundary events yet. |
+| Exclusive | `camunda:exclusive="false"` | The node's jobs may run beside the instance's other work. |
+| Retry cycle | `camunda:failedJobRetryTimeCycle` | `R<n>/<duration>` or a list of durations. Default three attempts, retried at once. None left raises an incident; `managementService` gives attempts back. |
 
 ### Gateways
 
 | Construct | BPMN | Semantics |
 |---|---|---|
-| Exclusive split/merge | `exclusiveGateway` | First true condition, else default. Merge is pass-through. |
+| Exclusive split/merge | `exclusiveGateway` | First true condition in document order, else default; no match fails the command. Merge is pass-through. |
 | Parallel split/join | `parallelGateway` | Split makes concurrent executions. Join fires when as many executions wait at it as it has incoming flows. Conditions ignored. |
 | Inclusive split/join | `inclusiveGateway` | All true conditions (else default). Join fires when no other execution in the scope can still reach it. |
 | Event-based | `eventBasedGateway` | The execution waits at the gateway with a subscription or timer per following catch event; the first to fire wins, the rest are cancelled. |
@@ -40,7 +49,7 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 |---|---|---|
 | None start / end | `startEvent` / `endEvent` | Start an instance / end a path; the last path ends the scope. |
 | Message start | `startEvent` + `messageEventDefinition` | A start subscription per deployed latest version; correlating the message starts an instance. |
-| Timer start | `startEvent` + `timerEventDefinition` | Deployed, not yet scheduled: starting by key starts an instance at once. Scheduled starts come with the job executor's step 3. |
+| Timer start | `startEvent` + `timerEventDefinition` | A job created on deployment starts an instance when due; a new version replaces it. |
 | Message catch | `intermediateCatchEvent` + message | Wait state with an event subscription. |
 | Timer catch | `intermediateCatchEvent` + timer | Wait state with a timer job at an absolute due date. |
 | Message throw / message end | throw / end + message | `UDProcessEngineDelegate` `didThrowMessage`, after commit. |
@@ -114,7 +123,7 @@ Deploying stores the XML, and the engine runs the definition read back from it, 
 | Execution | A path through an instance; executions form a tree under the process instance. |
 | Command | One call: its own Core Data context, run until every path is at a wait state or has ended, one save. |
 | Concurrency | A lost race fails with `UDWorkflowErrorConflict` and changes nothing; the engine retries its own commands. |
-| Worker and jobs | The in-process worker and the job executor run one instance's work on one serial queue at a time. |
+| Worker and jobs | The in-process worker and the job executor run one instance's exclusive work on one serial queue at a time. A job is acquired, run and, on failure, recorded in three transactions. |
 | Public API | `UDProcessEngine` and its services; value objects out. Delegates and target-action. |
 | Persistence | `UDStore`: Core Data (`Model/UDWorkflow.xcdatamodeld`) over in-memory, SQLite or a FreeCoreData SQL backend. |
 

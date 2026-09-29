@@ -26,6 +26,11 @@
 @property (nonatomic) BOOL suspended;
 /* The message a message start event starts this definition on, if any. */
 @property (nonatomic, copy) NSString *messageStartName;
+/* A timer start event, if any: its id, its delay after deployment, and the
+ * attempts its job gets. */
+@property (nonatomic, copy) NSString *timerStartActivityId;
+@property (nonatomic) NSTimeInterval timerStartDelay;
+@property (nonatomic) NSInteger timerStartAttempts;
 @end
 
 /*
@@ -60,7 +65,8 @@
  * Each definition gets the next version of its key and a fresh id; the
  * records answered carry them. A definition with a message start event
  * gets a start subscription for it, replacing the previous version's; a
- * message name another process key already starts on is an error. */
+ * message name another process key already starts on is an error. A timer
+ * start event gets a job, replacing the previous version's. */
 - (NSArray<UDDefinitionRecord *> *)insertDeployment:(UDDeploymentRecord *)deployment
                                         definitions:(NSArray<UDDefinitionRecord *> *)definitions
                                               error:(NSError **)error;

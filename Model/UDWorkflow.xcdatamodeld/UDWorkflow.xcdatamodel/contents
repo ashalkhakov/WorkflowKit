@@ -58,6 +58,7 @@
         <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDExecution" inverseName="parent" inverseEntity="UDExecution"/>
         <relationship name="eventSubscriptions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDEventSubscription" inverseName="execution" inverseEntity="UDEventSubscription"/>
         <relationship name="externalTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDExternalTask" inverseName="execution" inverseEntity="UDExternalTask"/>
+        <relationship name="incidents" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDIncident" inverseName="execution" inverseEntity="UDIncident"/>
         <relationship name="jobs" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDJob" inverseName="execution" inverseEntity="UDJob"/>
         <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="children" inverseEntity="UDExecution"/>
         <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UDTask" inverseName="execution" inverseEntity="UDTask"/>
@@ -126,6 +127,7 @@
     <entity name="UDJob" representedClassName="UDJobEntity" syncable="YES">
         <attribute name="activityId" attributeType="String"/>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="definitionId" optional="YES" attributeType="String"/>
         <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="exceptionMessage" optional="YES" attributeType="String"/>
         <attribute name="exclusive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
@@ -134,7 +136,7 @@
         <attribute name="lockExpiration" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="lockOwner" optional="YES" attributeType="String"/>
         <attribute name="priority" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
         <attribute name="retries" attributeType="Integer 32" defaultValueString="3" usesScalarValueType="YES"/>
         <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="jobs" inverseEntity="UDExecution"/>
         <fetchIndex name="byDue">
@@ -186,6 +188,19 @@
         </fetchIndex>
         <fetchIndex name="byVariableId">
             <fetchIndexElement property="variableId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="UDIncident" representedClassName="UDIncidentEntity" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="configuration" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="incidentId" attributeType="String"/>
+        <attribute name="incidentType" attributeType="String"/>
+        <attribute name="message" optional="YES" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="incidents" inverseEntity="UDExecution"/>
+        <fetchIndex name="byConfiguration">
+            <fetchIndexElement property="configuration" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
 </model>

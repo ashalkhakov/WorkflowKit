@@ -6,6 +6,7 @@ static NSString * const UDDeploymentEntity = @"UDDeployment";
 static NSString * const UDResourceEntity = @"UDResource";
 static NSString * const UDDefinitionEntity = @"UDDefinitionRecord";
 static NSString * const UDSubscriptionEntity = @"UDEventSubscription";
+static NSString * const UDJobEntityName = @"UDJob";
 
 @implementation UDDeploymentRecord
 @end
@@ -259,6 +260,35 @@ static NSString * const UDSubscriptionEntity = @"UDEventSubscription";
 			              sort:nil
 			             limit:0]) {
 				[self->_context deleteObject:old];
+			}
+			NSArray *versions = [[self fetch:UDDefinitionEntity
+			                      predicate:[NSPredicate predicateWithFormat:@"key == %@",
+			                          definition.key]
+			                           sort:nil
+			                          limit:0] valueForKey:@"definitionId"];
+			if ([versions count] > 0) {
+				for (UDJobEntity *old in [self fetch:UDJobEntityName
+				         predicate:[NSPredicate predicateWithFormat:
+				             @"jobType == %@ AND definitionId IN %@",
+				             UDJobTypeTimerStart, versions]
+				              sort:nil
+				             limit:0]) {
+					[self->_context deleteObject:old];
+				}
+			}
+			if (definition.timerStartActivityId != nil) {
+				UDJobEntity *job = [NSEntityDescription
+					insertNewObjectForEntityForName:UDJobEntityName
+					         inManagedObjectContext:self->_context];
+				job.jobId = [[NSUUID UUID] UUIDString];
+				job.jobType = UDJobTypeTimerStart;
+				job.activityId = definition.timerStartActivityId;
+				job.definitionId = record.definitionId;
+				job.createdAt = deployment.deployedAt;
+				job.dueDate = [deployment.deployedAt
+					dateByAddingTimeInterval:definition.timerStartDelay];
+				job.retries = (int32_t)definition.timerStartAttempts;
+				job.exclusive = YES;
 			}
 			if (definition.messageStartName != nil) {
 				UDEventSubscriptionEntity *start = [NSEntityDescription

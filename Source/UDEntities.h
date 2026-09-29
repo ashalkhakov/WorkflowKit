@@ -3,6 +3,7 @@
 
 #import <CoreData/CoreData.h>
 #import "UDTypes.h"
+#import "UDManagementService.h"
 
 /*
  * The runtime and history rows of Model/UDWorkflow.xcdatamodeld, as the
@@ -32,6 +33,7 @@
 @property (nonatomic, strong) NSSet *eventSubscriptions;
 @property (nonatomic, strong) NSSet *jobs;
 @property (nonatomic, strong) NSSet *externalTasks;
+@property (nonatomic, strong) NSSet *incidents;
 
 - (BOOL)isProcessInstance;
 - (UDExecutionEntity *)processInstance;
@@ -99,13 +101,18 @@ extern NSString * const UDEventTypeMessage;
 @property (nonatomic, strong) UDExecutionEntity *execution;
 @end
 
-extern NSString * const UDJobTypeTimer;
+#define UDJobTypeTimer UDJobTypeTimerName
+/* A timer start event's job: it has a definition, not an execution. */
+#define UDJobTypeTimerStart UDJobTypeTimerStartName
+#define UDJobTypeAsyncBefore UDJobTypeAsyncBeforeName
+#define UDJobTypeAsyncAfter UDJobTypeAsyncAfterName
 
 @interface UDJobEntity : NSManagedObject
 @property (nonatomic, copy) NSString *jobId;
 @property (nonatomic, copy) NSString *jobType;
 @property (nonatomic, copy) NSString *activityId;
 @property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, copy) NSString *definitionId;
 @property (nonatomic, copy) NSDate *dueDate;
 @property (nonatomic, copy) NSDate *createdAt;
 @property (nonatomic, copy) NSString *lockOwner;
@@ -128,6 +135,21 @@ extern NSString * const UDJobTypeTimer;
 @property (nonatomic, strong) NSNumber *retries;
 @property (nonatomic, copy) NSString *errorMessage;
 @property (nonatomic) int64_t priority;
+@property (nonatomic, copy) NSDate *createdAt;
+@property (nonatomic, strong) UDExecutionEntity *execution;
+@end
+
+#define UDIncidentTypeFailedJob UDIncidentTypeFailedJobName
+#define UDIncidentTypeFailedExternalTask UDIncidentTypeFailedExternalTaskName
+
+/* A job or external task that ran out of retries. configuration is its id. */
+@interface UDIncidentEntity : NSManagedObject
+@property (nonatomic, copy) NSString *incidentId;
+@property (nonatomic, copy) NSString *incidentType;
+@property (nonatomic, copy) NSString *message;
+@property (nonatomic, copy) NSString *activityId;
+@property (nonatomic, copy) NSString *processInstanceId;
+@property (nonatomic, copy) NSString *configuration;
 @property (nonatomic, copy) NSDate *createdAt;
 @property (nonatomic, strong) UDExecutionEntity *execution;
 @end

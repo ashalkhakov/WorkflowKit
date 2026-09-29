@@ -21,6 +21,7 @@ UDWorkflow_OBJC_FILES = \
 	Source/UDHandlers.m \
 	Source/UDStore.m \
 	Source/UDRepositoryService.m \
+	Source/UDDuration.m \
 	Source/UDBpmn.m \
 	Source/UDEntities.m \
 	Source/UDCommandContext.m \
@@ -40,6 +41,7 @@ UDWorkflow_HEADER_FILES = \
 	UDRuntimeService.h \
 	UDTaskService.h \
 	UDHistoryService.h \
+	UDManagementService.h \
 	UDProcessEngine.h \
 	UDBpmn.h \
 	UDWorkflow.h

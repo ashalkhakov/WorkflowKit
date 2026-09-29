@@ -2,7 +2,12 @@
 #include <string.h>
 
 NSString * const UDEventTypeMessage = @"message";
-NSString * const UDJobTypeTimer = @"timer";
+NSString * const UDJobTypeTimerName = @"timer";
+NSString * const UDJobTypeTimerStartName = @"timer-start";
+NSString * const UDJobTypeAsyncBeforeName = @"async-before";
+NSString * const UDJobTypeAsyncAfterName = @"async-after";
+NSString * const UDIncidentTypeFailedJobName = @"failedJob";
+NSString * const UDIncidentTypeFailedExternalTaskName = @"failedExternalTask";
 NSString * const UDHistoricStateActive = @"ACTIVE";
 NSString * const UDHistoricStateCompleted = @"COMPLETED";
 
@@ -10,7 +15,7 @@ NSString * const UDHistoricStateCompleted = @"COMPLETED";
 @dynamic executionId, processInstanceId, definitionId, businessKey;
 @dynamic activityId, activityInstanceId, isActive, isConcurrent, isScope;
 @dynamic suspended, lockRevision, parent, children, variables, tasks;
-@dynamic eventSubscriptions, jobs, externalTasks;
+@dynamic eventSubscriptions, jobs, externalTasks, incidents;
 
 - (BOOL)isProcessInstance
 {
@@ -173,7 +178,7 @@ UDIsIntegerNumber(NSNumber *number)
 @end
 
 @implementation UDJobEntity
-@dynamic jobId, jobType, activityId, processInstanceId, dueDate, createdAt;
+@dynamic jobId, jobType, activityId, processInstanceId, definitionId, dueDate, createdAt;
 @dynamic lockOwner, lockExpiration, retries, exclusive, priority;
 @dynamic exceptionMessage, execution;
 @end
@@ -181,6 +186,11 @@ UDIsIntegerNumber(NSNumber *number)
 @implementation UDExternalTaskEntity
 @dynamic externalTaskId, topic, activityId, activityInstanceId, processInstanceId;
 @dynamic workerId, lockExpiration, retries, errorMessage, priority, createdAt, execution;
+@end
+
+@implementation UDIncidentEntity
+@dynamic incidentId, incidentType, message, activityId, processInstanceId;
+@dynamic configuration, createdAt, execution;
 @end
 
 @implementation UDHistoricProcessInstanceEntity
