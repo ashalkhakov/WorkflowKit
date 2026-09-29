@@ -30,6 +30,9 @@
  * activity is the multi-instance activity, and its children are the
  * instances. */
 @property (nonatomic) BOOL isMultiInstanceBody;
+/* Runs one compensation handler for the compensation throw its parent
+ * waits at. */
+@property (nonatomic) BOOL isCompensation;
 @property (nonatomic) BOOL suspended;
 /* Bumped to make concurrent commands that both touch a scope conflict. */
 @property (nonatomic) int64_t lockRevision;
@@ -96,6 +99,12 @@ typedef NS_ENUM(int16_t, UDVariableType) {
 
 extern NSString * const UDEventTypeMessage;
 extern NSString * const UDEventTypeSignal;
+/* A completed activity's compensation handler, waiting on its scope:
+ * activityId the activity, eventName the subprocess it completed in when
+ * it was carried up out of one. */
+extern NSString * const UDEventTypeCompensate;
+/* The same, queued on a compensation throw that works through them. */
+extern NSString * const UDEventTypeCompensating;
 
 @interface UDEventSubscriptionEntity : NSManagedObject
 @property (nonatomic, copy) NSString *subscriptionId;
@@ -106,6 +115,9 @@ extern NSString * const UDEventTypeSignal;
 /* Set on a start event's subscription, which has no execution. */
 @property (nonatomic, copy) NSString *definitionId;
 @property (nonatomic, copy) NSDate *createdAt;
+/* Orders subscriptions made in the same instant: compensation runs the
+ * newest first. */
+@property (nonatomic) int64_t sequence;
 @property (nonatomic, strong) UDExecutionEntity *execution;
 @end
 

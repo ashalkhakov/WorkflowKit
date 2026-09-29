@@ -18,6 +18,7 @@
 		2CF368A57C16C46BCF25C568 /* UDMultiInstanceTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 729D1C7A383C53EE00839F16 /* UDMultiInstanceTests.m */; };
 		309BC1424AF76CFB56616923 /* UDProcessDefinition.h in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 19283D395B779DA7AC2F1980 /* UDProcessDefinition.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		3CC448ED294727ED9AC96940 /* UDWorkflow.xcdatamodeld in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 61C68206993F43F04102883C /* UDWorkflow.xcdatamodeld */; };
+		3D9D237E871718D420896DA8 /* UDEscalationTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 7512395632DAE90CA53A06ED /* UDEscalationTests.m */; };
 		40A42E0AF300EB11E51211BC /* UDBpmn.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = E0125C13EEA9CE9A75250427 /* UDBpmn.m */; };
 		47FD367694BEDC90F7027FA1 /* UDProcessDefinition.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 70CD06708A04A80327ECE7DA /* UDProcessDefinition.m */; };
 		511B6B19899D3DFD4D0CE4E9 /* UDExternalTaskService.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 77F0C1AF31B509708C85A9BA /* UDExternalTaskService.m */; };
@@ -52,6 +53,7 @@
 		A354E3A312FB9E7EE5E9395E /* UDExternalTaskService.h in UDWorkflow */ = { isa = PBXBuildFile; fileRef = F5151B23D7EEA27D55899BC5 /* UDExternalTaskService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		AC251AD990F154E3DD16BFDA /* CoreData.framework in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 2AB66C65BE330D1517DF768E /* CoreData.framework */; };
 		B84C87C6F2CD946A45C20A56 /* UDRepositoryService.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = 3913F4C64DBBD96CD6166422 /* UDRepositoryService.m */; };
+		BF6EE884FE3C3553AE7F7367 /* UDCompensationTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 96C29DF5DE950BE7842B8357 /* UDCompensationTests.m */; };
 		CD946A116F33B995F2AF377F /* UDRepositoryService.h in UDWorkflow */ = { isa = PBXBuildFile; fileRef = A9AECFEE6C67EBA8CDB6195F /* UDRepositoryService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		CECF821B605A16111288498A /* UDEventTests.m in UDWorkflowTests */ = { isa = PBXBuildFile; fileRef = 37D945C1A93E0B791EE8C400 /* UDEventTests.m */; };
 		DDD44DC79F167F8C60169BFE /* UDFeelFunctions.m in UDWorkflow */ = { isa = PBXBuildFile; fileRef = CA9160935AF251679E8937AB /* UDFeelFunctions.m */; };
@@ -116,6 +118,7 @@
 		6DEA38D26A908E18D2347A1A /* UDFeel.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UDFeel.h; sourceTree = "<group>"; };
 		70CD06708A04A80327ECE7DA /* UDProcessDefinition.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDProcessDefinition.m; sourceTree = "<group>"; };
 		729D1C7A383C53EE00839F16 /* UDMultiInstanceTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDMultiInstanceTests.m; sourceTree = "<group>"; };
+		7512395632DAE90CA53A06ED /* UDEscalationTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDEscalationTests.m; sourceTree = "<group>"; };
 		7560DD2E7CF674209CB5221A /* UDBpmn.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UDBpmn.h; sourceTree = "<group>"; };
 		7613FAF6F5041DA0150DAD0D /* UDDuration.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDDuration.m; sourceTree = "<group>"; };
 		775ABB6AA38FF2553127CC96 /* UDExternalTaskTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDExternalTaskTests.m; sourceTree = "<group>"; };
@@ -125,6 +128,7 @@
 		82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */ = { isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		8500DBC868374EF3E0490741 /* UDDeploymentTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDDeploymentTests.m; sourceTree = "<group>"; };
 		8CD1A266AE9E24F04EDA40FC /* UDJobTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDJobTests.m; sourceTree = "<group>"; };
+		96C29DF5DE950BE7842B8357 /* UDCompensationTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDCompensationTests.m; sourceTree = "<group>"; };
 		9FEDB40ABD24AF3F46C2C4B6 /* UDFlowElements.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDFlowElements.m; sourceTree = "<group>"; };
 		A01477C08490EA0A3284E3ED /* PurchaseRequestDemo.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PurchaseRequestDemo.m; sourceTree = "<group>"; };
 		A16963014264B20BA05AF5D9 /* UDFeelParser.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UDFeelParser.m; sourceTree = "<group>"; };
@@ -238,6 +242,8 @@
 				729D1C7A383C53EE00839F16 /* UDMultiInstanceTests.m */,
 				BA7F1E6CEFA2683479438F94 /* UDEventSubProcessTests.m */,
 				5AE907C89C6D3D7C8DBD8D66 /* UDTimerTests.m */,
+				7512395632DAE90CA53A06ED /* UDEscalationTests.m */,
+				96C29DF5DE950BE7842B8357 /* UDCompensationTests.m */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -439,6 +445,8 @@
 				2CF368A57C16C46BCF25C568 /* UDMultiInstanceTests.m in UDWorkflowTests */,
 				5D633A6ACB818F6E53D2675A /* UDEventSubProcessTests.m in UDWorkflowTests */,
 				9F38D4B0A9B00D326BC0E230 /* UDTimerTests.m in UDWorkflowTests */,
+				3D9D237E871718D420896DA8 /* UDEscalationTests.m in UDWorkflowTests */,
+				BF6EE884FE3C3553AE7F7367 /* UDCompensationTests.m in UDWorkflowTests */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -52,6 +52,13 @@
 	[[rescue connect:@"failed" to:@"triage"] connect:@"triage" to:@"triaged"];
 	[b addEventSubProcess:@"rescue" name:@"Rescue" inner:[rescue build:&error]];
 	[b addBoundaryError:@"onBad" onTask:@"check" errorRef:@"BAD_CREDIT" interrupting:YES];
+	[b setCodeVariable:@"creditError" forElement:@"onBad"];
+	/* Undoing the check, and noting a slow review. */
+	[b addServiceTask:@"voidCheck" action:@"credit.void"];
+	[b addBoundaryCompensation:@"undoCheck" onTask:@"check" handler:@"voidCheck"];
+	[[b addBoundaryEscalation:@"slow" onTask:@"manual" code:@"SLOW" interrupting:NO] addEnd:@"slowNoted"];
+	[b setCodeVariable:@"slowness" forElement:@"slow"];
+	[b connect:@"slow" to:@"slowNoted"];
 	[b addBoundaryError:@"onAny" onTask:@"audit" errorRef:nil interrupting:YES];
 	[b addBoundaryMessage:@"onCancel" onTask:@"fill" message:@"cancel" interrupting:YES];
 	[[b addSignalCatch:@"recalled" signal:@"recall"] addTerminateEnd:@"aborted"];
@@ -115,6 +122,8 @@
 	XCTAssertTrue([xml rangeOfString:@"camunda:topic=\"credit.check\""].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:failedJobRetryTimeCycle>R5/PT5M</camunda:failedJobRetryTimeCycle>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmndi:BPMNShape"].location != NSNotFound);
+	XCTAssertTrue([xml rangeOfString:@"<bpmn:association id=\"Association_undoCheck\" associationDirection=\"One\" sourceRef=\"undoCheck\" targetRef=\"voidCheck\"/>"].location != NSNotFound, @"%@", xml);
+	XCTAssertTrue([xml rangeOfString:@"<bpmn:escalation id=\"Escalation_SLOW\" name=\"SLOW\" escalationCode=\"SLOW\"/>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmn:subProcess id=\"rescue\" name=\"Rescue\" triggeredByEvent=\"true\">"].location != NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"<bpmn:startEvent id=\"nudged\" isInterrupting=\"false\">"].location != NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"<bpmn:multiInstanceLoopCharacteristics isSequential=\"true\" camunda:collection=\"auditors\" camunda:elementVariable=\"auditor\">"].location != NSNotFound, @"%@", xml);

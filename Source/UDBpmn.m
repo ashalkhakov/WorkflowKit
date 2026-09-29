@@ -34,29 +34,6 @@ UDBpmnError(NSString *format, ...)
 	                       userInfo:@{ NSLocalizedDescriptionKey: message }];
 }
 
-static NSString *
-UDEscapeXML(NSString *text)
-{
-	if (text == nil) {
-		return @"";
-	}
-	NSString *s = text;
-	s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
-	s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
-	s = [s stringByReplacingOccurrencesOfString:@">" withString:@"&gt;"];
-	s = [s stringByReplacingOccurrencesOfString:@"\"" withString:@"&quot;"];
-	return s;
-}
-
-static NSString *
-UDAttr(NSString *name, NSString *value)
-{
-	if (value == nil || [value length] == 0) {
-		return @"";
-	}
-	return [NSString stringWithFormat:@" %@=\"%@\"", name, UDEscapeXML(value)];
-}
-
 /* An XML id for a name that may contain anything. */
 static NSString *
 UDXMLId(NSString *prefix, NSString *name)
@@ -94,11 +71,47 @@ UDParseWhole(NSString *text, long long *value)
 
 #pragma mark - Writer
 
+static NSString * const UDXSINamespace = @"http://www.w3.org/2001/XMLSchema-instance";
+
+/* An element by its qualified name -- bpmn:task, camunda:in, dc:Bounds --
+ * whose prefix the document's root declares. (A URI of its own would have
+ * gnustep-base declare the namespace again on every element.) */
+static NSXMLElement *
+UDElement(NSString *qualifiedName)
+{
+	return [NSXMLElement elementWithName:qualifiedName];
+}
+
+/* Sets the attribute, unless there is no value to give it; a prefixed
+ * name's prefix is one the root declares. */
+static void
+UDSet(NSXMLElement *element, NSString *name, NSString *value)
+{
+	if (value == nil || [value length] == 0) {
+		return;
+	}
+	[element addAttribute:[NSXMLNode attributeWithName:name stringValue:value]];
+}
+
+/* <bpmn:name xsi:type="bpmn:tFormalExpression">text</bpmn:name>: an
+ * expression as BPMN holds one. */
+static NSXMLElement *
+UDFormalExpression(NSString *qualifiedName, NSString *text)
+{
+	NSXMLElement *element = UDElement(qualifiedName);
+	UDSet(element, @"xsi:type", @"bpmn:tFormalExpression");
+	[element setStringValue:text];
+	return element;
+}
+
 @interface UDBpmnWriteContext : NSObject
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *messages;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *errors;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *signals;
-@property (nonatomic, strong) NSMutableString *diagram;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *escalations;
+/* The diagram's plane, which shapes and edges go into as their elements
+ * are written. */
+@property (nonatomic, strong) NSXMLElement *plane;
 @end
 
 @implementation UDBpmnWriteContext
@@ -107,43 +120,24 @@ UDParseWhole(NSString *text, long long *value)
 /* The expression Camunda models write to pass the business key on. */
 static NSString * const UDBusinessKeyExpression = @"#{execution.processBusinessKey}";
 
-static NSString *
-UDMappingAttrs(UDVariableMapping *mapping)
-{
-	if (mapping.isAllVariables) {
-		return @" variables=\"all\"";
-	}
-	if (mapping.isBusinessKey) {
-		return UDAttr(@"businessKey", UDBusinessKeyExpression);
-	}
-	return [UDAttr(@"source", mapping.source) stringByAppendingString:
-		UDAttr(@"target", mapping.target)];
-}
-
 @implementation UDBpmnWriter
 
-+ (NSString *)messageIdFor:(NSString *)name context:(UDBpmnWriteContext *)context
+/* The id of the top-level element a name or code is written as, made the
+ * first time it is asked for. */
++ (NSString *)idFor:(NSString *)name
+             prefix:(NSString *)prefix
+                 in:(NSMutableDictionary<NSString *, NSString *> *)ids
 {
-	NSString *id = [context.messages objectForKey:name];
+	NSString *id = [ids objectForKey:name];
 	if (id == nil) {
-		id = UDXMLId(@"Message_", name);
-		[context.messages setObject:id forKey:name];
+		id = UDXMLId(prefix, name);
+		[ids setObject:id forKey:name];
 	}
 	return id;
 }
 
-+ (NSString *)errorIdFor:(NSString *)code context:(UDBpmnWriteContext *)context
-{
-	NSString *id = [context.errors objectForKey:code];
-	if (id == nil) {
-		id = UDXMLId(@"Error_", code);
-		[context.errors setObject:id forKey:code];
-	}
-	return id;
-}
-
-+ (NSString *)XMLStringFromDefinition:(UDProcessDefinition *)definition
-                                error:(NSError **)error
++ (NSXMLDocument *)documentFromDefinition:(UDProcessDefinition *)definition
+                                    error:(NSError **)error
 {
 	if (definition == nil) {
 		if (error != NULL) {
@@ -155,250 +149,274 @@ UDMappingAttrs(UDVariableMapping *mapping)
 	context.messages = [NSMutableDictionary dictionary];
 	context.errors = [NSMutableDictionary dictionary];
 	context.signals = [NSMutableDictionary dictionary];
-	context.diagram = [NSMutableString string];
+	context.escalations = [NSMutableDictionary dictionary];
+	context.plane = UDElement(@"bpmndi:BPMNPlane");
+	UDSet(context.plane, @"id", UDXMLId(@"Plane_", definition.processId));
+	UDSet(context.plane, @"bpmnElement", definition.processId);
 
-	NSMutableString *process = [NSMutableString string];
-	[process appendFormat:@"  <bpmn:process%@%@ isExecutable=\"true\"%@%@>\n",
-		UDAttr(@"id", definition.processId),
-		[definition.name isEqualToString:definition.processId]
-			? @"" : UDAttr(@"name", definition.name),
-		UDAttr(@"camunda:taskPriority", [definition.defaultTaskPriority stringValue]),
-		UDAttr(@"camunda:historyTimeToLive", [definition.historyTimeToLive stringValue])];
-	if (![self appendScope:definition
-	                    to:process
-	                indent:@"    "
-	               context:context
-	                 error:error]) {
+	NSXMLElement *process = UDElement(@"bpmn:process");
+	UDSet(process, @"id", definition.processId);
+	if (![definition.name isEqualToString:definition.processId]) {
+		UDSet(process, @"name", definition.name);
+	}
+	UDSet(process, @"isExecutable", @"true");
+	UDSet(process, @"camunda:taskPriority", [definition.defaultTaskPriority stringValue]);
+	UDSet(process, @"camunda:historyTimeToLive", [definition.historyTimeToLive stringValue]);
+	if (![self appendScope:definition to:process context:context error:error]) {
 		return nil;
 	}
-	[process appendString:@"  </bpmn:process>\n"];
 
-	NSMutableString *xml = [NSMutableString string];
-	[xml appendString:@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"];
-	[xml appendFormat:
-		@"<bpmn:definitions xmlns:bpmn=\"%@\" xmlns:bpmndi=\"%@\" "
-		 @"xmlns:dc=\"%@\" xmlns:di=\"%@\" xmlns:camunda=\"%@\" xmlns:ud=\"%@\" "
-		 @"xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"%@ "
-		 @"targetNamespace=\"%@\" expressionLanguage=\"%@\" "
-		 @"exporter=\"UDWorkflow\">\n",
-		UDBpmnNamespace, UDBpmnDINamespace, UDBpmnDCNamespace,
-		UDBpmnDINodesNamespace, UDCamundaNamespace, UDBpmnExtensionNamespace,
-		UDAttr(@"id", UDXMLId(@"Definitions_", definition.processId)),
-		UDBpmnExtensionNamespace, UDFeelLanguage];
-	for (NSString *name in [[context.messages allKeys]
-	         sortedArrayUsingSelector:@selector(compare:)]) {
-		[xml appendFormat:@"  <bpmn:message%@%@/>\n",
-			UDAttr(@"id", [context.messages objectForKey:name]),
-			UDAttr(@"name", name)];
+	NSXMLElement *root = UDElement(@"bpmn:definitions");
+	NSDictionary *prefixes = @{ @"bpmn": UDBpmnNamespace, @"bpmndi": UDBpmnDINamespace,
+		@"dc": UDBpmnDCNamespace, @"di": UDBpmnDINodesNamespace, @"camunda": UDCamundaNamespace,
+		@"ud": UDBpmnExtensionNamespace, @"xsi": UDXSINamespace };
+	for (NSString *prefix in @[ @"bpmn", @"bpmndi", @"dc", @"di", @"camunda", @"ud", @"xsi" ]) {
+		[root addNamespace:[NSXMLNode namespaceWithName:prefix stringValue:[prefixes objectForKey:prefix]]];
 	}
-	for (NSString *name in [[context.signals allKeys]
-	         sortedArrayUsingSelector:@selector(compare:)]) {
-		[xml appendFormat:@"  <bpmn:signal%@%@/>\n",
-			UDAttr(@"id", [context.signals objectForKey:name]),
-			UDAttr(@"name", name)];
+	UDSet(root, @"id", UDXMLId(@"Definitions_", definition.processId));
+	UDSet(root, @"targetNamespace", UDBpmnExtensionNamespace);
+	UDSet(root, @"expressionLanguage", UDFeelLanguage);
+	UDSet(root, @"exporter", @"UDWorkflow");
+	/* What events refer to, sorted so the same definition writes the same
+	 * document. */
+	NSArray *references = @[
+		@[ @"bpmn:message", context.messages, @"name" ],
+		@[ @"bpmn:signal", context.signals, @"name" ],
+		@[ @"bpmn:error", context.errors, @"errorCode" ],
+		@[ @"bpmn:escalation", context.escalations, @"escalationCode" ],
+	];
+	for (NSArray *kind in references) {
+		NSDictionary *ids = [kind objectAtIndex:1];
+		for (NSString *name in [[ids allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
+			NSXMLElement *element = UDElement([kind objectAtIndex:0]);
+			UDSet(element, @"id", [ids objectForKey:name]);
+			UDSet(element, @"name", name);
+			if (![[kind objectAtIndex:2] isEqualToString:@"name"]) {
+				UDSet(element, [kind objectAtIndex:2], name);
+			}
+			[root addChild:element];
+		}
 	}
-	for (NSString *code in [[context.errors allKeys]
-	         sortedArrayUsingSelector:@selector(compare:)]) {
-		[xml appendFormat:@"  <bpmn:error%@%@%@/>\n",
-			UDAttr(@"id", [context.errors objectForKey:code]),
-			UDAttr(@"name", code),
-			UDAttr(@"errorCode", code)];
+	[root addChild:process];
+	if ([context.plane childCount] > 0) {
+		NSXMLElement *diagram = UDElement(@"bpmndi:BPMNDiagram");
+		UDSet(diagram, @"id", UDXMLId(@"Diagram_", definition.processId));
+		[diagram addChild:context.plane];
+		[root addChild:diagram];
 	}
-	[xml appendString:process];
-	if ([context.diagram length] > 0) {
-		[xml appendFormat:@"  <bpmndi:BPMNDiagram%@>\n",
-			UDAttr(@"id", UDXMLId(@"Diagram_", definition.processId))];
-		[xml appendFormat:@"    <bpmndi:BPMNPlane%@%@>\n",
-			UDAttr(@"id", UDXMLId(@"Plane_", definition.processId)),
-			UDAttr(@"bpmnElement", definition.processId)];
-		[xml appendString:context.diagram];
-		[xml appendString:@"    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n"];
-	}
-	[xml appendString:@"</bpmn:definitions>\n"];
-	return xml;
+
+	NSXMLDocument *document = [[NSXMLDocument alloc] initWithRootElement:root];
+	[document setVersion:@"1.0"];
+	[document setCharacterEncoding:@"UTF-8"];
+	return document;
+}
+
++ (NSString *)XMLStringFromDefinition:(UDProcessDefinition *)definition
+                                error:(NSError **)error
+{
+	NSXMLDocument *document = [self documentFromDefinition:definition error:error];
+	return [document XMLStringWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement];
 }
 
 + (BOOL)appendScope:(UDProcessDefinition *)scope
-                 to:(NSMutableString *)out
-             indent:(NSString *)indent
+                 to:(NSXMLElement *)parent
             context:(UDBpmnWriteContext *)context
               error:(NSError **)error
 {
 	NSArray *nodeIds = [[scope.nodes allKeys] sortedArrayUsingSelector:@selector(compare:)];
 	for (NSString *nodeId in nodeIds) {
-		if (![self appendNode:[scope nodeWithId:nodeId]
-		                   to:out
-		               indent:indent
-		              context:context
-		                error:error]) {
+		if (![self appendNode:[scope nodeWithId:nodeId] to:parent context:context error:error]) {
 			return NO;
 		}
 	}
 	for (NSString *flowId in scope.flowOrder) {
-		if (![self appendFlow:[scope flowWithId:flowId]
-		                scope:scope
-		                   to:out
-		               indent:indent
-		              context:context
-		                error:error]) {
+		if (![self appendFlow:[scope flowWithId:flowId] scope:scope to:parent context:context error:error]) {
 			return NO;
+		}
+	}
+	/* A compensation boundary event reaches its handler through an
+	 * association, not a flow. */
+	for (NSString *nodeId in nodeIds) {
+		UDFlowNode *node = [scope nodeWithId:nodeId];
+		NSString *handler = [node isKindOfClass:[UDEvent class]] ? [(UDEvent *)node compensationHandlerId] : nil;
+		if (handler != nil) {
+			NSXMLElement *association = UDElement(@"bpmn:association");
+			UDSet(association, @"id", UDXMLId(@"Association_", nodeId));
+			UDSet(association, @"associationDirection", @"One");
+			UDSet(association, @"sourceRef", nodeId);
+			UDSet(association, @"targetRef", handler);
+			[parent addChild:association];
 		}
 	}
 	return YES;
 }
 
-+ (NSString *)eventDefinitionFor:(UDEvent *)event
-                          indent:(NSString *)indent
-                         context:(UDBpmnWriteContext *)context
+/* A catch's code: nil for one that catches any. */
+static NSString *
+UDCaughtCode(NSString *code)
 {
+	return code == nil || [code length] == 0 || [code isEqualToString:@"*"] ? nil : code;
+}
+
++ (NSXMLElement *)eventDefinitionFor:(UDEvent *)event context:(UDBpmnWriteContext *)context
+{
+	NSXMLElement *definition = nil;
 	switch (event.trigger) {
 	case UDEventTriggerMessage:
-		return [NSString stringWithFormat:@"%@<bpmn:messageEventDefinition%@/>\n",
-			indent, UDAttr(@"messageRef",
-				[self messageIdFor:event.messageName context:context])];
+		definition = UDElement(@"bpmn:messageEventDefinition");
+		UDSet(definition, @"messageRef",
+			[self idFor:event.messageName prefix:@"Message_" in:context.messages]);
+		break;
 	case UDEventTriggerError: {
-		NSString *code = event.errorRef;
-		BOOL any = code == nil || [code length] == 0 || [code isEqualToString:@"*"];
-		return [NSString stringWithFormat:@"%@<bpmn:errorEventDefinition%@/>\n",
-			indent, any ? @"" : UDAttr(@"errorRef",
-				[self errorIdFor:code context:context])];
-	}
-	case UDEventTriggerSignal: {
-		NSString *id = [context.signals objectForKey:event.signalName];
-		if (id == nil) {
-			id = UDXMLId(@"Signal_", event.signalName);
-			[context.signals setObject:id forKey:event.signalName];
+		definition = UDElement(@"bpmn:errorEventDefinition");
+		NSString *code = UDCaughtCode(event.errorRef);
+		if (code != nil) {
+			UDSet(definition, @"errorRef", [self idFor:code prefix:@"Error_" in:context.errors]);
 		}
-		return [NSString stringWithFormat:@"%@<bpmn:signalEventDefinition%@/>\n",
-			indent, UDAttr(@"signalRef", id)];
+		UDSet(definition, @"camunda:errorCodeVariable", event.codeVariable);
+		break;
 	}
+	case UDEventTriggerEscalation: {
+		definition = UDElement(@"bpmn:escalationEventDefinition");
+		NSString *code = UDCaughtCode(event.escalationCode);
+		if (code != nil) {
+			UDSet(definition, @"escalationRef", [self idFor:code prefix:@"Escalation_" in:context.escalations]);
+		}
+		UDSet(definition, @"camunda:escalationCodeVariable", event.codeVariable);
+		break;
+	}
+	case UDEventTriggerCompensation:
+		definition = UDElement(@"bpmn:compensateEventDefinition");
+		UDSet(definition, @"activityRef", event.activityRef);
+		break;
+	case UDEventTriggerSignal:
+		definition = UDElement(@"bpmn:signalEventDefinition");
+		UDSet(definition, @"signalRef", [self idFor:event.signalName prefix:@"Signal_" in:context.signals]);
+		break;
 	case UDEventTriggerTerminate:
-		return [NSString stringWithFormat:@"%@<bpmn:terminateEventDefinition/>\n", indent];
+		definition = UDElement(@"bpmn:terminateEventDefinition");
+		break;
 	case UDEventTriggerTimer: {
 		/* A literal as ISO-8601 text, which any modeler reads; a computed
 		 * timer as its FEEL. */
-		NSArray *tags = @[ @"timeDate", @"timeDuration", @"timeCycle" ];
-		NSString *tag = [tags objectAtIndex:(NSUInteger)event.timer.kind];
+		definition = UDElement(@"bpmn:timerEventDefinition");
+		NSArray *tags = @[ @"bpmn:timeDate", @"bpmn:timeDuration", @"bpmn:timeCycle" ];
 		NSString *text = UDTimerText(event.timer) ?: [event.timer.expression expressionString];
-		return [NSString stringWithFormat:
-			@"%@<bpmn:timerEventDefinition>\n"
-			 @"%@  <bpmn:%@ xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:%@>\n"
-			 @"%@</bpmn:timerEventDefinition>\n",
-			indent, indent, tag, UDEscapeXML(text), tag, indent];
+		[definition addChild:UDFormalExpression([tags objectAtIndex:(NSUInteger)event.timer.kind], text)];
+		break;
 	}
-	default:
-		return @"";
+	case UDEventTriggerNone:
+		break;
 	}
+	return definition;
 }
 
-+ (NSString *)loopFor:(UDMultiInstance *)loop indent:(NSString *)indent
++ (NSXMLElement *)loopFor:(UDMultiInstance *)loop
 {
-	NSMutableString *attrs = [NSMutableString string];
+	NSXMLElement *element = UDElement(@"bpmn:multiInstanceLoopCharacteristics");
 	if (loop.isSequential) {
-		[attrs appendString:@" isSequential=\"true\""];
+		UDSet(element, @"isSequential", @"true");
 	}
-	[attrs appendString:UDAttr(@"camunda:collection", [loop.collection expressionString])];
-	[attrs appendString:UDAttr(@"camunda:elementVariable", loop.elementVariable)];
-	NSMutableString *children = [NSMutableString string];
+	UDSet(element, @"camunda:collection", [loop.collection expressionString]);
+	UDSet(element, @"camunda:elementVariable", loop.elementVariable);
 	if (loop.loopCardinality != nil) {
-		[children appendFormat:
-			@"%@  <bpmn:loopCardinality xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:loopCardinality>\n",
-			indent, UDEscapeXML([loop.loopCardinality expressionString])];
+		[element addChild:UDFormalExpression(@"bpmn:loopCardinality", [loop.loopCardinality expressionString])];
 	}
 	if (loop.completionCondition != nil) {
-		[children appendFormat:
-			@"%@  <bpmn:completionCondition xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:completionCondition>\n",
-			indent, UDEscapeXML([loop.completionCondition expressionString])];
+		[element addChild:UDFormalExpression(@"bpmn:completionCondition",
+			[loop.completionCondition expressionString])];
 	}
-	if ([children length] == 0) {
-		return [NSString stringWithFormat:@"%@<bpmn:multiInstanceLoopCharacteristics%@/>\n",
-			indent, attrs];
+	return element;
+}
+
++ (NSXMLElement *)mapping:(UDVariableMapping *)mapping named:(NSString *)name
+{
+	NSXMLElement *element = UDElement(name);
+	if (mapping.isAllVariables) {
+		UDSet(element, @"variables", @"all");
+	} else if (mapping.isBusinessKey) {
+		UDSet(element, @"businessKey", UDBusinessKeyExpression);
+	} else {
+		UDSet(element, @"source", mapping.source);
+		UDSet(element, @"target", mapping.target);
 	}
-	return [NSString stringWithFormat:
-		@"%@<bpmn:multiInstanceLoopCharacteristics%@>\n%@%@</bpmn:multiInstanceLoopCharacteristics>\n",
-		indent, attrs, children, indent];
+	return element;
 }
 
 + (BOOL)appendNode:(UDFlowNode *)node
-                to:(NSMutableString *)out
-            indent:(NSString *)indent
+                to:(NSXMLElement *)parent
            context:(UDBpmnWriteContext *)context
              error:(NSError **)error
 {
 	NSString *tag = nil;
-	NSMutableString *attrs = [NSMutableString string];
-	NSMutableString *body = [NSMutableString string];
-	NSString *inner = [indent stringByAppendingString:@"  "];
-	[attrs appendString:UDAttr(@"id", node.elementId)];
-	if (node.name != nil && ![node.name isEqualToString:node.elementId]) {
-		[attrs appendString:UDAttr(@"name", node.name)];
-	}
+	/* Attributes in the order they are written. */
+	NSMutableArray *attributes = [NSMutableArray array];
+	NSXMLElement *eventDefinition = nil;
+	UDProcessDefinition *scope = nil;
 
 	if ([node isKindOfClass:[UDEvent class]]) {
 		UDEvent *event = (UDEvent *)node;
 		switch (event.kind) {
 		case UDEventKindStart:
-			tag = @"startEvent";
+			tag = @"bpmn:startEvent";
 			if (!event.isInterrupting) {
-				[attrs appendString:@" isInterrupting=\"false\""];
+				[attributes addObject:@[ @"isInterrupting", @"false" ]];
 			}
 			break;
-		case UDEventKindEnd: tag = @"endEvent"; break;
-		case UDEventKindIntermediateCatch: tag = @"intermediateCatchEvent"; break;
-		case UDEventKindIntermediateThrow: tag = @"intermediateThrowEvent"; break;
+		case UDEventKindEnd: tag = @"bpmn:endEvent"; break;
+		case UDEventKindIntermediateCatch: tag = @"bpmn:intermediateCatchEvent"; break;
+		case UDEventKindIntermediateThrow: tag = @"bpmn:intermediateThrowEvent"; break;
 		case UDEventKindBoundary:
-			tag = @"boundaryEvent";
-			[attrs appendString:UDAttr(@"attachedToRef", event.attachedToId)];
+			tag = @"bpmn:boundaryEvent";
+			[attributes addObject:@[ @"attachedToRef", event.attachedToId ?: @"" ]];
 			if (!event.isInterrupting) {
-				[attrs appendString:@" cancelActivity=\"false\""];
+				[attributes addObject:@[ @"cancelActivity", @"false" ]];
 			}
 			break;
 		}
-		[body appendString:[self eventDefinitionFor:event indent:inner context:context]];
+		eventDefinition = [self eventDefinitionFor:event context:context];
 	} else if ([node isKindOfClass:[UDTask class]]) {
 		UDTask *task = (UDTask *)node;
 		if (task.kind == UDTaskKindUser) {
-			tag = @"userTask";
-			[attrs appendString:UDAttr(@"camunda:assignee", task.assignee)];
+			tag = @"bpmn:userTask";
+			[attributes addObject:@[ @"camunda:assignee", task.assignee ?: @"" ]];
 		} else if (task.kind == UDTaskKindService) {
-			tag = @"serviceTask";
-			[attrs appendString:@" camunda:type=\"external\""];
-			[attrs appendString:UDAttr(@"camunda:topic", task.actionKey)];
+			tag = @"bpmn:serviceTask";
+			[attributes addObject:@[ @"camunda:type", @"external" ]];
+			[attributes addObject:@[ @"camunda:topic", task.actionKey ?: @"" ]];
 		} else {
 			/* Camunda script tasks run script text; ours run an action by
 			 * key, which only our own attribute can say. */
-			tag = @"scriptTask";
-			[attrs appendString:UDAttr(@"ud:action", task.actionKey)];
+			tag = @"bpmn:scriptTask";
+			[attributes addObject:@[ @"ud:action", task.actionKey ?: @"" ]];
 		}
 	} else if ([node isKindOfClass:[UDGateway class]]) {
 		UDGateway *gateway = (UDGateway *)node;
 		switch (gateway.kind) {
-		case UDGatewayKindExclusive: tag = @"exclusiveGateway"; break;
-		case UDGatewayKindInclusive: tag = @"inclusiveGateway"; break;
-		case UDGatewayKindParallel: tag = @"parallelGateway"; break;
-		case UDGatewayKindEventBased: tag = @"eventBasedGateway"; break;
+		case UDGatewayKindExclusive: tag = @"bpmn:exclusiveGateway"; break;
+		case UDGatewayKindInclusive: tag = @"bpmn:inclusiveGateway"; break;
+		case UDGatewayKindParallel: tag = @"bpmn:parallelGateway"; break;
+		case UDGatewayKindEventBased: tag = @"bpmn:eventBasedGateway"; break;
 		}
-		[attrs appendString:UDAttr(@"default", gateway.defaultFlowId)];
+		[attributes addObject:@[ @"default", gateway.defaultFlowId ?: @"" ]];
 	} else if ([node isKindOfClass:[UDCallActivity class]]) {
 		UDCallActivity *call = (UDCallActivity *)node;
-		tag = @"callActivity";
-		[attrs appendString:UDAttr(@"calledElement", call.calledElement)];
+		tag = @"bpmn:callActivity";
+		[attributes addObject:@[ @"calledElement", call.calledElement ?: @"" ]];
 		if (call.binding == UDCalledElementBindingDeployment) {
-			[attrs appendString:@" camunda:calledElementBinding=\"deployment\""];
+			[attributes addObject:@[ @"camunda:calledElementBinding", @"deployment" ]];
 		} else if (call.binding == UDCalledElementBindingVersion) {
-			[attrs appendString:@" camunda:calledElementBinding=\"version\""];
-			[attrs appendString:UDAttr(@"camunda:calledElementVersion",
-				[NSString stringWithFormat:@"%ld", (long)call.calledElementVersion])];
+			[attributes addObject:@[ @"camunda:calledElementBinding", @"version" ]];
+			[attributes addObject:@[ @"camunda:calledElementVersion",
+				[NSString stringWithFormat:@"%ld", (long)call.calledElementVersion] ]];
 		}
 	} else if ([node isKindOfClass:[UDSubProcess class]]) {
-		tag = @"subProcess";
+		tag = @"bpmn:subProcess";
 		if ([(UDSubProcess *)node isTriggeredByEvent]) {
-			[attrs appendString:@" triggeredByEvent=\"true\""];
+			[attributes addObject:@[ @"triggeredByEvent", @"true" ]];
 		}
-		UDProcessDefinition *scope = [(UDSubProcess *)node innerDefinition];
-		if (![self appendScope:scope to:body indent:inner context:context error:error]) {
-			return NO;
-		}
+		/* Its flow elements go in after the wiring, which BPMN puts first. */
+		scope = [(UDSubProcess *)node innerDefinition];
 	} else {
 		if (error != NULL) {
 			*error = UDBpmnError(@"%@ cannot be written as BPMN", node.elementId);
@@ -406,121 +424,128 @@ UDMappingAttrs(UDVariableMapping *mapping)
 		return NO;
 	}
 
+	NSXMLElement *element = UDElement(tag);
+	UDSet(element, @"id", node.elementId);
+	if (node.name != nil && ![node.name isEqualToString:node.elementId]) {
+		UDSet(element, @"name", node.name);
+	}
+	for (NSArray *attribute in attributes) {
+		UDSet(element, [attribute objectAtIndex:0], [attribute objectAtIndex:1]);
+	}
+	if (node.isForCompensation) {
+		UDSet(element, @"isForCompensation", @"true");
+	}
 	if (node.isAsyncBefore) {
-		[attrs appendString:@" camunda:asyncBefore=\"true\""];
+		UDSet(element, @"camunda:asyncBefore", @"true");
 	}
 	if (node.isAsyncAfter) {
-		[attrs appendString:@" camunda:asyncAfter=\"true\""];
+		UDSet(element, @"camunda:asyncAfter", @"true");
 	}
 	if (!node.isExclusive) {
-		[attrs appendString:@" camunda:exclusive=\"false\""];
+		UDSet(element, @"camunda:exclusive", @"false");
 	}
-	[attrs appendString:UDAttr(@"camunda:taskPriority", [node.taskPriority stringValue])];
-	NSMutableString *extensions = [NSMutableString string];
+	UDSet(element, @"camunda:taskPriority", [node.taskPriority stringValue]);
+
+	/* BPMN puts extension elements, then incoming and outgoing, then an
+	 * activity's loop characteristics or an event's definition, before
+	 * everything else -- a subprocess's flow elements included. */
+	NSXMLElement *extensions = UDElement(@"bpmn:extensionElements");
 	if (node.retryTimeCycle != nil) {
-		[extensions appendFormat:
-			@"%@  <camunda:failedJobRetryTimeCycle>%@</camunda:failedJobRetryTimeCycle>\n",
-			inner, UDEscapeXML(node.retryTimeCycle)];
+		NSXMLElement *cycle = UDElement(@"camunda:failedJobRetryTimeCycle");
+		[cycle setStringValue:node.retryTimeCycle];
+		[extensions addChild:cycle];
 	}
 	if ([node isKindOfClass:[UDCallActivity class]]) {
 		UDCallActivity *call = (UDCallActivity *)node;
 		for (UDVariableMapping *mapping in call.inputs) {
-			[extensions appendFormat:@"%@  <camunda:in%@/>\n", inner, UDMappingAttrs(mapping)];
+			[extensions addChild:[self mapping:mapping named:@"camunda:in"]];
 		}
 		for (UDVariableMapping *mapping in call.outputs) {
-			[extensions appendFormat:@"%@  <camunda:out%@/>\n", inner, UDMappingAttrs(mapping)];
+			[extensions addChild:[self mapping:mapping named:@"camunda:out"]];
 		}
 	}
-	NSMutableString *wiring = [NSMutableString string];
-	if ([extensions length] > 0) {
-		[wiring appendFormat:@"%@<bpmn:extensionElements>\n%@%@</bpmn:extensionElements>\n",
-			inner, extensions, inner];
+	if ([extensions childCount] > 0) {
+		[element addChild:extensions];
 	}
 	for (NSString *flowId in node.incomingFlowIds) {
-		[wiring appendFormat:@"%@<bpmn:incoming>%@</bpmn:incoming>\n",
-			inner, UDEscapeXML(flowId)];
+		NSXMLElement *incoming = UDElement(@"bpmn:incoming");
+		[incoming setStringValue:flowId];
+		[element addChild:incoming];
 	}
 	for (NSString *flowId in node.outgoingFlowIds) {
-		[wiring appendFormat:@"%@<bpmn:outgoing>%@</bpmn:outgoing>\n",
-			inner, UDEscapeXML(flowId)];
+		NSXMLElement *outgoing = UDElement(@"bpmn:outgoing");
+		[outgoing setStringValue:flowId];
+		[element addChild:outgoing];
 	}
-	/* BPMN puts extension elements, then incoming and outgoing, then an
-	 * activity's loop characteristics, before everything else -- a
-	 * subprocess's flow elements included. */
 	if (node.multiInstance != nil) {
-		[body insertString:[self loopFor:node.multiInstance indent:inner] atIndex:0];
+		[element addChild:[self loopFor:node.multiInstance]];
 	}
-	[body insertString:wiring atIndex:0];
-	if ([body length] == 0) {
-		[out appendFormat:@"%@<bpmn:%@%@/>\n", indent, tag, attrs];
-	} else {
-		[out appendFormat:@"%@<bpmn:%@%@>\n%@%@</bpmn:%@>\n",
-			indent, tag, attrs, body, indent, tag];
+	if (eventDefinition != nil) {
+		[element addChild:eventDefinition];
+	}
+	[parent addChild:element];
+	if (scope != nil && ![self appendScope:scope to:element context:context error:error]) {
+		return NO;
 	}
 
 	if (node.boundsWidth > 0 || node.boundsHeight > 0) {
-		[context.diagram appendFormat:
-			@"      <bpmndi:BPMNShape%@%@%@>\n"
-			 @"        <dc:Bounds x=\"%@\" y=\"%@\" width=\"%@\" height=\"%@\"/>\n"
-			 @"      </bpmndi:BPMNShape>\n",
-			UDAttr(@"id", UDXMLId(@"Shape_", node.elementId)),
-			UDAttr(@"bpmnElement", node.elementId),
-			[node isKindOfClass:[UDSubProcess class]] ? @" isExpanded=\"true\"" : @"",
-			UDNumber(node.boundsX), UDNumber(node.boundsY),
-			UDNumber(node.boundsWidth), UDNumber(node.boundsHeight)];
+		NSXMLElement *shape = UDElement(@"bpmndi:BPMNShape");
+		UDSet(shape, @"id", UDXMLId(@"Shape_", node.elementId));
+		UDSet(shape, @"bpmnElement", node.elementId);
+		if ([node isKindOfClass:[UDSubProcess class]]) {
+			UDSet(shape, @"isExpanded", @"true");
+		}
+		NSXMLElement *bounds = UDElement(@"dc:Bounds");
+		UDSet(bounds, @"x", UDNumber(node.boundsX));
+		UDSet(bounds, @"y", UDNumber(node.boundsY));
+		UDSet(bounds, @"width", UDNumber(node.boundsWidth));
+		UDSet(bounds, @"height", UDNumber(node.boundsHeight));
+		[shape addChild:bounds];
+		[context.plane addChild:shape];
 	}
 	return YES;
 }
 
 + (BOOL)appendFlow:(UDSequenceFlow *)flow
              scope:(UDProcessDefinition *)scope
-                to:(NSMutableString *)out
-            indent:(NSString *)indent
+                to:(NSXMLElement *)parent
            context:(UDBpmnWriteContext *)context
              error:(NSError **)error
 {
-	NSMutableString *attrs = [NSMutableString string];
-	[attrs appendString:UDAttr(@"id", flow.elementId)];
+	NSXMLElement *element = UDElement(@"bpmn:sequenceFlow");
+	UDSet(element, @"id", flow.elementId);
 	if (flow.name != nil && ![flow.name isEqualToString:flow.elementId]) {
-		[attrs appendString:UDAttr(@"name", flow.name)];
+		UDSet(element, @"name", flow.name);
 	}
-	[attrs appendString:UDAttr(@"sourceRef", flow.sourceId)];
-	[attrs appendString:UDAttr(@"targetRef", flow.targetId)];
-
+	UDSet(element, @"sourceRef", flow.sourceId);
+	UDSet(element, @"targetRef", flow.targetId);
 	id condition = flow.condition;
-	if (condition == nil) {
-		[out appendFormat:@"%@<bpmn:sequenceFlow%@/>\n", indent, attrs];
-	} else if ([condition conformsToProtocol:@protocol(UDCondition)]) {
-		[out appendFormat:
-			@"%@<bpmn:sequenceFlow%@>\n"
-			 @"%@  <bpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:conditionExpression>\n"
-			 @"%@</bpmn:sequenceFlow>\n",
-			indent, attrs, indent,
-			UDEscapeXML([condition expressionString]), indent];
-	} else {
-		if (error != NULL) {
-			*error = UDBpmnError(@"the condition on %@ cannot be written as BPMN",
-				flow.elementId);
+	if (condition != nil) {
+		if (![condition conformsToProtocol:@protocol(UDCondition)]) {
+			if (error != NULL) {
+				*error = UDBpmnError(@"the condition on %@ cannot be written as BPMN", flow.elementId);
+			}
+			return NO;
 		}
-		return NO;
+		[element addChild:UDFormalExpression(@"bpmn:conditionExpression", [condition expressionString])];
 	}
+	[parent addChild:element];
 
 	/* A straight edge between the shapes' centres: the diagram needs an
 	 * edge to show the flow at all, and we keep no waypoints. */
 	UDFlowNode *source = [scope nodeWithId:flow.sourceId];
 	UDFlowNode *target = [scope nodeWithId:flow.targetId];
 	if (source.boundsWidth > 0 && target.boundsWidth > 0) {
-		[context.diagram appendFormat:
-			@"      <bpmndi:BPMNEdge%@%@>\n"
-			 @"        <di:waypoint x=\"%@\" y=\"%@\"/>\n"
-			 @"        <di:waypoint x=\"%@\" y=\"%@\"/>\n"
-			 @"      </bpmndi:BPMNEdge>\n",
-			UDAttr(@"id", UDXMLId(@"Edge_", flow.elementId)),
-			UDAttr(@"bpmnElement", flow.elementId),
-			UDNumber(source.boundsX + source.boundsWidth / 2),
-			UDNumber(source.boundsY + source.boundsHeight / 2),
-			UDNumber(target.boundsX + target.boundsWidth / 2),
-			UDNumber(target.boundsY + target.boundsHeight / 2)];
+		NSXMLElement *edge = UDElement(@"bpmndi:BPMNEdge");
+		UDSet(edge, @"id", UDXMLId(@"Edge_", flow.elementId));
+		UDSet(edge, @"bpmnElement", flow.elementId);
+		for (UDFlowNode *end in @[ source, target ]) {
+			NSXMLElement *waypoint = UDElement(@"di:waypoint");
+			UDSet(waypoint, @"x", UDNumber(end.boundsX + end.boundsWidth / 2));
+			UDSet(waypoint, @"y", UDNumber(end.boundsY + end.boundsHeight / 2));
+			[edge addChild:waypoint];
+		}
+		[context.plane addChild:edge];
 	}
 	return YES;
 }
@@ -529,12 +554,13 @@ UDMappingAttrs(UDVariableMapping *mapping)
                   toURL:(NSURL *)url
                   error:(NSError **)error
 {
-	NSString *xml = [self XMLStringFromDefinition:definition error:error];
-	if (xml == nil) {
+	NSXMLDocument *document = [self documentFromDefinition:definition error:error];
+	if (document == nil) {
 		return NO;
 	}
-	return [xml writeToURL:url atomically:YES encoding:NSUTF8StringEncoding
-	                 error:error];
+	return [[document XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement]
+		writeToURL:url options:NSDataWritingAtomic
+	                                                                 error:error];
 }
 
 @end
@@ -563,6 +589,7 @@ UDIgnoredElements(void)
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *messages;
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *errors;
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *signals;
+@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *escalations;
 @property (nonatomic, strong) NSDictionary<NSString *, NSXMLElement *> *shapes;
 @property (nonatomic, copy) NSString *expressionLanguage;
 @property (nonatomic, strong) NSError *error;
@@ -662,6 +689,7 @@ UDIgnoredElements(void)
 	NSMutableDictionary *messages = [NSMutableDictionary dictionary];
 	NSMutableDictionary *errors = [NSMutableDictionary dictionary];
 	NSMutableDictionary *signals = [NSMutableDictionary dictionary];
+	NSMutableDictionary *escalations = [NSMutableDictionary dictionary];
 	NSMutableArray *processes = [NSMutableArray array];
 	for (NSXMLElement *element in [self children:root of:UDBpmnNamespace]) {
 		NSString *name = [element localName];
@@ -671,6 +699,10 @@ UDIgnoredElements(void)
 			             forKey:elementId];
 		} else if ([name isEqualToString:@"signal"] && elementId != nil) {
 			[signals setObject:[self attr:@"name" of:element] ?: elementId forKey:elementId];
+		} else if ([name isEqualToString:@"escalation"] && elementId != nil) {
+			[escalations setObject:[self attr:@"escalationCode" of:element]
+				?: [self attr:@"name" of:element] ?: elementId
+			                forKey:elementId];
 		} else if ([name isEqualToString:@"error"] && elementId != nil) {
 			[errors setObject:[self attr:@"errorCode" of:element]
 				?: [self attr:@"name" of:element] ?: elementId
@@ -683,6 +715,7 @@ UDIgnoredElements(void)
 	context.messages = messages;
 	context.errors = errors;
 	context.signals = signals;
+	context.escalations = escalations;
 	NSMutableDictionary *shapes = [NSMutableDictionary dictionary];
 	[self collectShapes:root into:shapes];
 	context.shapes = shapes;
@@ -756,11 +789,33 @@ UDIgnoredElements(void)
              into:(UDDefinitionBuilder *)builder
           context:(UDBpmnReadContext *)context
 {
+	NSMutableArray *associations = [NSMutableArray array];
+	[self readElementsOf:scope into:builder associations:associations context:context];
+	for (NSXMLElement *association in associations) {
+		NSString *source = [self attr:@"sourceRef" of:association];
+		NSString *target = [self attr:@"targetRef" of:association];
+		if (source != nil && target != nil) {
+			[builder setCompensationHandler:target forBoundary:source];
+		}
+	}
+}
+
++ (void)readElementsOf:(NSXMLElement *)scope
+                  into:(UDDefinitionBuilder *)builder
+          associations:(NSMutableArray *)associations
+               context:(UDBpmnReadContext *)context
+{
 	for (NSXMLElement *element in [self children:scope of:UDBpmnNamespace]) {
 		if (context.error != nil) {
 			return;
 		}
 		NSString *name = [element localName];
+		if ([name isEqualToString:@"association"]) {
+			/* A compensation boundary event's link to its handler; any
+			 * other association is an annotation's, and ignored. */
+			[associations addObject:element];
+			continue;
+		}
 		if ([UDIgnoredElements() containsObject:name]) {
 			continue;
 		}
@@ -788,6 +843,17 @@ UDIgnoredElements(void)
 		NSString *label = [self attr:@"name" of:element];
 		if (label != nil) {
 			[builder setName:label forElement:elementId];
+		}
+		if ([[self attr:@"isForCompensation" of:element] isEqualToString:@"true"]) {
+			[builder setForCompensation:YES forElement:elementId];
+		}
+		for (NSString *definitionName in @[ @"errorEventDefinition", @"escalationEventDefinition" ]) {
+			NSXMLElement *definition = [self child:element named:definitionName];
+			NSString *variable = [self attr:[definitionName hasPrefix:@"error"] ? @"errorCodeVariable"
+				: @"escalationCodeVariable" namespace:UDCamundaNamespace of:definition];
+			if (variable != nil) {
+				[builder setCodeVariable:variable forElement:elementId];
+			}
 		}
 		[self readJobSettings:element id:elementId into:builder context:context];
 		NSXMLElement *bounds = [context.shapes objectForKey:elementId];
@@ -858,7 +924,9 @@ UDIgnoredElements(void)
 		    && ![name isEqualToString:@"timerEventDefinition"]
 		    && ![name isEqualToString:@"errorEventDefinition"]
 		    && ![name isEqualToString:@"signalEventDefinition"]
-		    && ![name isEqualToString:@"terminateEventDefinition"]) {
+		    && ![name isEqualToString:@"terminateEventDefinition"]
+		    && ![name isEqualToString:@"escalationEventDefinition"]
+		    && ![name isEqualToString:@"compensateEventDefinition"]) {
 			*unsupported = name;
 			return nil;
 		}
@@ -1060,6 +1128,23 @@ UDIgnoredElements(void)
 	BOOL errorTrigger = [trigger isEqualToString:@"errorEventDefinition"];
 	BOOL signal = [trigger isEqualToString:@"signalEventDefinition"];
 	BOOL terminate = [trigger isEqualToString:@"terminateEventDefinition"];
+	BOOL escalation = [trigger isEqualToString:@"escalationEventDefinition"];
+	BOOL compensate = [trigger isEqualToString:@"compensateEventDefinition"];
+	NSString *escalationCode = nil;
+	if (escalation) {
+		NSString *ref = [self attr:@"escalationRef" of:definition];
+		escalationCode = ref == nil ? nil : ([context.escalations objectForKey:ref] ?: ref);
+	}
+	NSString *errorCode = nil;
+	if (errorTrigger) {
+		NSString *ref = [self attr:@"errorRef" of:definition];
+		errorCode = ref == nil ? nil : ([context.errors objectForKey:ref] ?: ref);
+	}
+	if (compensate && [[self attr:@"waitForCompletion" of:definition] isEqualToString:@"false"]) {
+		[self fail:context error:UDBpmnError(
+			@"%@: waitForCompletion=\"false\" is not supported; compensation is waited for", elementId)];
+		return NO;
+	}
 	NSString *signalName = nil;
 	if (signal) {
 		NSString *ref = [self attr:@"signalRef" of:definition];
@@ -1085,9 +1170,18 @@ UDIgnoredElements(void)
 					@"%@: an error start event can only start an event subprocess", elementId)];
 				return NO;
 			}
-			NSString *ref = [self attr:@"errorRef" of:definition];
-			[builder addErrorStart:elementId
-			              errorRef:ref == nil ? nil : ([context.errors objectForKey:ref] ?: ref)];
+			[builder addErrorStart:elementId errorRef:errorCode];
+		} else if (escalation) {
+			if (!context.inEventSubProcess) {
+				[self fail:context error:UDBpmnError(
+					@"%@: an escalation start event can only start an event subprocess", elementId)];
+				return NO;
+			}
+			[builder addEscalationStart:elementId code:escalationCode];
+		} else if (compensate) {
+			[self fail:context error:UDBpmnError(
+				@"%@: compensation event subprocesses are not supported yet", elementId)];
+			return NO;
 		} else {
 			[builder addStart:elementId];
 		}
@@ -1102,9 +1196,15 @@ UDIgnoredElements(void)
 			[builder addSignalEnd:elementId signal:signalName];
 		} else if (terminate) {
 			[builder addTerminateEnd:elementId];
+		} else if (errorTrigger) {
+			[builder addErrorEnd:elementId errorRef:errorCode];
+		} else if (escalation) {
+			[builder addEscalationEnd:elementId code:escalationCode];
+		} else if (compensate) {
+			[builder addCompensationEnd:elementId activity:[self attr:@"activityRef" of:definition]];
 		} else if (definition != nil) {
 			[self fail:context error:UDBpmnError(
-				@"%@: error end events are not supported yet", elementId)];
+				@"%@: %@ end events are not supported yet", elementId, trigger)];
 		} else {
 			[builder addEnd:elementId];
 		}
@@ -1127,11 +1227,16 @@ UDIgnoredElements(void)
 			                 message:[self messageNameOf:definition id:elementId context:context]];
 		} else if (signal) {
 			[builder addSignalThrow:elementId signal:signalName];
+		} else if (escalation) {
+			[builder addEscalationThrow:elementId code:escalationCode];
+		} else if (compensate) {
+			[builder addCompensationThrow:elementId activity:[self attr:@"activityRef" of:definition]];
 		} else if (definition == nil) {
 			[builder addIntermediateThrow:elementId];
 		} else {
 			[self fail:context error:UDBpmnError(
-				@"%@: only message, signal and none throw events are supported", elementId)];
+				@"%@: only message, signal, escalation, compensation and none throw events are supported",
+				elementId)];
 		}
 	} else if ([name isEqualToString:@"boundaryEvent"]) {
 		NSString *host = [self attr:@"attachedToRef" of:element];
@@ -1149,15 +1254,17 @@ UDIgnoredElements(void)
 			[builder addBoundarySignal:elementId onTask:host signal:signalName
 			              interrupting:interrupting];
 		} else if (errorTrigger) {
-			NSString *ref = [self attr:@"errorRef" of:definition];
-			[builder addBoundaryError:elementId
-			                   onTask:host
-			                 errorRef:ref == nil ? nil
-			                     : ([context.errors objectForKey:ref] ?: ref)
-			             interrupting:YES];
+			[builder addBoundaryError:elementId onTask:host errorRef:errorCode interrupting:YES];
+		} else if (escalation) {
+			[builder addBoundaryEscalation:elementId onTask:host code:escalationCode
+			                  interrupting:interrupting];
+		} else if (compensate) {
+			/* Its handler comes from the association, read with the scope. */
+			[builder addBoundaryCompensation:elementId onTask:host handler:nil];
 		} else {
 			[self fail:context error:UDBpmnError(
-				@"%@: a boundary event needs a message, timer, signal or error", elementId)];
+				@"%@: a boundary event needs a message, timer, signal, error, escalation or compensation",
+				elementId)];
 		}
 	} else if ([name isEqualToString:@"userTask"]) {
 		[builder addUserTask:elementId

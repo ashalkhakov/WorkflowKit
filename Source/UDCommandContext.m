@@ -489,6 +489,14 @@ UDGone(NSManagedObject *object)
 		[self leave:event execution:execution];
 		return;
 	case UDEventKindIntermediateThrow:
+		if (event.trigger == UDEventTriggerEscalation) {
+			[self throwEscalation:event execution:execution];
+			return;
+		}
+		if (event.trigger == UDEventTriggerCompensation) {
+			[self throwCompensation:event execution:execution];
+			return;
+		}
 		if (event.trigger == UDEventTriggerMessage) {
 			[self throwMessage:event execution:execution];
 		} else if (event.trigger == UDEventTriggerSignal) {
@@ -499,6 +507,22 @@ UDGone(NSManagedObject *object)
 	case UDEventKindEnd:
 		if (event.trigger == UDEventTriggerTerminate) {
 			[self terminate:execution];
+			return;
+		}
+		if (event.trigger == UDEventTriggerEscalation) {
+			[self throwEscalation:event execution:execution];
+			return;
+		}
+		if (event.trigger == UDEventTriggerCompensation) {
+			[self throwCompensation:event execution:execution];
+			return;
+		}
+		if (event.trigger == UDEventTriggerError) {
+			[self activityEnded:execution.activityInstanceId canceled:NO];
+			if (![self propagate:UDEventTriggerError code:event.errorRef from:execution]) {
+				/* Uncaught, as an end event its path ends all the same. */
+				[self endPath:execution];
+			}
 			return;
 		}
 		if (event.trigger == UDEventTriggerMessage) {
@@ -559,6 +583,7 @@ UDGone(NSManagedObject *object)
 	subscription.activityId = activityId;
 	subscription.processInstanceId = execution.processInstanceId;
 	subscription.createdAt = [NSDate date];
+	subscription.sequence = [self.engine ud_nextSequence];
 	subscription.execution = execution;
 }
 
@@ -863,62 +888,80 @@ UDGone(NSManagedObject *object)
 	[self leave:boundary execution:path];
 }
 
-/* The error boundary on the node that catches the code: one for that code,
- * else a catch-all. */
-- (UDEvent *)errorBoundaryOn:(UDFlowNode *)node
-                       scope:(UDProcessDefinition *)scope
-                        code:(NSString *)errorCode
+/* The boundary on the node that catches a thrown error or escalation
+ * with the code: one for that code, else a catch-all. */
+- (UDEvent *)catcherOn:(UDFlowNode *)node
+                 scope:(UDProcessDefinition *)scope
+               trigger:(UDEventTrigger)trigger
+                  code:(NSString *)code
 {
 	UDEvent *catchAll = nil;
 	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
-		if (boundary.trigger != UDEventTriggerError) {
+		if (boundary.trigger != trigger) {
 			continue;
 		}
 		NSString *ref = boundary.errorRef;
 		if (ref == nil || [ref length] == 0 || [ref isEqualToString:@"*"]) {
 			catchAll = catchAll ?: boundary;
-		} else if ([ref isEqualToString:errorCode]) {
+		} else if ([ref isEqualToString:code]) {
 			return boundary;
 		}
 	}
 	return catchAll;
 }
 
-- (void)throwBpmnError:(NSString *)errorCode fromExecution:(UDExecutionEntity *)execution
+/* The catching event's code variable gets the code it caught. */
+- (BOOL)caught:(NSString *)code by:(UDEvent *)catcher on:(UDExecutionEntity *)execution
 {
-	/* The error travels outward through the scopes around the activity --
-	 * the activity's own, if it has boundary events, then each enclosing
-	 * subprocess, then, out of a called instance, the call activity and the
-	 * scopes around it -- and the nearest boundary that catches it wins. */
+	if (catcher.codeVariable == nil) {
+		return YES;
+	}
+	return [self setVariables:@{ catcher.codeVariable: code ?: [NSNull null] } from:execution];
+}
+
+/* A thrown error or escalation travels outward through the scopes around
+ * the thrower -- the activity's own, if it has boundary events, then each
+ * enclosing subprocess, then, out of a called instance, the call activity
+ * and the scopes around it. At each scope its event subprocesses catch it
+ * first, inside the boundary events of the activity around the scope --
+ * unless it comes out of one of them. NO when nothing caught it. */
+- (BOOL)propagate:(UDEventTrigger)trigger code:(NSString *)code from:(UDExecutionEntity *)execution
+{
 	UDProcessDefinition *definition = [self definitionForExecution:execution];
 	UDExecutionEntity *scopeExecution = execution;
-	/* The execution the error came up through, just below this one. */
+	/* The execution it came up through, just below this one. */
 	UDExecutionEntity *below = nil;
 	while (scopeExecution != nil) {
-		/* An error event subprocess of the scope catches it first, inside
-		 * the boundary events of the activity around the scope -- unless
-		 * the error comes out of one of the scope's event subprocesses. */
 		UDProcessDefinition *inner = scopeExecution.isScope ? [self definitionScopeOf:scopeExecution] : nil;
 		if (inner != nil && ![self isEventSubProcess:scopeExecution.activityId in:inner]
 		    && ![self isEventSubProcess:below.activityId in:inner]) {
-			UDSubProcess *handler = [self errorEventSubProcessIn:inner code:errorCode];
+			UDSubProcess *handler = [self eventSubProcessIn:inner catching:trigger code:code];
 			if (handler != nil) {
-				[self interruptScope:scopeExecution];
-				[self enterNow:handler execution:scopeExecution];
-				return;
+				UDEvent *start = [handler.innerDefinition startEvent];
+				if (![self caught:code by:start on:scopeExecution]) {
+					return YES;
+				}
+				if (start.isInterrupting) {
+					[self interruptScope:scopeExecution];
+					[self enterNow:handler execution:scopeExecution];
+				} else {
+					UDExecutionEntity *path = [self pathBeside:scopeExecution
+					                                   keeping:[self scopeWaitsOf:inner]];
+					[self enterNow:handler execution:path];
+				}
+				return YES;
 			}
 		}
 		if (scopeExecution.parent == nil) {
 			UDExecutionEntity *caller = scopeExecution.superExecution;
 			if (caller == nil) {
-				break;
+				return NO;
 			}
 			definition = [self definitionForExecution:caller];
 			UDFlowNode *call = [definition flowNodeWithId:caller.activityId];
 			UDEvent *catcher = [call isKindOfClass:[UDCallActivity class]]
-				? [self errorBoundaryOn:call
-				                  scope:[definition scopeOfFlowNode:call.elementId]
-				                   code:errorCode]
+				? [self catcherOn:call scope:[definition scopeOfFlowNode:call.elementId]
+				          trigger:trigger code:code]
 				: nil;
 			if (catcher != nil) {
 				/* A call activity with boundary events is a scope: the
@@ -930,10 +973,10 @@ UDGone(NSManagedObject *object)
 				                                   from:[self visibleVariables:scopeExecution]];
 				UDExecutionEntity *scopeOfCall = [self isInstance:caller of:call]
 					? caller.parent : caller;
-				if ([self setVariables:outputs from:caller]) {
+				if ([self setVariables:outputs from:caller] && [self caught:code by:catcher on:caller]) {
 					[self boundary:catcher firedOn:scopeOfCall subscription:nil];
 				}
-				return;
+				return YES;
 			}
 			below = nil;
 			scopeExecution = caller;
@@ -945,20 +988,29 @@ UDGone(NSManagedObject *object)
 			UDFlowNode *owner = [definition flowNodeWithId:ownerId];
 			UDEvent *catcher = nil;
 			if ([owner isKindOfClass:[UDTask class]] || [owner isKindOfClass:[UDSubProcess class]]) {
-				catcher = [self errorBoundaryOn:owner
-				                          scope:[definition scopeOfFlowNode:ownerId]
-				                           code:errorCode];
+				catcher = [self catcherOn:owner scope:[definition scopeOfFlowNode:ownerId]
+				                  trigger:trigger code:code];
 			}
 			if (catcher != nil) {
-				[self boundary:catcher firedOn:scopeExecution subscription:nil];
-				return;
+				if ([self caught:code by:catcher on:scopeExecution]) {
+					[self boundary:catcher firedOn:scopeExecution subscription:nil];
+				}
+				return YES;
 			}
 		}
 		below = scopeExecution;
 		scopeExecution = scopeExecution.parent;
 	}
-	definition = [self definitionForExecution:execution];
+	return NO;
+}
+
+- (void)throwBpmnError:(NSString *)errorCode fromExecution:(UDExecutionEntity *)execution
+{
+	if ([self propagate:UDEventTriggerError code:errorCode from:execution]) {
+		return;
+	}
 	/* Nothing catches it: the path ends, as the reference does by default. */
+	UDProcessDefinition *definition = [self definitionForExecution:execution];
 	UDFlowNode *node = [definition flowNodeWithId:execution.activityId];
 	if (node != nil && [self isActivityScope:execution node:node]) {
 		UDExecutionEntity *host = execution.parent;
@@ -969,6 +1021,183 @@ UDGone(NSManagedObject *object)
 		[self activityEnded:execution.activityInstanceId canceled:YES];
 		[self endPath:execution];
 	}
+}
+
+/* An escalation from a throw or end event. Unlike an error it is not
+ * critical: uncaught, or caught without interrupting the thrower, an
+ * intermediate throw goes on and an end event ends its path. */
+- (void)throwEscalation:(UDEvent *)event execution:(UDExecutionEntity *)execution
+{
+	NSString *instance = execution.activityInstanceId;
+	UDExecutionEntity *level = execution;
+	[self propagate:UDEventTriggerEscalation code:event.escalationCode from:execution];
+	/* A non-interrupting catch in this scope may have moved the throwing
+	 * path into a concurrent child; an interrupting one removed it. */
+	UDExecutionEntity *thrower = nil;
+	if (!UDGone(execution) && [execution.activityInstanceId isEqualToString:instance]) {
+		thrower = execution;
+	} else if (!UDGone(level)) {
+		for (UDExecutionEntity *child in [level concurrentChildren]) {
+			if ([child.activityInstanceId isEqualToString:instance]) {
+				thrower = child;
+			}
+		}
+	}
+	if (thrower == nil) {
+		return;
+	}
+	if (event.kind == UDEventKindEnd) {
+		[self activityEnded:thrower.activityInstanceId canceled:NO];
+		[self endPath:thrower];
+	} else {
+		[self leave:event execution:thrower];
+	}
+}
+
+#pragma mark - Compensation
+
+/* The activity's compensation boundary event, if it has one. */
+- (UDEvent *)compensationBoundaryOf:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
+	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
+	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
+		if (boundary.trigger == UDEventTriggerCompensation) {
+			return boundary;
+		}
+	}
+	return nil;
+}
+
+/* The scope execution in which the node's flow runs, from an execution
+ * at or under it. */
+- (UDExecutionEntity *)scopeExecutionFor:(UDFlowNode *)node from:(UDExecutionEntity *)execution
+{
+	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
+	for (UDExecutionEntity *at = execution; at != nil; at = at.parent) {
+		if ([self definitionScopeOf:at] == scope) {
+			return at;
+		}
+	}
+	return nil;
+}
+
+- (void)compensation:(NSString *)activityId
+                 via:(NSString *)subProcessId
+                  on:(UDExecutionEntity *)scopeExecution
+{
+	[self subscribe:scopeExecution type:UDEventTypeCompensate name:subProcessId ?: @"" activity:activityId];
+}
+
+/* An activity with a compensation handler completed: the handler waits on
+ * its scope until compensation is thrown there, or the scope ends. */
+- (void)recordCompensationFor:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
+	if (![node isKindOfClass:[UDTask class]] && ![node isKindOfClass:[UDSubProcess class]]
+	    && ![node isKindOfClass:[UDCallActivity class]]) {
+		return;
+	}
+	if ([self compensationBoundaryOf:node execution:execution] == nil) {
+		return;
+	}
+	UDExecutionEntity *scopeExecution = [self scopeExecutionFor:node from:execution];
+	if (scopeExecution != nil) {
+		[self compensation:node.elementId via:nil on:scopeExecution];
+	}
+}
+
+- (NSArray<UDEventSubscriptionEntity *> *)compensationsOn:(UDExecutionEntity *)execution
+{
+	return [self subscriptions:UDEventTypeCompensate on:execution];
+}
+
+- (NSArray<UDEventSubscriptionEntity *> *)subscriptions:(NSString *)type on:(UDExecutionEntity *)execution
+{
+	NSMutableArray *found = [NSMutableArray array];
+	for (UDEventSubscriptionEntity *subscription in execution.eventSubscriptions) {
+		if (![subscription isDeleted] && [subscription.eventType isEqualToString:type]) {
+			[found addObject:subscription];
+		}
+	}
+	/* Newest first: compensation undoes in reverse. */
+	return [found sortedArrayUsingDescriptors:@[ [NSSortDescriptor sortDescriptorWithKey:@"sequence"
+	                                                                            ascending:NO] ]];
+}
+
+/* A subprocess completed: the handlers waiting in it move up to the
+ * scope around it -- unless it has a handler of its own, which stands for
+ * them. */
+- (void)carryCompensationsOutOf:(UDExecutionEntity *)inner node:(UDFlowNode *)node host:(UDExecutionEntity *)host
+{
+	NSArray *waiting = [self compensationsOn:inner];
+	if ([waiting count] == 0) {
+		return;
+	}
+	UDExecutionEntity *outer = [self compensationBoundaryOf:node execution:host] == nil
+		? [self scopeExecutionFor:node from:host] : nil;
+	/* Oldest first, keeping their order. */
+	for (UDEventSubscriptionEntity *subscription in [[waiting reverseObjectEnumerator] allObjects]) {
+		if (outer != nil) {
+			subscription.execution = outer;
+			subscription.eventName = node.elementId;
+			subscription.sequence = [self.engine ud_nextSequence];
+		} else {
+			[self remove:subscription];
+		}
+	}
+}
+
+/* A compensation throw or end event: the handlers of the completed
+ * activities in its scope -- the one named, or all -- run one after
+ * another, newest first, and the thrower waits for them. */
+- (void)throwCompensation:(UDEvent *)event execution:(UDExecutionEntity *)execution
+{
+	UDExecutionEntity *scopeExecution = [self scopeExecutionFor:event from:execution];
+	NSString *target = event.activityRef;
+	for (UDEventSubscriptionEntity *subscription in [self compensationsOn:scopeExecution]) {
+		if (target == nil || [subscription.activityId isEqualToString:target]
+		    || [subscription.eventName isEqualToString:target]) {
+			/* Queued on the thrower, which works through them. */
+			subscription.eventType = UDEventTypeCompensating;
+			subscription.execution = execution;
+		}
+	}
+	execution.isActive = NO;
+	[self compensateNext:execution];
+}
+
+- (void)compensateNext:(UDExecutionEntity *)thrower
+{
+	UDEventSubscriptionEntity *next = [[self subscriptions:UDEventTypeCompensating on:thrower] firstObject];
+	if (next == nil) {
+		/* Done: the thrower goes on, or its path ends. */
+		thrower.isActive = YES;
+		UDFlowNode *event = [self node:thrower.activityId of:thrower];
+		if (event == nil) {
+			return;
+		}
+		if ([(UDEvent *)event kind] == UDEventKindEnd) {
+			[self activityEnded:thrower.activityInstanceId canceled:NO];
+			[self endPath:thrower];
+		} else {
+			[self leave:event execution:thrower];
+		}
+		return;
+	}
+	UDFlowNode *activity = [self node:next.activityId of:thrower];
+	UDEvent *boundary = activity != nil ? [self compensationBoundaryOf:activity execution:thrower] : nil;
+	UDFlowNode *handler = boundary != nil ? [self node:boundary.compensationHandlerId of:thrower] : nil;
+	[self remove:next];
+	if (handler == nil) {
+		[self compensateNext:thrower];
+		return;
+	}
+	UDExecutionEntity *compensating = [self newChildOf:thrower concurrent:NO];
+	compensating.isCompensation = YES;
+	[self schedule:^{
+		if (!UDGone(compensating)) {
+			[self enter:handler execution:compensating];
+		}
+	}];
 }
 
 #pragma mark - Call activities
@@ -1276,7 +1505,7 @@ static NSString * const UDLoopCounter = @"loopCounter";
 	if (execution.parent == nil) {
 		return [self definitionForExecution:execution];
 	}
-	if (!execution.isScope || execution.isMultiInstanceBody) {
+	if (!execution.isScope || execution.isMultiInstanceBody || execution.parent.isMultiInstanceBody) {
 		return nil;
 	}
 	UDFlowNode *owner = [[self definitionForExecution:execution] flowNodeWithId:execution.parent.activityId];
@@ -1303,24 +1532,37 @@ static NSString * const UDLoopCounter = @"loopCounter";
 	return [node isKindOfClass:[UDSubProcess class]] && [(UDSubProcess *)node isTriggeredByEvent];
 }
 
-/* The scope's event subprocess whose error start catches the code: one
- * for that code, else a catch-all. */
-- (UDSubProcess *)errorEventSubProcessIn:(UDProcessDefinition *)scope code:(NSString *)errorCode
+/* The scope's event subprocess whose error or escalation start catches
+ * the code: one for that code, else a catch-all. */
+- (UDSubProcess *)eventSubProcessIn:(UDProcessDefinition *)scope
+                           catching:(UDEventTrigger)trigger
+                               code:(NSString *)code
 {
 	UDSubProcess *catchAll = nil;
 	for (UDSubProcess *handler in [self eventSubProcessesIn:scope]) {
 		UDEvent *start = [handler.innerDefinition startEvent];
-		if (start.trigger != UDEventTriggerError) {
+		if (start.trigger != trigger) {
 			continue;
 		}
 		NSString *ref = start.errorRef;
 		if (ref == nil || [ref length] == 0 || [ref isEqualToString:@"*"]) {
 			catchAll = catchAll ?: handler;
-		} else if ([ref isEqualToString:errorCode]) {
+		} else if ([ref isEqualToString:code]) {
 			return handler;
 		}
 	}
 	return catchAll;
+}
+
+/* What the scope execution waits for on its own account: its event
+ * subprocesses' starts. */
+- (NSSet *)scopeWaitsOf:(UDProcessDefinition *)scope
+{
+	NSMutableSet *starts = [NSMutableSet set];
+	for (UDSubProcess *other in [self eventSubProcessesIn:scope]) {
+		[starts addObject:[other.innerDefinition startEvent].elementId];
+	}
+	return starts;
 }
 
 /* A scope starts: its event subprocesses' message and signal starts
@@ -1364,11 +1606,7 @@ static NSString * const UDLoopCounter = @"loopCounter";
 	}
 	/* Beside the scope's other paths; a message or signal start stays
 	 * armed for the next one. */
-	NSMutableSet *starts = [NSMutableSet set];
-	for (UDSubProcess *other in [self eventSubProcessesIn:scope]) {
-		[starts addObject:[other.innerDefinition startEvent].elementId];
-	}
-	UDExecutionEntity *path = [self pathBeside:scopeExecution keeping:starts];
+	UDExecutionEntity *path = [self pathBeside:scopeExecution keeping:[self scopeWaitsOf:scope]];
 	[self enterNow:handler execution:path];
 }
 
@@ -1431,7 +1669,9 @@ static NSString * const UDLoopCounter = @"loopCounter";
 			}
 		}
 		for (UDEventSubscriptionEntity *subscription in [scopeExecution.eventSubscriptions allObjects]) {
-			if (![scopeWaits containsObject:subscription.activityId]) {
+			/* Completed activities' handlers belong to the scope too. */
+			if (![scopeWaits containsObject:subscription.activityId]
+			    && ![subscription.eventType isEqualToString:UDEventTypeCompensate]) {
 				subscription.execution = moved;
 			}
 		}
@@ -1602,6 +1842,7 @@ static NSString * const UDLoopCounter = @"loopCounter";
  * holds; several flows are an implicit parallel split. */
 - (void)leave:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
+	[self recordCompensationFor:node execution:execution];
 	/* The activity is done, even when an async continuation holds back
 	 * the flows out of it. */
 	[self activityEnded:execution.activityInstanceId canceled:NO];
@@ -1734,6 +1975,13 @@ static NSString * const UDLoopCounter = @"loopCounter";
 		[self processInstanceEnded:scopeExecution];
 		return;
 	}
+	if (scopeExecution.isCompensation) {
+		/* One handler has run: the thrower goes on to the next. */
+		UDExecutionEntity *thrower = scopeExecution.parent;
+		[self remove:scopeExecution];
+		[self compensateNext:thrower];
+		return;
+	}
 	if (scopeExecution.parent.isMultiInstanceBody) {
 		/* An instance whose path ended without leaving the activity -- an
 		 * uncaught error -- is done all the same. */
@@ -1746,6 +1994,9 @@ static NSString * const UDLoopCounter = @"loopCounter";
 	/* An embedded subprocess has run to its end: its host path leaves it. */
 	UDExecutionEntity *host = scopeExecution.parent;
 	UDFlowNode *node = [self node:host.activityId of:host];
+	if (node != nil) {
+		[self carryCompensationsOutOf:scopeExecution node:node host:host];
+	}
 	[self remove:scopeExecution];
 	host.isActive = YES;
 	if (node != nil) {

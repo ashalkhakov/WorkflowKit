@@ -64,6 +64,9 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Signal throw / signal end | throw / end + signal | Broadcast in the throwing transaction to every waiting catcher, in every instance, and every signal start. |
 | Boundary signal | `boundaryEvent` + signal | On a task, subprocess or call activity; interrupting, or non-interrupting and repeatable. |
 | Terminate end | `endEvent` + `terminateEventDefinition` | Ends its scope -- the instance, or the subprocess it is in -- with every path in it. |
+| Error end | `endEvent` + `errorEventDefinition` | Throws the error as a service task's is thrown; uncaught, its path ends. `camunda:errorCodeVariable` on a catch gets the code. |
+| Escalation | throw, end, boundary, event subprocess start + `escalationEventDefinition` | Travels outward like an error -- through subprocesses, out of a called process to its call activity -- to the nearest boundary or event subprocess start with its `escalationCode` (or none: any). Catches may be interrupting or not. Not critical: uncaught, or caught without interrupting, an intermediate throw goes on and an end event ends its path. `camunda:escalationCodeVariable` on a catch gets the code. |
+| Compensation | boundary + association to an `isForCompensation` handler; throw and end with `compensateEventDefinition` | A completed activity's handler waits on its scope (each instance of a multi-instance activity, each completion). A completed subprocess passes its inner handlers up to its scope, unless it has a handler of its own. A throw or end event runs the handlers of the scope -- `activityRef`'s only, or all -- one after another, newest first, and waits for them. |
 | Boundary error | `boundaryEvent` + `errorEventDefinition` | Catches a BPMN error with its `errorCode`, or any without `errorRef`, on the task or on any subprocess around it, nearest first, and then, out of a called instance, on the call activity and the scopes around it; the call activity's outputs are passed back first. An uncaught error ends its path. |
 
 ## 2. Event rules
@@ -106,7 +109,7 @@ The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` (or `#{
 | Gateways | complex |
 | Activities | transaction, ad-hoc, standard loop, compensation |
 | Tasks | manual, business rule, send, receive, receive-task as event stand-in |
-| Events | escalation, cancel, compensate, link, conditional, multiple, parallel multiple |
+| Events | cancel, link, conditional, multiple, parallel multiple; compensation event subprocesses and `waitForCompletion="false"` |
 | Data | data object, data store, data association, properties as BPMN itemAware |
 | Multi-instance extras | `asyncBefore`/`asyncAfter` on the loop characteristics themselves, `loopDataInputRef`/`inputDataItem` and the output side, `complexBehaviorDefinition` |
 | Call activity extras | expressions in `calledElement`, `versionTag` binding, `sourceExpression`, `local="true"`, variable mapping delegates, tenants, CMMN cases |
@@ -148,4 +151,4 @@ Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/
 
 Tests: `Tests/` holds one XCTest case per area (gateways, events, subprocesses, call activities, external tasks, jobs, history, deployment, durability, BPMN), on a shared `UDWorkflowTestCase`. On GNUstep, `make test` builds the library and runs the bundle under tools-xctest; see `CLAUDE.md` for the patched stack it is built against.
 
-V3 candidates: escalation and compensation events, full BPMN DI edge waypoints.
+V3 candidates: full BPMN DI edge waypoints, link and conditional events.

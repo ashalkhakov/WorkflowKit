@@ -34,6 +34,10 @@
 @property (nonatomic, readonly, strong) NSNumber *taskPriority;
 /* multiInstanceLoopCharacteristics: nil for an activity that runs once. */
 @property (nonatomic, readonly, strong) UDMultiInstance *multiInstance;
+/* isForCompensation: a compensation handler, run only when compensation
+ * is thrown for the activity whose compensation boundary event names it.
+ * It has no sequence flows. */
+@property (nonatomic, readonly, getter=isForCompensation) BOOL forCompensation;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId
@@ -109,6 +113,18 @@ typedef NS_ENUM(NSInteger, UDTimerKind) {
 @property (nonatomic, readonly, copy) NSString *signalName;
 /* A timer event's timer; nil for other events. */
 @property (nonatomic, readonly, strong) UDTimer *timer;
+/* An escalation event's escalationCode; nil (or "*") on a catch catches
+ * any. */
+@property (nonatomic, readonly, copy) NSString *escalationCode;
+/* A compensation throw's activityRef: the activity to compensate; nil
+ * for every completed one in the scope. */
+@property (nonatomic, readonly, copy) NSString *activityRef;
+/* A compensation boundary event's handler, the activity its association
+ * points at. */
+@property (nonatomic, readonly, copy) NSString *compensationHandlerId;
+/* camunda:errorCodeVariable, camunda:escalationCodeVariable: where a
+ * catching error or escalation event puts the code it caught. */
+@property (nonatomic, readonly, copy) NSString *codeVariable;
 @property (nonatomic, readonly, copy) NSString *attachedToId;
 @property (nonatomic, readonly, copy) NSString *errorRef;
 /* A boundary event's cancelActivity, or an event subprocess's start

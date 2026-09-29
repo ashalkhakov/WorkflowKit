@@ -14,6 +14,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 @property (nonatomic, readwrite, copy) NSString *retryTimeCycle;
 @property (nonatomic, readwrite, strong) NSNumber *taskPriority;
 @property (nonatomic, readwrite, strong) UDMultiInstance *multiInstance;
+@property (nonatomic, readwrite, getter=isForCompensation) BOOL forCompensation;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableIncoming;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableOutgoing;
 - (void)addIncomingFlowId:(NSString *)flowId;
@@ -126,6 +127,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 @interface UDEvent ()
 @property (nonatomic, readwrite, getter=isInterrupting) BOOL interrupting;
 @property (nonatomic, readwrite, strong) UDTimer *timer;
+@property (nonatomic, readwrite, copy) NSString *codeVariable;
 @end
 
 @interface UDSubProcess ()
@@ -137,6 +139,28 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 - (NSString *)signalName
 {
 	return self.trigger == UDEventTriggerSignal ? self.messageName : nil;
+}
+
+- (NSString *)escalationCode
+{
+	return self.trigger == UDEventTriggerEscalation ? self.errorRef : nil;
+}
+
+- (NSString *)activityRef
+{
+	return self.trigger == UDEventTriggerCompensation && self.kind != UDEventKindBoundary
+		? self.messageName : nil;
+}
+
+- (NSString *)compensationHandlerId
+{
+	return self.trigger == UDEventTriggerCompensation && self.kind == UDEventKindBoundary
+		? self.messageName : nil;
+}
+
+- (void)ud_setMessageName:(NSString *)name
+{
+	_messageName = [name copy];
 }
 
 - (instancetype)initWithElementId:(NSString *)elementId

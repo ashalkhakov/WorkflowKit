@@ -299,7 +299,7 @@ UDEventSubProcessDocument(NSString *inside)
 	NSDictionary *refused = @{
 		@"<bpmn:subProcess id=\"x\" triggeredByEvent=\"true\"><bpmn:startEvent id=\"xs\"/>"
 		 @"<bpmn:endEvent id=\"xe\"/><bpmn:sequenceFlow id=\"x1\" sourceRef=\"xs\" targetRef=\"xe\"/>"
-		 @"</bpmn:subProcess>": @"message, timer, signal or error start",
+		 @"</bpmn:subProcess>": @"message, timer, signal, error or escalation start",
 		@"<bpmn:subProcess id=\"x\" triggeredByEvent=\"true\">"
 		 @"<bpmn:startEvent id=\"xs\"><bpmn:messageEventDefinition messageRef=\"Message_1\"/></bpmn:startEvent>"
 		 @"<bpmn:endEvent id=\"xe\"/><bpmn:sequenceFlow id=\"x1\" sourceRef=\"xs\" targetRef=\"xe\"/>"

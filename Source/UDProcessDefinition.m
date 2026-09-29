@@ -13,11 +13,14 @@
 - (void)setRetryTimeCycle:(NSString *)cycle;
 - (void)setTaskPriority:(NSNumber *)priority;
 - (void)setMultiInstance:(UDMultiInstance *)multiInstance;
+- (void)setForCompensation:(BOOL)forCompensation;
 @end
 
 @interface UDEvent (UDBuilderAccess)
 - (void)setInterrupting:(BOOL)interrupting;
 - (void)setTimer:(UDTimer *)timer;
+- (void)setCodeVariable:(NSString *)name;
+- (void)ud_setMessageName:(NSString *)name;
 @end
 
 @interface UDSubProcess (UDBuilderAccess)
@@ -189,6 +192,8 @@
 @property (nonatomic) NSUInteger flowSerial;
 /* The first thing added wrongly, which -build: reports. */
 @property (nonatomic, strong) NSError *firstError;
+/* Activities compensation boundary events name, made handlers at -build:. */
+@property (nonatomic, strong) NSMutableSet<NSString *> *compensationHandlers;
 @end
 
 @implementation UDDefinitionBuilder
@@ -206,6 +211,7 @@
 	builder.nodes = [NSMutableDictionary dictionary];
 	builder.flows = [NSMutableDictionary dictionary];
 	builder.flowOrder = [NSMutableArray array];
+	builder.compensationHandlers = [NSMutableSet set];
 	builder.flowSerial = 0;
 	return builder;
 }
@@ -494,6 +500,12 @@
 	          messageName:errorRef timer:nil attachedToId:nil errorRef:errorRef interrupting:YES];
 }
 
+- (instancetype)addErrorEnd:(NSString *)elementId errorRef:(NSString *)errorRef
+{
+	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerError
+	          messageName:nil timer:nil attachedToId:nil errorRef:errorRef interrupting:YES];
+}
+
 - (instancetype)setTimer:(UDTimer *)timer forElement:(NSString *)elementId
 {
 	UDFlowNode *node = [self.nodes objectForKey:elementId];
@@ -508,6 +520,82 @@
 	UDFeelExpression *feel = [self feel:expression];
 	return feel != nil ? [self setTimer:[[UDTimer alloc] initWithKind:kind expression:feel] forElement:elementId]
 		: self;
+}
+
+- (instancetype)addEscalationThrow:(NSString *)elementId code:(NSString *)code
+{
+	return [self addEvent:elementId kind:UDEventKindIntermediateThrow trigger:UDEventTriggerEscalation
+	          messageName:nil timer:nil attachedToId:nil errorRef:code interrupting:YES];
+}
+
+- (instancetype)addEscalationEnd:(NSString *)elementId code:(NSString *)code
+{
+	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerEscalation
+	          messageName:nil timer:nil attachedToId:nil errorRef:code interrupting:YES];
+}
+
+- (instancetype)addEscalationStart:(NSString *)elementId code:(NSString *)code
+{
+	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerEscalation
+	          messageName:nil timer:nil attachedToId:nil errorRef:code interrupting:YES];
+}
+
+- (instancetype)addBoundaryEscalation:(NSString *)elementId
+                               onTask:(NSString *)taskId
+                                 code:(NSString *)code
+                         interrupting:(BOOL)interrupting
+{
+	return [self addEvent:elementId kind:UDEventKindBoundary trigger:UDEventTriggerEscalation
+	          messageName:nil timer:nil attachedToId:taskId errorRef:code interrupting:interrupting];
+}
+
+- (instancetype)addBoundaryCompensation:(NSString *)elementId
+                                 onTask:(NSString *)taskId
+                                handler:(NSString *)handlerId
+{
+	[self addEvent:elementId kind:UDEventKindBoundary trigger:UDEventTriggerCompensation
+	   messageName:handlerId timer:nil attachedToId:taskId errorRef:nil interrupting:NO];
+	if (handlerId != nil) {
+		[self.compensationHandlers addObject:handlerId];
+	}
+	return self;
+}
+
+- (instancetype)addCompensationThrow:(NSString *)elementId activity:(NSString *)activityId
+{
+	return [self addEvent:elementId kind:UDEventKindIntermediateThrow trigger:UDEventTriggerCompensation
+	          messageName:activityId timer:nil attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addCompensationEnd:(NSString *)elementId activity:(NSString *)activityId
+{
+	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerCompensation
+	          messageName:activityId timer:nil attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)setCodeVariable:(NSString *)name forElement:(NSString *)elementId
+{
+	UDFlowNode *node = [self.nodes objectForKey:elementId];
+	if ([node isKindOfClass:[UDEvent class]]) {
+		[(UDEvent *)node setCodeVariable:name];
+	}
+	return self;
+}
+
+- (instancetype)setForCompensation:(BOOL)forCompensation forElement:(NSString *)elementId
+{
+	[[self.nodes objectForKey:elementId] setForCompensation:forCompensation];
+	return self;
+}
+
+- (instancetype)setCompensationHandler:(NSString *)handlerId forBoundary:(NSString *)boundaryId
+{
+	UDFlowNode *node = [self.nodes objectForKey:boundaryId];
+	if ([node isKindOfClass:[UDEvent class]] && [(UDEvent *)node trigger] == UDEventTriggerCompensation) {
+		[(UDEvent *)node ud_setMessageName:handlerId];
+		[self.compensationHandlers addObject:handlerId];
+	}
+	return self;
 }
 
 - (instancetype)setInterrupting:(BOOL)interrupting forElement:(NSString *)elementId
@@ -766,9 +854,10 @@
 			@"%@: an event subprocess cannot be multi-instance", node.elementId]];
 	}
 	if (start.trigger != UDEventTriggerMessage && start.trigger != UDEventTriggerTimer
-	    && start.trigger != UDEventTriggerSignal && start.trigger != UDEventTriggerError) {
+	    && start.trigger != UDEventTriggerSignal && start.trigger != UDEventTriggerError
+	    && start.trigger != UDEventTriggerEscalation) {
 		return [self fail:error message:[NSString stringWithFormat:
-			@"%@: an event subprocess starts from a message, timer, signal or error start event",
+			@"%@: an event subprocess starts from a message, timer, signal, error or escalation start event",
 			node.elementId]];
 	}
 	if (start.trigger == UDEventTriggerError && !start.isInterrupting) {
@@ -892,12 +981,38 @@
 						@"boundary %@ needs a task, subprocess or call activity host",
 						node.elementId]];
 			}
+			if (boundary.trigger == UDEventTriggerCompensation) {
+				/* Its handler hangs off an association, not a flow. */
+				UDFlowNode *handler = [self.nodes objectForKey:boundary.compensationHandlerId];
+				if (handler == nil || [node.outgoingFlowIds count] > 0) {
+					return [self fail:error message:[NSString stringWithFormat:
+						@"compensation boundary %@ needs a handler in its scope, and no outgoing flow",
+						node.elementId]];
+				}
+				continue;
+			}
 			if ([node.outgoingFlowIds count] == 0) {
 				return [self fail:error
 				          message:[NSString stringWithFormat:
 						@"boundary %@ has no outgoing flow", node.elementId]];
 			}
 			continue;
+		}
+
+		if (node.isForCompensation) {
+			if ([node.incomingFlowIds count] > 0 || [node.outgoingFlowIds count] > 0) {
+				return [self fail:error message:[NSString stringWithFormat:
+					@"compensation handler %@ has no sequence flows", node.elementId]];
+			}
+			continue;
+		}
+
+		if ([node isKindOfClass:[UDEvent class]] && [(UDEvent *)node trigger] == UDEventTriggerCompensation) {
+			NSString *target = [(UDEvent *)node activityRef];
+			if (target != nil && [self.nodes objectForKey:target] == nil) {
+				return [self fail:error message:[NSString stringWithFormat:
+					@"%@ compensates %@, which is not in its scope", node.elementId, target]];
+			}
 		}
 
 		if (!isStart && [node.incomingFlowIds count] == 0) {
@@ -928,6 +1043,9 @@
 			*error = self.firstError;
 		}
 		return nil;
+	}
+	for (NSString *handlerId in self.compensationHandlers) {
+		[[self.nodes objectForKey:handlerId] setForCompensation:YES];
 	}
 	if (![self validate:error]) {
 		return nil;

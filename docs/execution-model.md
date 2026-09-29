@@ -102,6 +102,22 @@ out through the scopes and, at each, tries the scope's error event
 subprocesses before the error boundaries of the activity around it; an
 error from inside an event subprocess skips its own scope's.
 
+**Errors and escalations** travel the same way (`propagate`): outward
+through the scopes, at each trying the scope's event subprocesses, then the
+boundary events of the activity around it, then out of a called instance
+to its call activity. An escalation is not critical: whether or not
+something catches it, a thrower that was not interrupted goes on.
+
+**Compensation** is kept as event subscriptions of type `compensate` on
+the scope execution: one per completed activity with a compensation
+handler (per instance, for multi-instance). A completing subprocess moves
+its own up to its scope, noting itself as where they came from, unless it
+has a handler of its own. A compensation throw moves the matching ones
+onto the throwing execution as a queue and runs each handler in a child
+execution of it, newest first; when the last is done, the thrower goes on
+or its path ends. Handlers see the variables of the scope as they are
+now, not a snapshot from when the activity completed.
+
 A **call activity** starts another process instance, with a tree of its
 own. Its root points at the execution at the call activity (the super
 execution), which points back at it; both are Core Data relationships, and
@@ -417,7 +433,8 @@ the reference's documented behaviour. Phase 5 so far: signal events and
 terminate end events; call activities (bindings, `camunda:in`/`out`,
 business key, errors out of the called instance, cancellation with the
 caller); FEEL (see above); multi-instance; event subprocesses. Still to
-come: escalation and compensation. FEEL's temporal values brought timers
+come: escalation and compensation (now in, with error end events). FEEL's
+temporal values brought timers
 with them: `timeDate`, `timeDuration` and `timeCycle`, literal or
 computed, with cycles on timer starts and non-interrupting boundary events
 and event subprocesses.

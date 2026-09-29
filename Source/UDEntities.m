@@ -3,6 +3,8 @@
 
 NSString * const UDEventTypeMessage = @"message";
 NSString * const UDEventTypeSignal = @"signal";
+NSString * const UDEventTypeCompensate = @"compensate";
+NSString * const UDEventTypeCompensating = @"compensating";
 NSString * const UDJobTypeTimerName = @"timer";
 NSString * const UDJobTypeTimerStartName = @"timer-start";
 NSString * const UDJobTypeAsyncBeforeName = @"async-before";
@@ -19,6 +21,7 @@ NSString * const UDHistoricStateInternallyTerminated = @"INTERNALLY_TERMINATED";
 @dynamic suspended, lockRevision, parent, children, variables, tasks;
 @dynamic eventSubscriptions, jobs, externalTasks, incidents;
 @dynamic superProcessInstanceId, superExecution, subProcessInstance, isMultiInstanceBody;
+@dynamic isCompensation;
 
 - (BOOL)isProcessInstance
 {
@@ -177,7 +180,7 @@ UDIsIntegerNumber(NSNumber *number)
 
 @implementation UDEventSubscriptionEntity
 @dynamic subscriptionId, eventType, eventName, activityId, processInstanceId;
-@dynamic definitionId, createdAt, execution;
+@dynamic definitionId, createdAt, sequence, execution;
 @end
 
 @implementation UDJobEntity

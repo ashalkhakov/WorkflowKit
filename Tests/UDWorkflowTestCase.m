@@ -274,6 +274,7 @@ UDMappingStrings(NSArray<UDVariableMapping *> *mappings)
 	XCTAssertEqual(a.isExclusive, b.isExclusive, @"%@", a.elementId);
 	XCTAssertEqualObjects(a.retryTimeCycle, b.retryTimeCycle, @"%@", a.elementId);
 	XCTAssertEqualObjects(a.taskPriority, b.taskPriority, @"%@", a.elementId);
+	XCTAssertEqual(a.isForCompensation, b.isForCompensation, @"%@", a.elementId);
 	XCTAssertEqual(a.multiInstance == nil, b.multiInstance == nil, @"%@", a.elementId);
 	if (a.multiInstance != nil) {
 		UDMultiInstance *x = a.multiInstance, *y = b.multiInstance;
@@ -297,6 +298,10 @@ UDMappingStrings(NSArray<UDVariableMapping *> *mappings)
 			XCTAssertEqualObjects(x.errorRef, y.errorRef, @"%@", a.elementId);
 		}
 		XCTAssertEqual(x.timer.kind, y.timer.kind, @"%@", a.elementId);
+		XCTAssertEqualObjects(x.escalationCode, y.escalationCode, @"%@", a.elementId);
+		XCTAssertEqualObjects(x.activityRef, y.activityRef, @"%@", a.elementId);
+		XCTAssertEqualObjects(x.compensationHandlerId, y.compensationHandlerId, @"%@", a.elementId);
+		XCTAssertEqualObjects(x.codeVariable, y.codeVariable, @"%@", a.elementId);
 		XCTAssertEqualObjects([x.timer.expression expressionString], [y.timer.expression expressionString],
 			@"%@", a.elementId);
 		XCTAssertEqualObjects(x.attachedToId, y.attachedToId, @"%@", a.elementId);

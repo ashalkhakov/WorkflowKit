@@ -51,6 +51,7 @@
         <attribute name="definitionId" attributeType="String"/>
         <attribute name="executionId" attributeType="String"/>
         <attribute name="isActive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="isCompensation" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="isConcurrent" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="isMultiInstanceBody" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="isScope" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
@@ -126,6 +127,7 @@
         <attribute name="eventType" attributeType="String"/>
         <attribute name="processInstanceId" optional="YES" attributeType="String"/>
         <attribute name="subscriptionId" attributeType="String"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="eventSubscriptions" inverseEntity="UDExecution"/>
         <fetchIndex name="byEvent">
             <fetchIndexElement property="eventType" type="Binary" order="ascending"/>

@@ -107,11 +107,40 @@
 /* An event subprocess's start on a BPMN error with that code; nil (or
  * "*") catches any. Always interrupting. */
 - (instancetype)addErrorStart:(NSString *)elementId errorRef:(NSString *)errorRef;
+/* Throws a BPMN error with that code, caught as a service task's is;
+ * uncaught, its path ends. */
+- (instancetype)addErrorEnd:(NSString *)elementId errorRef:(NSString *)errorRef;
 /* A timer event's timer, replacing the duration it was added with. */
 - (instancetype)setTimer:(UDTimer *)timer forElement:(NSString *)elementId;
 /* The same from FEEL: "due", "@\"R3/PT10M\"", "now() + duration(wait)".
  * Text that is not FEEL fails -build:. */
 - (instancetype)setTimer:(UDTimerKind)kind expression:(NSString *)expression forElement:(NSString *)elementId;
+/* Escalation: thrown by an intermediate throw or end event, caught by a
+ * boundary event or an event subprocess's start. A catch's nil code (or
+ * "*") catches any. */
+- (instancetype)addEscalationThrow:(NSString *)elementId code:(NSString *)code;
+- (instancetype)addEscalationEnd:(NSString *)elementId code:(NSString *)code;
+- (instancetype)addEscalationStart:(NSString *)elementId code:(NSString *)code;
+- (instancetype)addBoundaryEscalation:(NSString *)elementId
+                               onTask:(NSString *)taskId
+                                 code:(NSString *)code
+                         interrupting:(BOOL)interrupting;
+/* Compensation: a boundary event on an activity names its handler, an
+ * activity (added before or after) that then has no sequence flows; a
+ * throw or end event compensates the activity named, or with nil every
+ * completed one in its scope, newest first, and waits for them. */
+- (instancetype)addBoundaryCompensation:(NSString *)elementId
+                                 onTask:(NSString *)taskId
+                                handler:(NSString *)handlerId;
+- (instancetype)addCompensationThrow:(NSString *)elementId activity:(NSString *)activityId;
+- (instancetype)addCompensationEnd:(NSString *)elementId activity:(NSString *)activityId;
+/* camunda:errorCodeVariable or escalationCodeVariable on a catch. */
+- (instancetype)setCodeVariable:(NSString *)name forElement:(NSString *)elementId;
+/* isForCompensation, as a file says it; -addBoundaryCompensation:... sets
+ * it on its handler. */
+- (instancetype)setForCompensation:(BOOL)forCompensation forElement:(NSString *)elementId;
+/* The association from a compensation boundary event to its handler. */
+- (instancetype)setCompensationHandler:(NSString *)handlerId forBoundary:(NSString *)boundaryId;
 /* An event subprocess's start event: whether it interrupts the scope. */
 - (instancetype)setInterrupting:(BOOL)interrupting forElement:(NSString *)elementId;
 - (instancetype)addBoundaryError:(NSString *)elementId
