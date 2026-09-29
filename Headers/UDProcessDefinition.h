@@ -110,6 +110,18 @@
                     forElement:(NSString *)elementId;
 - (instancetype)setRetryTimeCycle:(NSString *)cycle forElement:(NSString *)elementId;
 - (instancetype)setTaskPriority:(NSInteger)priority forElement:(NSString *)elementId;
+/* Makes an activity already added -- a task, subprocess or call activity
+ * -- multi-instance. */
+- (instancetype)setMultiInstance:(UDMultiInstance *)multiInstance forElement:(NSString *)elementId;
+/* The same from FEEL text: cardinality or collection (the other nil),
+ * and optionally the element variable and completion condition. Text
+ * that is not FEEL fails -build:. */
+- (instancetype)setMultiInstanceSequential:(BOOL)sequential
+                           loopCardinality:(NSString *)loopCardinality
+                                collection:(NSString *)collection
+                           elementVariable:(NSString *)elementVariable
+                       completionCondition:(NSString *)completionCondition
+                                forElement:(NSString *)elementId;
 /* Process-level settings. */
 - (instancetype)setDefaultTaskPriority:(NSInteger)priority;
 - (instancetype)setHistoryTimeToLive:(NSInteger)days;

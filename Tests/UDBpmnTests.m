@@ -69,6 +69,11 @@
 	[b setName:@"needs review" forElement:@"toManual"];
 	[b setAsyncBefore:YES asyncAfter:NO exclusive:YES forElement:@"check"];
 	[b setAsyncBefore:NO asyncAfter:YES exclusive:NO forElement:@"audit"];
+	[b setMultiInstanceSequential:YES loopCardinality:nil collection:@"auditors"
+	              elementVariable:@"auditor" completionCondition:@"nrOfCompletedInstances >= 2"
+	                   forElement:@"audit"];
+	[b setMultiInstanceSequential:NO loopCardinality:@"3" collection:nil elementVariable:nil
+	          completionCondition:nil forElement:@"manual"];
 	[b setRetryTimeCycle:@"R5/PT5M" forElement:@"check"];
 	[b setRetryTimeCycle:@"PT1M,PT10M" forElement:@"timeout"];
 	[b setTaskPriority:7 forElement:@"check"];
@@ -94,6 +99,7 @@
 	XCTAssertTrue([xml rangeOfString:@"camunda:topic=\"credit.check\""].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:failedJobRetryTimeCycle>R5/PT5M</camunda:failedJobRetryTimeCycle>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmndi:BPMNShape"].location != NSNotFound);
+	XCTAssertTrue([xml rangeOfString:@"<bpmn:multiInstanceLoopCharacteristics isSequential=\"true\" camunda:collection=\"auditors\" camunda:elementVariable=\"auditor\">"].location != NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"calledElement=\"escalation\" camunda:calledElementBinding=\"version\" camunda:calledElementVersion=\"2\""].location != NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:in businessKey=\"#{execution.processBusinessKey}\"/>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:out source=\"verdict\" target=\"escalation\"/>"].location != NSNotFound);

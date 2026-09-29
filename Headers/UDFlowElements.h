@@ -1,5 +1,8 @@
 #import "UDTypes.h"
 
+@class UDFeelExpression;
+@class UDMultiInstance;
+
 @protocol UDFlowElement <NSObject>
 @property (nonatomic, readonly, copy) NSString *elementId;
 @property (nonatomic, readonly, copy) NSString *name;
@@ -29,11 +32,41 @@
 /* camunda:taskPriority: an external task's priority, over the process's.
  * nil when not set. */
 @property (nonatomic, readonly, strong) NSNumber *taskPriority;
+/* multiInstanceLoopCharacteristics: nil for an activity that runs once. */
+@property (nonatomic, readonly, strong) UDMultiInstance *multiInstance;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name NS_DESIGNATED_INITIALIZER;
 
+@end
+
+/*
+ * A multi-instance activity's loop: how many instances, one after
+ * another or side by side, and when enough of them have finished.
+ *
+ * The instances run under a body that holds nrOfInstances,
+ * nrOfActiveInstances and nrOfCompletedInstances; each instance has its
+ * own loopCounter (from 0) and, over a collection, the element variable.
+ * The completion condition is evaluated each time an instance finishes;
+ * when it holds, the instances still running are canceled and the
+ * activity is left. Boundary events on the activity are on the body.
+ */
+@interface UDMultiInstance : NSObject
+@property (nonatomic, readonly, getter=isSequential) BOOL sequential;
+/* A whole number of instances; nil over a collection. */
+@property (nonatomic, readonly, strong) UDFeelExpression *loopCardinality;
+/* A list, one instance per item; nil for a cardinality. */
+@property (nonatomic, readonly, strong) UDFeelExpression *collection;
+/* The name each instance sees its item under; nil for none. */
+@property (nonatomic, readonly, copy) NSString *elementVariable;
+@property (nonatomic, readonly, strong) UDFeelExpression *completionCondition;
+- (instancetype)init NS_UNAVAILABLE;
+- (instancetype)initSequential:(BOOL)sequential
+               loopCardinality:(UDFeelExpression *)loopCardinality
+                    collection:(UDFeelExpression *)collection
+               elementVariable:(NSString *)elementVariable
+           completionCondition:(UDFeelExpression *)completionCondition NS_DESIGNATED_INITIALIZER;
 @end
 
 @interface UDEvent : UDFlowNode

@@ -274,6 +274,18 @@ UDMappingStrings(NSArray<UDVariableMapping *> *mappings)
 	XCTAssertEqual(a.isExclusive, b.isExclusive, @"%@", a.elementId);
 	XCTAssertEqualObjects(a.retryTimeCycle, b.retryTimeCycle, @"%@", a.elementId);
 	XCTAssertEqualObjects(a.taskPriority, b.taskPriority, @"%@", a.elementId);
+	XCTAssertEqual(a.multiInstance == nil, b.multiInstance == nil, @"%@", a.elementId);
+	if (a.multiInstance != nil) {
+		UDMultiInstance *x = a.multiInstance, *y = b.multiInstance;
+		XCTAssertEqual(x.isSequential, y.isSequential, @"%@", a.elementId);
+		XCTAssertEqualObjects([x.loopCardinality expressionString], [y.loopCardinality expressionString],
+			@"%@", a.elementId);
+		XCTAssertEqualObjects([x.collection expressionString], [y.collection expressionString],
+			@"%@", a.elementId);
+		XCTAssertEqualObjects(x.elementVariable, y.elementVariable, @"%@", a.elementId);
+		XCTAssertEqualObjects([x.completionCondition expressionString],
+			[y.completionCondition expressionString], @"%@", a.elementId);
+	}
 	if ([a isKindOfClass:[UDEvent class]]) {
 		UDEvent *x = (UDEvent *)a, *y = (UDEvent *)b;
 		XCTAssertEqual(x.kind, y.kind, @"%@", a.elementId);

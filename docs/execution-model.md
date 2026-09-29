@@ -76,6 +76,18 @@ form a tree whose root is the process instance itself.
   activity, nested by BPMN scope. They are what the API reports, and what
   history records. Their relation to executions is many-to-one.
 
+A **multi-instance activity** runs under a **body**: a scope execution
+under the arriving path, marked as the body, holding `nrOfInstances`,
+`nrOfActiveInstances` and `nrOfCompletedInstances` as its own variables and
+the activity's boundary subscriptions and timers. Each instance is a scope
+execution under the body with its own `loopCounter` and element variable,
+running the activity as it would run once. A finishing instance does not
+take the outgoing flows: the body counts it, evaluates the completion
+condition, and starts the next instance (sequential) or, when the
+condition holds or none is left, cancels what still runs and lets the path
+leave the activity. Instances finishing at once conflict on the body's
+counters rather than lose a count.
+
 A **call activity** starts another process instance, with a tree of its
 own. Its root points at the execution at the call activity (the super
 execution), which points back at it; both are Core Data relationships, and
@@ -293,8 +305,9 @@ a small stack machine is the next step if measurement ever calls for it,
 and the tree is the seam for it.
 
 For Camunda 7 files there is also a **compatibility subset of the `${...}`
-syntax**: comparisons, `&&`, `||`, `!` and property paths, with no method
-calls or bean lookups. It exists only so those files run, and it is not
+syntax**: comparisons, `&&`, `||`, `!`, property paths and `+ - * /` (so
+the usual `${nrOfCompletedInstances/nrOfInstances >= 0.6}` runs), with no
+method calls or bean lookups. It exists only so those files run, and it is not
 extended beyond that.
 
 **XPath is an option** as a second language. It is the specification's
@@ -331,6 +344,10 @@ predates FEEL; Camunda 8 moved to FEEL.
   `versionTag` binding and expressions in `calledElement` are refused on
   deployment. An error uncaught all the way up ends the throwing path in the
   called instance, as for any uncaught error.
+- **Multi-instance asynchronous continuations** are the activity's, on
+  each instance; `camunda:asyncBefore` and `asyncAfter` on the loop
+  characteristics (the body's) are refused for now. A sequential loop
+  reads its collection again for each instance.
 - **History cleanup** runs on demand (`cleanUpHistory:`) or every
   `historyCleanupInterval` seconds, not in a daily batch window, and only
   by end time. A definition without `camunda:historyTimeToLive` keeps its
@@ -382,5 +399,5 @@ reading (phase 2) and the remaining constructs (phase 5), each one following
 the reference's documented behaviour. Phase 5 so far: signal events and
 terminate end events; call activities (bindings, `camunda:in`/`out`,
 business key, errors out of the called instance, cancellation with the
-caller); FEEL (see above). Still to come: multi-instance, event
+caller); FEEL (see above); multi-instance. Still to come: event
 subprocesses, and FEEL's temporal values.

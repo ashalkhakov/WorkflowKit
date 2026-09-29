@@ -18,7 +18,7 @@ NSString * const UDHistoricStateInternallyTerminated = @"INTERNALLY_TERMINATED";
 @dynamic activityId, activityInstanceId, isActive, isConcurrent, isScope;
 @dynamic suspended, lockRevision, parent, children, variables, tasks;
 @dynamic eventSubscriptions, jobs, externalTasks, incidents;
-@dynamic superProcessInstanceId, superExecution, subProcessInstance;
+@dynamic superProcessInstanceId, superExecution, subProcessInstance, isMultiInstanceBody;
 
 - (BOOL)isProcessInstance
 {

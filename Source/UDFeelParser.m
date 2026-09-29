@@ -19,6 +19,8 @@ UDFeelOperatorText(UDFeelOperator op)
 	case UDFeelOperatorMultiply: return @"*";
 	case UDFeelOperatorDivide: return @"/";
 	case UDFeelOperatorPower: return @"**";
+	/* Only ever a call, modulo(a, b); the parser makes no such operator. */
+	case UDFeelOperatorModulo:
 	case UDFeelOperatorNone: break;
 	}
 	return @"?";
@@ -474,10 +476,6 @@ UDFeelKeyText(NSString *key)
 - (UDFeelNode *)parseAdditive
 {
 	UDFeelNode *left = [self parseMultiplicative];
-	if (self.camunda7) {
-		/* The Camunda 7 subset compares values; it does not compute them. */
-		return left;
-	}
 	for (;;) {
 		if ([self match:UDFeelTokenPlus]) {
 			left = [UDFeelNode binary:UDFeelOperatorAdd left:left right:[self parseMultiplicative]];
@@ -492,9 +490,6 @@ UDFeelKeyText(NSString *key)
 - (UDFeelNode *)parseMultiplicative
 {
 	UDFeelNode *left = [self parseUnary];
-	if (self.camunda7) {
-		return left;
-	}
 	for (;;) {
 		if ([self match:UDFeelTokenStar]) {
 			left = [UDFeelNode binary:UDFeelOperatorMultiply left:left right:[self parseUnary]];

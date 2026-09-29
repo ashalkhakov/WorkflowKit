@@ -17,7 +17,8 @@ UDWorkflowTests_OBJC_FILES = \
 	UDDeploymentTests.m \
 	UDDurabilityTests.m \
 	UDBpmnTests.m \
-	UDFeelTests.m
+	UDFeelTests.m \
+	UDMultiInstanceTests.m
 UDWorkflowTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 UDWorkflowTests_INCLUDE_DIRS = -I../Headers
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)

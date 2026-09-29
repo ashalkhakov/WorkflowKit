@@ -16,8 +16,9 @@
  *
  * Camunda 7 files write `${...}`; what is inside is read as a small
  * subset: literals (single- or double-quoted strings), names and paths,
- * comparisons (== != < <= > >= and eq ne lt le gt ge), && || ! (and or
- * not), and parentheses. It becomes the same FEEL.
+ * arithmetic (+ - * /), comparisons (== != < <= > >= and eq ne lt le gt
+ * ge), && || ! (and or not), and parentheses. It becomes the same FEEL;
+ * a division is a decimal one, 3/5 is 0.6.
  */
 @interface UDFeelExpression : NSObject <UDCondition>
 

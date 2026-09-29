@@ -371,12 +371,22 @@ UDGone(NSManagedObject *object)
 {
 	return execution.isScope && execution.parent != nil
 		&& ![node isKindOfClass:[UDSubProcess class]]
+		&& !execution.parent.isMultiInstanceBody
+		&& [execution.parent.activityId isEqualToString:node.elementId];
+}
+
+/* Is this one instance of the multi-instance activity? */
+- (BOOL)isInstance:(UDExecutionEntity *)execution of:(UDFlowNode *)node
+{
+	return execution.isScope && execution.parent.isMultiInstanceBody
 		&& [execution.parent.activityId isEqualToString:node.elementId];
 }
 
 - (void)enter:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
-	if (node.isAsyncBefore) {
+	/* A multi-instance activity's asyncBefore is each instance's. */
+	BOOL body = node.multiInstance != nil && ![self isInstance:execution of:node];
+	if (node.isAsyncBefore && !body) {
 		/* The command stops here; a job enters the node. */
 		execution.activityId = node.elementId;
 		execution.activityInstanceId = [UDCommandContext newId];
@@ -389,6 +399,14 @@ UDGone(NSManagedObject *object)
 
 - (void)enterNow:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
+	if ([self isInstance:execution of:node]) {
+		[self startInstance:node execution:execution];
+		return;
+	}
+	if (node.multiInstance != nil) {
+		[self enterMultiInstance:node execution:execution];
+		return;
+	}
 	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
 	execution.activityId = node.elementId;
 	execution.activityInstanceId = [UDCommandContext newId];
@@ -403,16 +421,7 @@ UDGone(NSManagedObject *object)
 	 * exactly that subtree. */
 	UDExecutionEntity *inner = [self newChildOf:execution concurrent:NO];
 	execution.isActive = NO;
-	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
-		if (boundary.trigger == UDEventTriggerMessage) {
-			[self subscribe:inner message:boundary.messageName activity:boundary.elementId];
-		} else if (boundary.trigger == UDEventTriggerSignal) {
-			[self subscribe:inner type:UDEventTypeSignal name:boundary.signalName
-			       activity:boundary.elementId];
-		} else if (boundary.trigger == UDEventTriggerTimer) {
-			[self timer:inner activity:boundary.elementId duration:boundary.timerDuration];
-		}
-	}
+	[self armBoundaryEventsOf:node scope:scope on:inner];
 	if ([node isKindOfClass:[UDSubProcess class]]) {
 		UDEvent *start = [[(UDSubProcess *)node innerDefinition] startEvent];
 		[self schedule:^{
@@ -425,6 +434,24 @@ UDGone(NSManagedObject *object)
 	inner.activityId = node.elementId;
 	inner.activityInstanceId = execution.activityInstanceId;
 	[self execute:node scope:scope execution:inner];
+}
+
+/* The activity's message, signal and timer boundary events wait on its
+ * scope execution. */
+- (void)armBoundaryEventsOf:(UDFlowNode *)node
+                      scope:(UDProcessDefinition *)scope
+                         on:(UDExecutionEntity *)inner
+{
+	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
+		if (boundary.trigger == UDEventTriggerMessage) {
+			[self subscribe:inner message:boundary.messageName activity:boundary.elementId];
+		} else if (boundary.trigger == UDEventTriggerSignal) {
+			[self subscribe:inner type:UDEventTypeSignal name:boundary.signalName
+			       activity:boundary.elementId];
+		} else if (boundary.trigger == UDEventTriggerTimer) {
+			[self timer:inner activity:boundary.elementId duration:boundary.timerDuration];
+		}
+	}
 }
 
 - (void)execute:(UDFlowNode *)node
@@ -794,19 +821,24 @@ UDGone(NSManagedObject *object)
 				: nil;
 			if (catcher != nil) {
 				/* A call activity with boundary events is a scope: the
-				 * caller is its scope execution. The outputs are passed
-				 * back as on a normal end. */
+				 * caller is its scope execution, or, for one instance of a
+				 * multi-instance call activity, the instance under the
+				 * body that has them. The outputs are passed back as on a
+				 * normal end. */
 				NSDictionary *outputs = [self outputsOf:(UDCallActivity *)call
 				                                   from:[self visibleVariables:scopeExecution]];
+				UDExecutionEntity *scopeOfCall = [self isInstance:caller of:call]
+					? caller.parent : caller;
 				if ([self setVariables:outputs from:caller]) {
-					[self boundary:catcher firedOn:caller subscription:nil];
+					[self boundary:catcher firedOn:scopeOfCall subscription:nil];
 				}
 				return;
 			}
 			scopeExecution = caller;
 			continue;
 		}
-		if (scopeExecution.isScope) {
+		if (scopeExecution.isScope && !scopeExecution.parent.isMultiInstanceBody) {
+			/* An instance's boundary events are its body's, which is next. */
 			NSString *ownerId = scopeExecution.parent.activityId;
 			UDFlowNode *owner = [definition flowNodeWithId:ownerId];
 			UDEvent *catcher = nil;
@@ -939,6 +971,194 @@ UDGone(NSManagedObject *object)
 	                  from:caller]) {
 		[self completeActivity:caller];
 	}
+}
+
+#pragma mark - Multi-instance
+
+static NSString * const UDNrOfInstances = @"nrOfInstances";
+static NSString * const UDNrOfActiveInstances = @"nrOfActiveInstances";
+static NSString * const UDNrOfCompletedInstances = @"nrOfCompletedInstances";
+static NSString * const UDLoopCounter = @"loopCounter";
+
+/* The instances' items, for a collection, or as many NSNulls as the
+ * cardinality says; nil, with the command failed, for a value that is
+ * neither a list nor a whole number of zero or more. */
+- (NSArray *)itemsOf:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
+	UDMultiInstance *loop = node.multiInstance;
+	NSDictionary *variables = [self visibleVariables:execution];
+	if (loop.collection != nil) {
+		id items = [loop.collection valueWithVariables:variables];
+		if (![items isKindOfClass:[NSArray class]]) {
+			[self fail:UDCommandError(UDWorkflowErrorInvalidState, [NSString stringWithFormat:
+				@"%@: the collection %@ is not a list", node.elementId,
+				[loop.collection expressionString]])];
+			return nil;
+		}
+		return items;
+	}
+	id count = [loop.loopCardinality valueWithVariables:variables];
+	NSInteger whole = [count isKindOfClass:[NSNumber class]] ? [count integerValue] : -1;
+	if (whole < 0 || whole > 100000 || [count doubleValue] != (double)whole) {
+		[self fail:UDCommandError(UDWorkflowErrorInvalidState, [NSString stringWithFormat:
+			@"%@: the loop cardinality %@ is not a whole number of instances", node.elementId,
+			[loop.loopCardinality expressionString]])];
+		return nil;
+	}
+	NSMutableArray *items = [NSMutableArray array];
+	for (NSInteger i = 0; i < whole; i++) {
+		[items addObject:[NSNull null]];
+	}
+	return items;
+}
+
+- (NSInteger)count:(NSString *)name of:(UDExecutionEntity *)body
+{
+	return [[[body localVariableNamed:name] ud_value] integerValue];
+}
+
+- (void)setCount:(NSString *)name to:(NSInteger)value on:(UDExecutionEntity *)body
+{
+	[self setLocal:name value:[NSNumber numberWithInteger:value] on:body];
+}
+
+/* The path arrives at a multi-instance activity: the body starts, with
+ * the activity's boundary events on it, and its first instances. */
+- (void)enterMultiInstance:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
+	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
+	execution.activityId = node.elementId;
+	execution.activityInstanceId = [UDCommandContext newId];
+	[self bodyStarted:node execution:execution];
+	NSArray *items = [self itemsOf:node execution:execution];
+	if (items == nil) {
+		return;
+	}
+	UDExecutionEntity *body = [self newChildOf:execution concurrent:NO];
+	body.isMultiInstanceBody = YES;
+	body.activityId = node.elementId;
+	body.isActive = NO;
+	execution.isActive = NO;
+	[self armBoundaryEventsOf:node scope:scope on:body];
+	NSUInteger count = [items count];
+	BOOL sequential = node.multiInstance.isSequential;
+	NSUInteger first = sequential ? MIN(count, (NSUInteger)1) : count;
+	[self setCount:UDNrOfInstances to:(NSInteger)count on:body];
+	[self setCount:UDNrOfActiveInstances to:(NSInteger)first on:body];
+	[self setCount:UDNrOfCompletedInstances to:0 on:body];
+	if (count == 0) {
+		[self completeBody:body node:node];
+		return;
+	}
+	for (NSUInteger i = 0; i < first; i++) {
+		[self newInstance:i of:node body:body item:[items objectAtIndex:i]];
+	}
+}
+
+- (void)newInstance:(NSUInteger)index
+                 of:(UDFlowNode *)node
+               body:(UDExecutionEntity *)body
+               item:(id)item
+{
+	UDExecutionEntity *instance = [self newChildOf:body concurrent:NO];
+	instance.activityId = node.elementId;
+	[self setLocal:UDLoopCounter value:[NSNumber numberWithUnsignedInteger:index] on:instance];
+	NSString *elementVariable = node.multiInstance.elementVariable;
+	if (elementVariable != nil) {
+		[self setLocal:elementVariable value:item on:instance];
+	}
+	[self schedule:^{
+		if (!UDGone(instance)) {
+			[self enter:node execution:instance];
+		}
+	}];
+}
+
+/* One instance runs the activity as it would run once, less the boundary
+ * events, which are its body's. */
+- (void)startInstance:(UDFlowNode *)node execution:(UDExecutionEntity *)instance
+{
+	instance.activityId = node.elementId;
+	instance.activityInstanceId = [UDCommandContext newId];
+	instance.isActive = YES;
+	[self activityStarted:node execution:instance];
+	if ([node isKindOfClass:[UDSubProcess class]]) {
+		UDExecutionEntity *inner = [self newChildOf:instance concurrent:NO];
+		instance.isActive = NO;
+		UDEvent *start = [[(UDSubProcess *)node innerDefinition] startEvent];
+		[self schedule:^{
+			if (!UDGone(inner)) {
+				[self enter:start execution:inner];
+			}
+		}];
+		return;
+	}
+	[self execute:node scope:[self scopeOf:node.elementId execution:instance] execution:instance];
+}
+
+/* An instance has finished: the body counts it, and either starts the
+ * next (sequential), or, when the completion condition holds or no
+ * instance is left, ends. */
+- (void)instanceCompleted:(UDExecutionEntity *)instance node:(UDFlowNode *)node
+{
+	UDExecutionEntity *body = instance.parent;
+	[self activityEnded:instance.activityInstanceId canceled:NO];
+	[self remove:instance];
+	/* Two instances finishing at once both update the body's counts, so
+	 * their commands conflict rather than each missing the other. */
+	body.lockRevision += 1;
+	NSInteger completed = [self count:UDNrOfCompletedInstances of:body] + 1;
+	NSInteger active = [self count:UDNrOfActiveInstances of:body] - 1;
+	NSInteger total = [self count:UDNrOfInstances of:body];
+	[self setCount:UDNrOfCompletedInstances to:completed on:body];
+	[self setCount:UDNrOfActiveInstances to:active on:body];
+
+	UDFeelExpression *condition = node.multiInstance.completionCondition;
+	if (condition != nil) {
+		NSError *error = nil;
+		BOOL done = [condition evaluateWithVariables:[self visibleVariables:body] error:&error];
+		if (error != nil) {
+			[self fail:error];
+			return;
+		}
+		if (done) {
+			/* Enough have finished: the others are canceled. */
+			for (UDExecutionEntity *other in [body.children allObjects]) {
+				if (![other isDeleted]) {
+					[self cancelSubtree:other];
+					[self remove:other];
+				}
+			}
+			[self setCount:UDNrOfActiveInstances to:0 on:body];
+			[self completeBody:body node:node];
+			return;
+		}
+	}
+	if (node.multiInstance.isSequential && completed < total) {
+		/* The collection is read again, as it is now. */
+		NSArray *items = [self itemsOf:node execution:body.parent];
+		if (items == nil) {
+			return;
+		}
+		id item = (NSUInteger)completed < [items count] ? [items objectAtIndex:(NSUInteger)completed]
+			: [NSNull null];
+		[self setCount:UDNrOfActiveInstances to:1 on:body];
+		[self newInstance:(NSUInteger)completed of:node body:body item:item];
+		return;
+	}
+	if (active <= 0) {
+		[self completeBody:body node:node];
+	}
+}
+
+/* Every instance is done: the path that arrived leaves the activity. */
+- (void)completeBody:(UDExecutionEntity *)body node:(UDFlowNode *)node
+{
+	UDExecutionEntity *path = body.parent;
+	[self remove:body];
+	path.isActive = YES;
+	[self activityEnded:path.activityInstanceId canceled:NO];
+	[self leaveNow:node execution:path];
 }
 
 #pragma mark - Signals and terminate
@@ -1110,6 +1330,11 @@ UDGone(NSManagedObject *object)
 
 - (void)leaveNow:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
+	if ([self isInstance:execution of:node]) {
+		/* An instance does not take the flows: its body counts it. */
+		[self instanceCompleted:execution node:node];
+		return;
+	}
 	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
 	NSMutableArray *flows = [NSMutableArray array];
 	for (UDSequenceFlow *flow in [scope outgoingFlowsFrom:node.elementId]) {
@@ -1219,6 +1444,15 @@ UDGone(NSManagedObject *object)
 {
 	if (scopeExecution.parent == nil) {
 		[self processInstanceEnded:scopeExecution];
+		return;
+	}
+	if (scopeExecution.parent.isMultiInstanceBody) {
+		/* An instance whose path ended without leaving the activity -- an
+		 * uncaught error -- is done all the same. */
+		UDFlowNode *node = [self node:scopeExecution.parent.activityId of:scopeExecution];
+		if (node != nil) {
+			[self instanceCompleted:scopeExecution node:node];
+		}
 		return;
 	}
 	/* An embedded subprocess has run to its end: its host path leaves it. */
@@ -1564,14 +1798,27 @@ UDGone(NSManagedObject *object)
 
 - (void)activityStarted:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
 {
+	[self activityStarted:node execution:execution body:NO];
+}
+
+/* A multi-instance activity's body is an activity instance of its own,
+ * as the reference records it: id#multiInstanceBody. */
+- (void)bodyStarted:(UDFlowNode *)node execution:(UDExecutionEntity *)execution
+{
+	[self activityStarted:node execution:execution body:YES];
+}
+
+- (void)activityStarted:(UDFlowNode *)node execution:(UDExecutionEntity *)execution body:(BOOL)body
+{
 	if (![self records:UDHistoryLevelActivity] || execution.activityInstanceId == nil) {
 		return;
 	}
 	UDHistoricActivityInstanceEntity *row = [self insert:UDHistoricActivityName];
 	row.activityInstanceId = execution.activityInstanceId;
-	row.activityId = node.elementId;
+	row.activityId = body ? [node.elementId stringByAppendingString:@"#multiInstanceBody"]
+		: node.elementId;
 	row.activityName = [node.name isEqualToString:node.elementId] ? nil : node.name;
-	row.activityType = UDActivityType(node);
+	row.activityType = body ? @"multiInstanceBody" : UDActivityType(node);
 	row.processInstanceId = execution.processInstanceId;
 	row.startTime = [NSDate date];
 	row.sequence = [self.engine ud_nextSequence];
@@ -1790,6 +2037,26 @@ UDGone(NSManagedObject *object)
 	[_historicVariables setObject:history forKey:variable.variableId];
 	[history ud_setValue:[variable ud_value]];
 	history.updatedAt = [NSDate date];
+}
+
+/* A variable of that execution's own, whatever its parents have. */
+- (BOOL)setLocal:(NSString *)name value:(id)value on:(UDExecutionEntity *)execution
+{
+	UDVariableEntity *variable = [execution localVariableNamed:name];
+	if (variable == nil) {
+		variable = [self insert:UDVariableName];
+		variable.variableId = [UDCommandContext newId];
+		variable.name = name;
+		variable.processInstanceId = execution.processInstanceId;
+		variable.execution = execution;
+	}
+	if (![variable ud_setValue:value]) {
+		[self fail:UDCommandError(UDWorkflowErrorInvalidState,
+			[NSString stringWithFormat:@"variable %@ is not a value the engine stores", name])];
+		return NO;
+	}
+	[self recordHistoryOf:variable];
+	return YES;
 }
 
 - (BOOL)setVariables:(NSDictionary *)variables from:(UDExecutionEntity *)execution

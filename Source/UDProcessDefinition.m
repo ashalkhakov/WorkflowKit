@@ -12,6 +12,7 @@
 - (void)setExclusive:(BOOL)exclusive;
 - (void)setRetryTimeCycle:(NSString *)cycle;
 - (void)setTaskPriority:(NSNumber *)priority;
+- (void)setMultiInstance:(UDMultiInstance *)multiInstance;
 @end
 
 @interface UDCallActivity (UDBuilderAccess)
@@ -502,6 +503,42 @@
 	return self;
 }
 
+- (instancetype)setMultiInstance:(UDMultiInstance *)multiInstance forElement:(NSString *)elementId
+{
+	[[self.nodes objectForKey:elementId] setMultiInstance:multiInstance];
+	return self;
+}
+
+/* FEEL text as an expression, or nil with the builder's first error set. */
+- (UDFeelExpression *)feel:(NSString *)text
+{
+	if (text == nil) {
+		return nil;
+	}
+	NSError *error = nil;
+	UDFeelExpression *expression = [UDFeelExpression expressionWithString:text error:&error];
+	if (expression == nil) {
+		self.firstError = self.firstError ?: error;
+	}
+	return expression;
+}
+
+- (instancetype)setMultiInstanceSequential:(BOOL)sequential
+                           loopCardinality:(NSString *)loopCardinality
+                                collection:(NSString *)collection
+                           elementVariable:(NSString *)elementVariable
+                       completionCondition:(NSString *)completionCondition
+                                forElement:(NSString *)elementId
+{
+	UDMultiInstance *multiInstance =
+		[[UDMultiInstance alloc] initSequential:sequential
+		                        loopCardinality:[self feel:loopCardinality]
+		                             collection:[self feel:collection]
+		                        elementVariable:elementVariable
+		                    completionCondition:[self feel:completionCondition]];
+	return [self setMultiInstance:multiInstance forElement:elementId];
+}
+
 - (instancetype)setDefaultTaskPriority:(NSInteger)priority
 {
 	self.processTaskPriority = [NSNumber numberWithInteger:priority];
@@ -656,6 +693,27 @@
 	return YES;
 }
 
+- (BOOL)validateMultiInstance:(UDFlowNode *)node error:(NSError **)error
+{
+	UDMultiInstance *loop = node.multiInstance;
+	if (![node isKindOfClass:[UDTask class]] && ![node isKindOfClass:[UDSubProcess class]]
+	    && ![node isKindOfClass:[UDCallActivity class]]) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: only tasks, subprocesses and call activities can be multi-instance",
+			node.elementId]];
+	}
+	if ((loop.loopCardinality == nil) == (loop.collection == nil)) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: a multi-instance activity needs a loop cardinality or a collection, not both",
+			node.elementId]];
+	}
+	if (loop.elementVariable != nil && loop.collection == nil) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: an element variable needs a collection", node.elementId]];
+	}
+	return YES;
+}
+
 - (BOOL)validate:(NSError **)error
 {
 	NSUInteger starts = 0;
@@ -709,6 +767,9 @@
 
 		if ([node isKindOfClass:[UDCallActivity class]]
 		    && ![self validateCall:(UDCallActivity *)node error:error]) {
+			return NO;
+		}
+		if (node.multiInstance != nil && ![self validateMultiInstance:node error:error]) {
 			return NO;
 		}
 

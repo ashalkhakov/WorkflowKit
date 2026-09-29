@@ -12,6 +12,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 @property (nonatomic, readwrite, getter=isExclusive) BOOL exclusive;
 @property (nonatomic, readwrite, copy) NSString *retryTimeCycle;
 @property (nonatomic, readwrite, strong) NSNumber *taskPriority;
+@property (nonatomic, readwrite, strong) UDMultiInstance *multiInstance;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableIncoming;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableOutgoing;
 - (void)addIncomingFlowId:(NSString *)flowId;
@@ -67,6 +68,27 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 {
 	return [NSString stringWithFormat:@"<%@ %@>",
 		NSStringFromClass([self class]), self.elementId];
+}
+
+@end
+
+@implementation UDMultiInstance
+
+- (instancetype)initSequential:(BOOL)sequential
+               loopCardinality:(UDFeelExpression *)loopCardinality
+                    collection:(UDFeelExpression *)collection
+               elementVariable:(NSString *)elementVariable
+           completionCondition:(UDFeelExpression *)completionCondition
+{
+	self = [super init];
+	if (self) {
+		_sequential = sequential;
+		_loopCardinality = loopCardinality;
+		_collection = collection;
+		_elementVariable = [elementVariable copy];
+		_completionCondition = completionCondition;
+	}
+	return self;
 }
 
 @end

@@ -230,6 +230,8 @@
 		@"a eq 1 and b ne 2": @"a = 1 and b != 2",
 		@"x gt 1 or not y": @"x > 1 or not(y)",
 		@"customer.vip == true": @"customer.vip = true",
+		@"nrOfCompletedInstances/nrOfInstances >= 0.6": @"nrOfCompletedInstances / nrOfInstances >= 0.6",
+		@"(a + 1) * 2 - b": @"(a + 1) * 2 - b",
 	};
 	for (NSString *text in cases) {
 		NSError *error = nil;
@@ -243,10 +245,12 @@
 	NSDictionary *declined = @{ @"amount": @2000, @"approved": @NO };
 	XCTAssertTrue([condition evaluateWithVariables:approved error:NULL]);
 	XCTAssertFalse([condition evaluateWithVariables:declined error:NULL]);
-	/* Only the subset: no lists, no textual forms, no calls, no
-	 * arithmetic. */
+	XCTAssertEqualObjects([[UDFeelExpression expressionWithCamunda7String:@"3/5" error:NULL]
+		valueWithVariables:@{}], [NSDecimalNumber decimalNumberWithString:@"0.6"
+		locale:@{ NSDecimalSeparator: @"." }]);
+	/* Only the subset: no lists, no textual forms, no calls, no %. */
 	for (NSString *text in @[ @"[1, 2]", @"if a then b else c", @"size(list) > 1", @"a ? b : c",
-	                          @"a + 1 > 2", @"a % 2 == 0" ]) {
+	                          @"a % 2 == 0" ]) {
 		XCTAssertNil([UDFeelExpression expressionWithCamunda7String:text error:NULL], @"%@", text);
 	}
 }

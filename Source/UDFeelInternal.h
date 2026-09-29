@@ -116,7 +116,7 @@ typedef NS_ENUM(NSInteger, UDFeelOperator) {
 @end
 
 /* Parses FEEL, or the Camunda 7 subset: literals, names and paths,
- * comparisons, && || ! and their word forms, parentheses. nil, with an
+ * + - * /, comparisons, && || ! and their word forms, parentheses. nil, with an
  * error saying where, for text that is neither. */
 UDFeelNode *UDFeelParse(NSString *text, BOOL camunda7, NSError **error);
 

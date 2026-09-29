@@ -321,6 +321,34 @@ UDMappingAttrs(UDVariableMapping *mapping)
 	}
 }
 
++ (NSString *)loopFor:(UDMultiInstance *)loop indent:(NSString *)indent
+{
+	NSMutableString *attrs = [NSMutableString string];
+	if (loop.isSequential) {
+		[attrs appendString:@" isSequential=\"true\""];
+	}
+	[attrs appendString:UDAttr(@"camunda:collection", [loop.collection expressionString])];
+	[attrs appendString:UDAttr(@"camunda:elementVariable", loop.elementVariable)];
+	NSMutableString *children = [NSMutableString string];
+	if (loop.loopCardinality != nil) {
+		[children appendFormat:
+			@"%@  <bpmn:loopCardinality xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:loopCardinality>\n",
+			indent, UDEscapeXML([loop.loopCardinality expressionString])];
+	}
+	if (loop.completionCondition != nil) {
+		[children appendFormat:
+			@"%@  <bpmn:completionCondition xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:completionCondition>\n",
+			indent, UDEscapeXML([loop.completionCondition expressionString])];
+	}
+	if ([children length] == 0) {
+		return [NSString stringWithFormat:@"%@<bpmn:multiInstanceLoopCharacteristics%@/>\n",
+			indent, attrs];
+	}
+	return [NSString stringWithFormat:
+		@"%@<bpmn:multiInstanceLoopCharacteristics%@>\n%@%@</bpmn:multiInstanceLoopCharacteristics>\n",
+		indent, attrs, children, indent];
+}
+
 + (BOOL)appendNode:(UDFlowNode *)node
                 to:(NSMutableString *)out
             indent:(NSString *)indent
@@ -438,8 +466,12 @@ UDMappingAttrs(UDVariableMapping *mapping)
 		[wiring appendFormat:@"%@<bpmn:outgoing>%@</bpmn:outgoing>\n",
 			inner, UDEscapeXML(flowId)];
 	}
-	/* BPMN puts extension elements, then incoming and outgoing, before
-	 * everything else. */
+	/* BPMN puts extension elements, then incoming and outgoing, then an
+	 * activity's loop characteristics, before everything else -- a
+	 * subprocess's flow elements included. */
+	if (node.multiInstance != nil) {
+		[body insertString:[self loopFor:node.multiInstance indent:inner] atIndex:0];
+	}
 	[body insertString:wiring atIndex:0];
 	if ([body length] == 0) {
 		[out appendFormat:@"%@<bpmn:%@%@/>\n", indent, tag, attrs];
@@ -531,7 +563,7 @@ UDMappingAttrs(UDVariableMapping *mapping)
 
 #pragma mark - Reader
 
-/* Children of a process or subprocess that carry no behaviour. */
+/* Children of a process or subprocess that are not flow elements of it. */
 static NSSet *
 UDIgnoredElements(void)
 {
@@ -542,7 +574,9 @@ UDIgnoredElements(void)
 			@"laneSet", @"textAnnotation", @"association", @"group",
 			@"dataObject", @"dataObjectReference", @"dataStoreReference",
 			@"property", @"ioSpecification", @"dataInputAssociation",
-			@"dataOutputAssociation", @"incoming", @"outgoing", nil];
+			@"dataOutputAssociation", @"incoming", @"outgoing",
+			/* A subprocess's own loop, read with the subprocess. */
+			@"multiInstanceLoopCharacteristics", @"standardLoopCharacteristics", nil];
 	});
 	return names;
 }
@@ -758,13 +792,16 @@ UDIgnoredElements(void)
 			[self readFlow:element id:elementId into:builder context:context];
 			continue;
 		}
-		if ([self child:element named:@"multiInstanceLoopCharacteristics"] != nil
-		    || [self child:element named:@"standardLoopCharacteristics"] != nil) {
+		if ([self child:element named:@"standardLoopCharacteristics"] != nil) {
 			[self fail:context error:UDBpmnError(
-				@"%@: loops and multi-instance are not supported yet", elementId)];
+				@"%@: standard loops are not supported; model the loop with a gateway", elementId)];
 			return;
 		}
 		if (![self readNode:element name:name id:elementId into:builder context:context]) {
+			return;
+		}
+		NSXMLElement *loop = [self child:element named:@"multiInstanceLoopCharacteristics"];
+		if (loop != nil && ![self readLoop:loop id:elementId into:builder context:context]) {
 			return;
 		}
 		NSString *label = [self attr:@"name" of:element];
@@ -1175,38 +1212,107 @@ UDIgnoredElements(void)
 }
 
 /*
- * A condition's language: `${...}` (or `#{...}`) is the Camunda 7
+ * An expression's language: `${...}` (or `#{...}`) is the Camunda 7
  * expression syntax, read as the subset UDFeelExpression takes, a
  * leading `=` marks FEEL as Camunda 8 writes it, and otherwise the
  * expression's own language attribute or the document's
  * expressionLanguage decides. A document that names none is read as FEEL:
- * the specification's default, XPath, is not supported.
+ * the specification's default, XPath, is not supported. what says which
+ * expression it is, for errors.
  */
-+ (id<UDCondition>)conditionFrom:(NSXMLElement *)expression
-                            flow:(NSString *)flowId
-                         context:(UDBpmnReadContext *)context
++ (UDFeelExpression *)expressionFrom:(NSString *)source
+                            language:(NSString *)language
+                                what:(NSString *)what
+                             context:(UDBpmnReadContext *)context
 {
-	NSString *text = [self trimmed:[expression stringValue]];
-	NSString *language = [self attr:@"language" of:expression] ?: context.expressionLanguage;
+	NSString *text = [self trimmed:source];
+	language = language ?: context.expressionLanguage;
 	BOOL camunda7 = ([text hasPrefix:@"${"] || [text hasPrefix:@"#{"]) && [text hasSuffix:@"}"];
 	if (camunda7) {
 		text = [text substringWithRange:NSMakeRange(2, [text length] - 3)];
 	} else if ([text hasPrefix:@"="]) {
 		text = [text substringFromIndex:1];
 	} else if ([language isEqualToString:UDXPathLanguage]) {
-		[self fail:context error:UDBpmnError(
-			@"%@: XPath conditions are not supported", flowId)];
+		[self fail:context error:UDBpmnError(@"%@: XPath is not supported", what)];
 		return nil;
 	}
 	NSError *parseError = nil;
-	UDFeelExpression *condition = camunda7
+	UDFeelExpression *expression = camunda7
 		? [UDFeelExpression expressionWithCamunda7String:text error:&parseError]
 		: [UDFeelExpression expressionWithString:text error:&parseError];
-	if (condition == nil) {
-		[self fail:context error:UDBpmnError(@"%@: condition %@",
-			flowId, [parseError localizedDescription])];
+	if (expression == nil) {
+		[self fail:context error:UDBpmnError(@"%@ %@", what, [parseError localizedDescription])];
 	}
-	return condition;
+	return expression;
+}
+
++ (id<UDCondition>)conditionFrom:(NSXMLElement *)expression
+                            flow:(NSString *)flowId
+                         context:(UDBpmnReadContext *)context
+{
+	return [self expressionFrom:[expression stringValue]
+	                   language:[self attr:@"language" of:expression]
+	                       what:[NSString stringWithFormat:@"%@: condition", flowId]
+	                    context:context];
+}
+
++ (BOOL)readLoop:(NSXMLElement *)loop
+              id:(NSString *)elementId
+            into:(UDDefinitionBuilder *)builder
+         context:(UDBpmnReadContext *)context
+{
+	for (NSString *unsupported in @[ @"asyncBefore", @"asyncAfter", @"exclusive" ]) {
+		if ([self attr:unsupported namespace:UDCamundaNamespace of:loop] != nil) {
+			[self fail:context error:UDBpmnError(
+				@"%@: camunda:%@ on the multi-instance body is not supported yet; set it on the activity",
+				elementId, unsupported)];
+			return NO;
+		}
+	}
+	for (NSString *unsupported in @[ @"loopDataInputRef", @"inputDataItem", @"loopDataOutputRef",
+	                                 @"outputDataItem", @"complexBehaviorDefinition" ]) {
+		if ([self child:loop named:unsupported] != nil) {
+			[self fail:context error:UDBpmnError(
+				@"%@: %@ is not supported; use camunda:collection and camunda:elementVariable",
+				elementId, unsupported)];
+			return NO;
+		}
+	}
+	UDFeelExpression *cardinality = nil;
+	UDFeelExpression *collection = nil;
+	UDFeelExpression *completion = nil;
+	NSXMLElement *cardinalityElement = [self child:loop named:@"loopCardinality"];
+	if (cardinalityElement != nil) {
+		cardinality = [self expressionFrom:[cardinalityElement stringValue]
+		                          language:[self attr:@"language" of:cardinalityElement]
+		                              what:[NSString stringWithFormat:@"%@: loop cardinality", elementId]
+		                           context:context];
+	}
+	NSString *collectionText = [self attr:@"collection" namespace:UDCamundaNamespace of:loop];
+	if (collectionText != nil) {
+		collection = [self expressionFrom:collectionText
+		                         language:nil
+		                             what:[NSString stringWithFormat:@"%@: collection", elementId]
+		                          context:context];
+	}
+	NSXMLElement *completionElement = [self child:loop named:@"completionCondition"];
+	if (completionElement != nil) {
+		completion = [self expressionFrom:[completionElement stringValue]
+		                         language:[self attr:@"language" of:completionElement]
+		                             what:[NSString stringWithFormat:@"%@: completion condition", elementId]
+		                          context:context];
+	}
+	if (context.error != nil) {
+		return NO;
+	}
+	BOOL sequential = [[self attr:@"isSequential" of:loop] isEqualToString:@"true"];
+	[builder setMultiInstance:[[UDMultiInstance alloc] initSequential:sequential
+		loopCardinality:cardinality
+		     collection:collection
+		elementVariable:[self attr:@"elementVariable" namespace:UDCamundaNamespace of:loop]
+		completionCondition:completion]
+	               forElement:elementId];
+	return YES;
 }
 
 + (void)readFlow:(NSXMLElement *)element

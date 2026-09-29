@@ -26,6 +26,10 @@
 @property (nonatomic) BOOL isActive;
 @property (nonatomic) BOOL isConcurrent;
 @property (nonatomic) BOOL isScope;
+/* The scope a multi-instance activity's instances run under: its
+ * activity is the multi-instance activity, and its children are the
+ * instances. */
+@property (nonatomic) BOOL isMultiInstanceBody;
 @property (nonatomic) BOOL suspended;
 /* Bumped to make concurrent commands that both touch a scope conflict. */
 @property (nonatomic) int64_t lockRevision;

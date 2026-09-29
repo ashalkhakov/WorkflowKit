@@ -1,0 +1,369 @@
+#import "UDWorkflowTestCase.h"
+
+@interface UDMultiInstanceTests : UDWorkflowTestCase
+@end
+
+@implementation UDMultiInstanceTests
+
+/* start -> work (made multi-instance by loop) -> after (a user task) -> end.
+ * kind: "service" (topic work), "user", or "subprocess" (a service task
+ * inside, topic step). */
+- (UDProcessDefinition *)loop:(void (^)(UDDefinitionBuilder *b))loop kind:(NSString *)kind
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"loop"];
+	[b addStart:@"start"];
+	if ([kind isEqualToString:@"service"]) {
+		[b addServiceTask:@"work" action:@"work"];
+	} else if ([kind isEqualToString:@"user"]) {
+		[b addUserTask:@"work" name:@"Work" assignee:@"ann"];
+	} else {
+		UDDefinitionBuilder *inner = [UDDefinitionBuilder process:@"work"];
+		[[[inner addStart:@"s"] addServiceTask:@"step" action:@"step"] addEnd:@"e"];
+		[[inner connect:@"s" to:@"step"] connect:@"step" to:@"e"];
+		[b addSubProcess:@"work" name:@"Work" inner:[inner build:&error]];
+	}
+	[[b addUserTask:@"after" name:@"After" assignee:@"ann"] addEnd:@"end"];
+	[[[b connect:@"start" to:@"work"] connect:@"work" to:@"after"] connect:@"after" to:@"end"];
+	loop(b);
+	UDProcessDefinition *definition = [b build:&error];
+	XCTAssertNotNil(definition, @"%@", error);
+	return definition;
+}
+
+- (NSArray<UDExternalTask *> *)fetch:(NSString *)topic engine:(UDProcessEngine *)engine
+{
+	NSError *error = nil;
+	NSArray *tasks = [engine.externalTaskService fetchAndLock:100 workerId:@"w"
+	                                                   topics:@{ topic: @60 } error:&error];
+	XCTAssertNotNil(tasks, @"%@", error);
+	return [tasks sortedArrayUsingComparator:^NSComparisonResult(UDExternalTask *x, UDExternalTask *y) {
+		return [[x.variables objectForKey:@"loopCounter"] compare:[y.variables objectForKey:@"loopCounter"]];
+	}];
+}
+
+- (void)finish:(UDExternalTask *)task engine:(UDProcessEngine *)engine variables:(NSDictionary *)variables
+{
+	NSError *error = nil;
+	XCTAssertTrue([engine.externalTaskService complete:task.externalTaskId workerId:@"w"
+	                                          variables:variables error:&error], @"%@", error);
+}
+
+- (NSArray<UDHistoricActivityInstance *> *)history:(NSString *)pid
+                                          activity:(NSString *)activityId
+                                            engine:(UDProcessEngine *)engine
+{
+	NSMutableArray *rows = [NSMutableArray array];
+	for (UDHistoricActivityInstance *row in
+	     [engine.historyService historicActivityInstancesForProcessInstance:pid]) {
+		if ([row.activityId isEqualToString:activityId]) {
+			[rows addObject:row];
+		}
+	}
+	return rows;
+}
+
+- (void)testParallelInstancesOverACollection
+{
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:nil collection:@"reviewers"
+		              elementVariable:@"reviewer" completionCondition:nil forElement:@"work"];
+	} kind:@"service"] engine:engine variables:@{ @"reviewers": @[ @"ann", @"bob", @"cy" ] }];
+
+	NSArray *tasks = [self fetch:@"work" engine:engine];
+	XCTAssertEqual([tasks count], (NSUInteger)3);
+	NSArray *expected = @[ @"ann", @"bob", @"cy" ];
+	for (NSUInteger i = 0; i < [tasks count]; i++) {
+		NSDictionary *variables = [[tasks objectAtIndex:i] variables];
+		XCTAssertEqualObjects([variables objectForKey:@"reviewer"], [expected objectAtIndex:i]);
+		XCTAssertEqualObjects([variables objectForKey:@"loopCounter"], @(i));
+		XCTAssertEqualObjects([variables objectForKey:@"nrOfInstances"], @3);
+		XCTAssertEqualObjects([variables objectForKey:@"nrOfActiveInstances"], @3);
+	}
+	/* The instances' own variables stay theirs. */
+	XCTAssertNil([[engine.runtimeService variablesForProcessInstance:pid error:NULL]
+		objectForKey:@"reviewer"]);
+
+	[self finish:[tasks objectAtIndex:0] engine:engine variables:@{ @"seen": @YES }];
+	[self finish:[tasks objectAtIndex:1] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"work" ]);
+	[self finish:[tasks objectAtIndex:2] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+	/* A new variable an instance sets lands on the process instance. */
+	XCTAssertEqualObjects([[engine.runtimeService variablesForProcessInstance:pid error:NULL]
+		objectForKey:@"seen"], @YES);
+
+	NSArray *body = [self history:pid activity:@"work#multiInstanceBody" engine:engine];
+	XCTAssertEqual([body count], (NSUInteger)1);
+	XCTAssertEqualObjects([[body lastObject] activityType], @"multiInstanceBody");
+	XCTAssertNotNil([[body lastObject] endTime]);
+	XCTAssertEqual([[self history:pid activity:@"work" engine:engine] count], (NSUInteger)3);
+	XCTAssertEqual([[self rows:@"UDExecution" engine:engine] count], (NSUInteger)1);
+}
+
+/* Instances finishing at once each count: the body's counters conflict,
+ * and the caller retries, rather than one completion being lost. */
+- (void)testInstancesFinishingAtOnceAreAllCounted
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self SQLiteEngineAtURL:[self temporarySQLiteURL] handler:nil];
+	[self deploy:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:@"4" collection:nil elementVariable:nil
+		          completionCondition:nil forElement:@"work"];
+	} kind:@"user"] engine:engine];
+	for (int round = 0; round < 10; round++) {
+		NSString *pid = [engine.runtimeService startProcessInstanceByKey:@"loop" variables:nil
+		                                                           error:&error].processInstanceId;
+		NSArray *tasks = [engine.taskService tasksForProcessInstance:pid];
+		XCTAssertEqual([tasks count], (NSUInteger)4);
+		dispatch_group_t group = dispatch_group_create();
+		for (UDWorkItem *task in tasks) {
+			dispatch_group_async(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+				NSError *completeError = nil;
+				while (![engine.taskService completeTask:task.taskId variables:nil error:&completeError]
+				       && [completeError code] == UDWorkflowErrorConflict) {
+				}
+			});
+		}
+		dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+		UDDispatchRelease(group);
+		XCTAssertEqualObjects([[engine.taskService tasksForProcessInstance:pid]
+			valueForKey:@"taskDefinitionKey"], @[ @"after" ], @"round %d", round);
+	}
+}
+
+- (void)testSequentialInstancesOneAfterAnother
+{
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:YES loopCardinality:@"n + 1" collection:nil
+		              elementVariable:nil completionCondition:nil forElement:@"work"];
+	} kind:@"service"] engine:engine variables:@{ @"n": @2 }];
+	for (NSUInteger i = 0; i < 3; i++) {
+		NSArray *tasks = [self fetch:@"work" engine:engine];
+		XCTAssertEqual([tasks count], (NSUInteger)1, @"round %lu", (unsigned long)i);
+		NSDictionary *variables = [[tasks lastObject] variables];
+		XCTAssertEqualObjects([variables objectForKey:@"loopCounter"], @(i));
+		XCTAssertEqualObjects([variables objectForKey:@"nrOfCompletedInstances"], @(i));
+		XCTAssertEqualObjects([variables objectForKey:@"nrOfActiveInstances"], @1);
+		[self finish:[tasks lastObject] engine:engine variables:nil];
+	}
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+}
+
+- (void)testCompletionConditionCancelsTheRest
+{
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:@"4" collection:nil elementVariable:nil
+		          completionCondition:@"nrOfCompletedInstances / nrOfInstances >= 0.5"
+		                   forElement:@"work"];
+	} kind:@"user"] engine:engine variables:nil];
+	NSArray *tasks = [engine.taskService tasksForProcessInstance:pid];
+	XCTAssertEqual([tasks count], (NSUInteger)4);
+	NSError *error = nil;
+	XCTAssertTrue([engine.taskService completeTask:[[tasks objectAtIndex:0] taskId] variables:nil error:&error],
+		@"%@", error);
+	XCTAssertEqual([[engine.taskService tasksForProcessInstance:pid] count], (NSUInteger)3);
+	XCTAssertTrue([engine.taskService completeTask:[[tasks objectAtIndex:1] taskId] variables:nil error:&error],
+		@"%@", error);
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+	NSUInteger deleted = 0;
+	for (UDHistoricTaskInstance *task in [engine.historyService historicTaskInstancesForProcessInstance:pid]) {
+		deleted += [task.deleteReason isEqualToString:UDTaskDeleteReasonDeleted];
+	}
+	XCTAssertEqual(deleted, (NSUInteger)2);
+}
+
+- (void)testNoInstancesPassesStraightThrough
+{
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:nil collection:@"items"
+		              elementVariable:@"item" completionCondition:nil forElement:@"work"];
+	} kind:@"service"] engine:engine variables:@{ @"items": @[] }];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+	XCTAssertEqual([[self history:pid activity:@"work#multiInstanceBody" engine:engine] count],
+		(NSUInteger)1);
+	XCTAssertEqual([[self history:pid activity:@"work" engine:engine] count], (NSUInteger)0);
+}
+
+- (void)testATimerOnTheActivityCancelsEveryInstance
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	engine.jobExecutorActive = NO;
+	NSString *pid = [self run:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:@"3" collection:nil elementVariable:nil
+		          completionCondition:nil forElement:@"work"];
+		[b addBoundaryTimer:@"late" onTask:@"work" duration:3600 interrupting:YES];
+		[b connect:@"late" to:@"after"];
+	} kind:@"user"] engine:engine variables:nil];
+	XCTAssertEqual([[engine.taskService tasksForProcessInstance:pid] count], (NSUInteger)3);
+	NSArray *jobs = [engine.managementService jobsForProcessInstance:pid];
+	/* One timer, on the body, not one per instance. */
+	XCTAssertEqual([jobs count], (NSUInteger)1);
+	XCTAssertTrue([engine.managementService executeJob:[[jobs lastObject] jobId] error:&error], @"%@", error);
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+	XCTAssertEqual([[engine.taskService tasksForProcessInstance:pid] count], (NSUInteger)1);
+	XCTAssertTrue([[[self history:pid activity:@"work#multiInstanceBody" engine:engine] lastObject] isCanceled]);
+}
+
+- (void)testAnErrorFromOneInstanceIsCaughtOnTheActivity
+{
+	UDMapHandler *h = [[UDMapHandler alloc] init];
+	[h.bpmnErrors setObject:@"STOP" forKey:@"work"];
+	UDProcessEngine *engine = [self engineWithHandler:h];
+	NSString *pid = [self run:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:@"2" collection:nil elementVariable:nil
+		          completionCondition:nil forElement:@"work"];
+		[[b addUserTask:@"handle" name:@"Handle" assignee:@"ann"] addEnd:@"handled"];
+		[b addBoundaryError:@"stopped" onTask:@"work" errorRef:@"STOP" interrupting:YES];
+		[[b connect:@"stopped" to:@"handle"] connect:@"handle" to:@"handled"];
+	} kind:@"service"] engine:engine variables:nil];
+	XCTAssertTrue([self waitForActive:@"handle" in:pid engine:engine]);
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"handle" ]);
+	XCTAssertEqual([[self rows:@"UDExternalTask" engine:engine] count], (NSUInteger)0);
+}
+
+- (void)testMultiInstanceSubprocess
+{
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:nil collection:@"[\"a\", \"b\"]"
+		              elementVariable:@"part" completionCondition:nil forElement:@"work"];
+	} kind:@"subprocess"] engine:engine variables:nil];
+	NSArray *steps = [self fetch:@"step" engine:engine];
+	XCTAssertEqual([steps count], (NSUInteger)2);
+	XCTAssertEqualObjects([[[steps objectAtIndex:0] variables] objectForKey:@"part"], @"a");
+	XCTAssertEqualObjects([[[steps objectAtIndex:1] variables] objectForKey:@"part"], @"b");
+	for (UDExternalTask *step in steps) {
+		[self finish:step engine:engine variables:nil];
+	}
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+}
+
+- (void)testMultiInstanceCallActivity
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	UDDefinitionBuilder *c = [UDDefinitionBuilder process:@"child"];
+	[[[c addStart:@"s"] addUserTask:@"check" name:@"Check" assignee:@"ann"] addEnd:@"e"];
+	[[c connect:@"s" to:@"check"] connect:@"check" to:@"e"];
+	[self deploy:[c build:&error] engine:engine];
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"parent"];
+	[[[[b addStart:@"start"] addCallActivity:@"call" calledElement:@"child"]
+		addUserTask:@"after" name:@"After" assignee:@"ann"] addEnd:@"end"];
+	[[[b connect:@"start" to:@"call"] connect:@"call" to:@"after"] connect:@"after" to:@"end"];
+	[b addInput:[UDVariableMapping mappingFrom:@"order" to:@"order"] forElement:@"call"];
+	[b setMultiInstanceSequential:NO loopCardinality:nil collection:@"orders"
+	              elementVariable:@"order" completionCondition:nil forElement:@"call"];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:@{ @"orders": @[ @"o1", @"o2" ] }];
+	NSArray *children = [engine.runtimeService subProcessInstancesOf:pid error:NULL];
+	XCTAssertEqual([children count], (NSUInteger)2);
+	NSMutableSet *orders = [NSMutableSet set];
+	for (UDProcessInstance *child in children) {
+		[orders addObject:[[engine.runtimeService variablesForProcessInstance:child.processInstanceId
+		                                                                error:NULL] objectForKey:@"order"]];
+	}
+	XCTAssertEqualObjects(orders, ([NSSet setWithObjects:@"o1", @"o2", nil]));
+	for (UDProcessInstance *child in children) {
+		[self complete:@"check" of:child.processInstanceId engine:engine variables:nil];
+	}
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+}
+
+- (void)testACollectionThatIsNotAListFailsTheStart
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	[self deploy:[self loop:^(UDDefinitionBuilder *b) {
+		[b setMultiInstanceSequential:NO loopCardinality:nil collection:@"items"
+		              elementVariable:@"item" completionCondition:nil forElement:@"work"];
+	} kind:@"service"] engine:engine];
+	XCTAssertNil([engine.runtimeService startProcessInstanceByKey:@"loop"
+		variables:@{ @"items": @"not a list" } error:&error]);
+	XCTAssertTrue([[error localizedDescription] rangeOfString:@"not a list"].location != NSNotFound,
+		@"%@", error);
+	XCTAssertEqual([[self rows:@"UDExecution" engine:engine] count], (NSUInteger)0);
+}
+
+- (void)testTheBuilderRefusesALoopWithoutACount
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"p"];
+	[[[b addStart:@"s"] addUserTask:@"t" name:@"T" assignee:nil] addEnd:@"e"];
+	[[b connect:@"s" to:@"t"] connect:@"t" to:@"e"];
+	[b setMultiInstanceSequential:NO loopCardinality:nil collection:nil elementVariable:nil
+	          completionCondition:nil forElement:@"t"];
+	XCTAssertNil([b build:&error]);
+	XCTAssertTrue([[error localizedDescription] rangeOfString:@"cardinality or a collection"].location
+		!= NSNotFound, @"%@", error);
+}
+
+static NSString *
+UDLoopDocument(NSString *loop)
+{
+	return [NSString stringWithFormat:
+		@"<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" "
+		 @"xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" "
+		 @"xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" id=\"d\">"
+		 @"<bpmn:process id=\"p\" isExecutable=\"true\">"
+		 @"<bpmn:startEvent id=\"s\"/>"
+		 @"<bpmn:userTask id=\"review\">%@</bpmn:userTask>"
+		 @"<bpmn:endEvent id=\"e\"/>"
+		 @"<bpmn:sequenceFlow id=\"f1\" sourceRef=\"s\" targetRef=\"review\"/>"
+		 @"<bpmn:sequenceFlow id=\"f2\" sourceRef=\"review\" targetRef=\"e\"/>"
+		 @"</bpmn:process></bpmn:definitions>", loop];
+}
+
+- (void)testReadsCamundaModelerLoops
+{
+	NSError *error = nil;
+	NSString *xml = UDLoopDocument(
+		@"<bpmn:multiInstanceLoopCharacteristics isSequential=\"true\" "
+		 @"camunda:collection=\"${reviewers}\" camunda:elementVariable=\"reviewer\">"
+		 @"<bpmn:completionCondition xsi:type=\"bpmn:tFormalExpression\">${approved == false}"
+		 @"</bpmn:completionCondition></bpmn:multiInstanceLoopCharacteristics>");
+	UDProcessDefinition *definition = [UDBpmnReader definitionFromXMLString:xml error:&error];
+	XCTAssertNotNil(definition, @"%@", error);
+	UDMultiInstance *loop = [[definition nodeWithId:@"review"] multiInstance];
+	XCTAssertTrue(loop.isSequential);
+	XCTAssertEqualObjects([loop.collection expressionString], @"reviewers");
+	XCTAssertEqualObjects(loop.elementVariable, @"reviewer");
+	XCTAssertEqualObjects([loop.completionCondition expressionString], @"approved = false");
+
+	NSDictionary *refused = @{
+		@"<bpmn:multiInstanceLoopCharacteristics camunda:asyncBefore=\"true\">"
+		 @"<bpmn:loopCardinality>3</bpmn:loopCardinality></bpmn:multiInstanceLoopCharacteristics>":
+			@"camunda:asyncBefore",
+		@"<bpmn:multiInstanceLoopCharacteristics><bpmn:loopDataInputRef>x</bpmn:loopDataInputRef>"
+		 @"</bpmn:multiInstanceLoopCharacteristics>": @"loopDataInputRef",
+		@"<bpmn:standardLoopCharacteristics/>": @"standard loops",
+		@"<bpmn:multiInstanceLoopCharacteristics><bpmn:loopCardinality>3</bpmn:loopCardinality>"
+		 @"<bpmn:completionCondition>${size(list) > 1}"
+		 @"</bpmn:completionCondition></bpmn:multiInstanceLoopCharacteristics>": @"completion condition",
+		@"<bpmn:multiInstanceLoopCharacteristics/>": @"cardinality or a collection",
+	};
+	for (NSString *loopXML in refused) {
+		error = nil;
+		XCTAssertNil([UDBpmnReader definitionFromXMLString:UDLoopDocument(loopXML) error:&error], @"%@", loopXML);
+		XCTAssertTrue([[error localizedDescription] rangeOfString:[refused objectForKey:loopXML]].location
+			!= NSNotFound, @"%@: %@", loopXML, error);
+	}
+	/* The usual Camunda 7 completion condition, and the same in FEEL. */
+	for (NSString *condition in @[ @"${nrOfCompletedInstances/nrOfInstances >= 0.6}",
+	                               @"nrOfCompletedInstances / nrOfInstances >= 0.6" ]) {
+		xml = UDLoopDocument([NSString stringWithFormat:
+			@"<bpmn:multiInstanceLoopCharacteristics><bpmn:loopCardinality>3</bpmn:loopCardinality>"
+			 @"<bpmn:completionCondition>%@</bpmn:completionCondition>"
+			 @"</bpmn:multiInstanceLoopCharacteristics>", condition]);
+		UDProcessDefinition *read = [UDBpmnReader definitionFromXMLString:xml error:&error];
+		XCTAssertNotNil(read, @"%@", error);
+		XCTAssertEqualObjects([[[read nodeWithId:@"review"] multiInstance].completionCondition expressionString],
+			@"nrOfCompletedInstances / nrOfInstances >= 0.6");
+	}
+}
+
+@end
