@@ -5,7 +5,8 @@
  * evaluated over variables.
  *
  * The engine implements FEEL's core: null, boolean, number (decimal),
- * string, list, context and range values; names, paths (a.b), filters
+ * string, list, context and range values, dates, dates and times and
+ * both kinds of duration (@"2020-01-01", @"P1D"); names, paths (a.b), filters
  * and indexes (list[item > 1], list[1]); arithmetic, comparison,
  * between, in with unary tests (x in [1..10], x in (< 5, > 10)), and and
  * or with FEEL's three-valued logic; if/then/else, for/return,
@@ -31,8 +32,9 @@
 + (instancetype)expressionWithCamunda7String:(NSString *)text error:(NSError **)error;
 
 /* The value over the variables: NSNull for null, an NSDecimalNumber for a
- * number, a boolean NSNumber, an NSString, an NSDate, an NSArray for a
- * list, an NSDictionary for a context. */
+ * number, a boolean NSNumber, an NSString, an NSArray for a list, an
+ * NSDictionary for a context; an NSDate for a date and time, and for a
+ * date its midnight in UTC; a duration as its ISO-8601 text, P1DT2H. */
 - (id)valueWithVariables:(NSDictionary *)variables;
 
 /* Canonical FEEL: parsing it gives the same expression. */

@@ -2,6 +2,7 @@
 #import "UDFlowElements.h"
 #import "UDCondition.h"
 #import "UDDuration.h"
+#import "UDTimers.h"
 #include <math.h>
 
 NSString * const UDBpmnNamespace =
@@ -80,43 +81,6 @@ UDNumber(double value)
 		return [NSString stringWithFormat:@"%lld", (long long)value];
 	}
 	return [NSString stringWithFormat:@"%.3f", value];
-}
-
-/* PnDTnHnMnS, seconds with up to millisecond precision. */
-static NSString *
-UDISODuration(NSTimeInterval seconds)
-{
-	if (seconds <= 0) {
-		return @"PT0S";
-	}
-	long long millis = llround(seconds * 1000.0);
-	long long days = millis / 86400000;
-	millis -= days * 86400000;
-	long long hours = millis / 3600000;
-	millis -= hours * 3600000;
-	long long minutes = millis / 60000;
-	millis -= minutes * 60000;
-	NSMutableString *out = [NSMutableString stringWithString:@"P"];
-	if (days > 0) {
-		[out appendFormat:@"%lldD", days];
-	}
-	if (hours > 0 || minutes > 0 || millis > 0) {
-		[out appendString:@"T"];
-		if (hours > 0) {
-			[out appendFormat:@"%lldH", hours];
-		}
-		if (minutes > 0) {
-			[out appendFormat:@"%lldM", minutes];
-		}
-		if (millis > 0) {
-			if (millis % 1000 == 0) {
-				[out appendFormat:@"%lldS", millis / 1000];
-			} else {
-				[out appendFormat:@"%lld.%03lldS", millis / 1000, millis % 1000];
-			}
-		}
-	}
-	return out;
 }
 
 /* A whole number, possibly negative, and nothing else. */
@@ -310,12 +274,18 @@ UDMappingAttrs(UDVariableMapping *mapping)
 	}
 	case UDEventTriggerTerminate:
 		return [NSString stringWithFormat:@"%@<bpmn:terminateEventDefinition/>\n", indent];
-	case UDEventTriggerTimer:
+	case UDEventTriggerTimer: {
+		/* A literal as ISO-8601 text, which any modeler reads; a computed
+		 * timer as its FEEL. */
+		NSArray *tags = @[ @"timeDate", @"timeDuration", @"timeCycle" ];
+		NSString *tag = [tags objectAtIndex:(NSUInteger)event.timer.kind];
+		NSString *text = UDTimerText(event.timer) ?: [event.timer.expression expressionString];
 		return [NSString stringWithFormat:
 			@"%@<bpmn:timerEventDefinition>\n"
-			 @"%@  <bpmn:timeDuration xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:timeDuration>\n"
+			 @"%@  <bpmn:%@ xsi:type=\"bpmn:tFormalExpression\">%@</bpmn:%@>\n"
 			 @"%@</bpmn:timerEventDefinition>\n",
-			indent, indent, UDISODuration(event.timerDuration), indent];
+			indent, indent, tag, UDEscapeXML(text), tag, indent];
+	}
 	default:
 		return @"";
 	}
@@ -897,25 +867,49 @@ UDIgnoredElements(void)
 	return found;
 }
 
-+ (NSTimeInterval)durationOf:(NSXMLElement *)timer
-                          id:(NSString *)elementId
-                     context:(UDBpmnReadContext *)context
+/* timeDate, timeDuration or timeCycle: ISO-8601 text as a literal, or an
+ * expression -- ${...}, =..., or FEEL -- evaluated when the timer is
+ * armed. */
++ (UDTimer *)timerOf:(NSXMLElement *)definition
+                  id:(NSString *)elementId
+             context:(UDBpmnReadContext *)context
 {
-	NSXMLElement *duration = [self child:timer named:@"timeDuration"];
-	if (duration == nil) {
-		[self fail:context error:UDBpmnError(
-			@"%@: only timeDuration timers are supported yet, not timeDate or timeCycle",
-			elementId)];
-		return -1;
+	NSArray *tags = @[ @"timeDate", @"timeDuration", @"timeCycle" ];
+	NSXMLElement *found = nil;
+	UDTimerKind kind = UDTimerKindDuration;
+	for (NSUInteger i = 0; i < [tags count]; i++) {
+		NSXMLElement *child = [self child:definition named:[tags objectAtIndex:i]];
+		if (child != nil) {
+			if (found != nil) {
+				[self fail:context error:UDBpmnError(@"%@: a timer has one of timeDate, timeDuration or timeCycle",
+					elementId)];
+				return nil;
+			}
+			found = child;
+			kind = (UDTimerKind)i;
+		}
 	}
-	NSString *text = [self trimmed:[duration stringValue]];
-	NSTimeInterval seconds = UDParseISODuration(text);
-	if (seconds < 0) {
-		[self fail:context error:UDBpmnError(
-			@"%@: timer duration \"%@\" is not an ISO-8601 duration in weeks, days, hours, minutes or seconds",
-			elementId, text)];
+	if (found == nil) {
+		[self fail:context error:UDBpmnError(@"%@: a timer needs timeDate, timeDuration or timeCycle", elementId)];
+		return nil;
 	}
-	return seconds;
+	NSString *text = [self trimmed:[found stringValue]];
+	UDTimer *literal = [UDTimer timerWithKind:kind text:text];
+	if (literal != nil) {
+		return literal;
+	}
+	if (kind == UDTimerKindCycle && [text length] > 0 && ![text hasPrefix:@"$"] && ![text hasPrefix:@"#"]
+	    && ![text hasPrefix:@"="] && [text rangeOfString:@" "].location != NSNotFound) {
+		[self fail:context error:UDBpmnError(
+			@"%@: timer cycle \"%@\" is not R<n>/<duration>; cron expressions are not supported", elementId, text)];
+		return nil;
+	}
+	UDFeelExpression *expression = [self expressionFrom:text
+	                                           language:[self attr:@"language" of:found]
+	                                               what:[NSString stringWithFormat:@"%@: %@",
+	                                                   elementId, [tags objectAtIndex:(NSUInteger)kind]]
+	                                            context:context];
+	return expression != nil ? [[UDTimer alloc] initWithKind:kind expression:expression] : nil;
 }
 
 + (NSString *)messageNameOf:(NSXMLElement *)definition
@@ -1081,8 +1075,8 @@ UDIgnoredElements(void)
 			NSString *messageName = [self messageNameOf:definition id:elementId context:context];
 			[builder addMessageStart:elementId message:messageName];
 		} else if (timer) {
-			[builder addTimerStart:elementId
-			              duration:[self durationOf:definition id:elementId context:context]];
+			[[builder addTimerStart:elementId duration:0]
+				setTimer:[self timerOf:definition id:elementId context:context] forElement:elementId];
 		} else if (signal) {
 			[builder addSignalStart:elementId signal:signalName];
 		} else if (errorTrigger) {
@@ -1119,8 +1113,8 @@ UDIgnoredElements(void)
 			[builder addMessageCatch:elementId
 			                 message:[self messageNameOf:definition id:elementId context:context]];
 		} else if (timer) {
-			[builder addTimerCatch:elementId
-			              duration:[self durationOf:definition id:elementId context:context]];
+			[[builder addTimerCatch:elementId duration:0]
+				setTimer:[self timerOf:definition id:elementId context:context] forElement:elementId];
 		} else if (signal) {
 			[builder addSignalCatch:elementId signal:signalName];
 		} else {
@@ -1149,10 +1143,8 @@ UDIgnoredElements(void)
 			                    message:[self messageNameOf:definition id:elementId context:context]
 			               interrupting:interrupting];
 		} else if (timer) {
-			[builder addBoundaryTimer:elementId
-			                   onTask:host
-			                 duration:[self durationOf:definition id:elementId context:context]
-			             interrupting:interrupting];
+			[[builder addBoundaryTimer:elementId onTask:host duration:0 interrupting:interrupting]
+				setTimer:[self timerOf:definition id:elementId context:context] forElement:elementId];
 		} else if (signal) {
 			[builder addBoundarySignal:elementId onTask:host signal:signalName
 			              interrupting:interrupting];

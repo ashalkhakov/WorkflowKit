@@ -5,6 +5,7 @@
  * as FEEL has it.
  */
 #import "UDFeelInternal.h"
+#include <math.h>
 
 typedef id (^UDFeelFunction)(NSArray *arguments);
 
@@ -117,7 +118,34 @@ UDStringOf(id value)
 	if ([value isKindOfClass:[NSString class]]) {
 		return value;
 	}
-	return UDFeelLiteralText(value);
+	return UDFeelTemporalText(value) ?: UDFeelLiteralText(value);
+}
+
+/* A date, a date and time, or its text: the day it falls on. */
+static UDFeelDateValue *
+UDDateOf(id value)
+{
+	if ([value isKindOfClass:[UDFeelDateValue class]]) {
+		return value;
+	}
+	if ([value isKindOfClass:[NSDate class]]) {
+		return [UDFeelDateValue dateOf:value];
+	}
+	if ([value isKindOfClass:[NSString class]]) {
+		NSDate *instant = UDFeelParseDateTime(value);
+		return instant != nil ? [UDFeelDateValue dateOf:instant] : UDFeelParseDate(value);
+	}
+	return nil;
+}
+
+static NSDateComponents *
+UDComponents(NSCalendarUnit units, UDFeelDateValue *date)
+{
+	NSCalendar *calendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
+	[calendar setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:0]];
+	[calendar setFirstWeekday:2];
+	[calendar setMinimumDaysInFirstWeek:4];
+	return [calendar components:units fromDate:[date startOfDay]];
 }
 
 /* Depth first, keeping the order. */
@@ -450,6 +478,87 @@ UDFeelFunctions(void)
 		/* Time. */
 		f[@"now"] = ^id(NSArray *a) {
 			return [a count] == 0 ? [NSDate date] : UDNull();
+		};
+		f[@"today"] = ^id(NSArray *a) {
+			return [a count] == 0 ? UDFeelToday() : UDNull();
+		};
+		f[@"date"] = ^id(NSArray *a) {
+			if ([a count] == 1) {
+				return UDDateOf([a objectAtIndex:0]) ?: UDNull();
+			}
+			long long y = 0, m = 0, d = 0;
+			if ([a count] == 3 && UDInteger([a objectAtIndex:0], &y) && UDInteger([a objectAtIndex:1], &m)
+			    && UDInteger([a objectAtIndex:2], &d)) {
+				return [UDFeelDateValue year:(NSInteger)y month:(NSInteger)m day:(NSInteger)d] ?: UDNull();
+			}
+			return UDNull();
+		};
+		f[@"date and time"] = ^id(NSArray *a) {
+			if ([a count] != 1) {
+				return UDNull();
+			}
+			id value = [a objectAtIndex:0];
+			if ([value isKindOfClass:[NSDate class]]) {
+				return value;
+			}
+			if ([value isKindOfClass:[UDFeelDateValue class]]) {
+				return [value startOfDay];
+			}
+			return [value isKindOfClass:[NSString class]] ? (UDFeelParseDateTime(value) ?: UDNull()) : UDNull();
+		};
+		f[@"duration"] = ^id(NSArray *a) {
+			return UDStrings(a, 1) ? (UDFeelParseDuration([a objectAtIndex:0]) ?: UDNull()) : UDNull();
+		};
+		f[@"years and months duration"] = ^id(NSArray *a) {
+			UDFeelDateValue *from = [a count] == 2 ? UDDateOf([a objectAtIndex:0]) : nil;
+			UDFeelDateValue *to = [a count] == 2 ? UDDateOf([a objectAtIndex:1]) : nil;
+			if (from == nil || to == nil || [[a objectAtIndex:0] isKindOfClass:[NSString class]]
+			    || [[a objectAtIndex:1] isKindOfClass:[NSString class]]) {
+				return UDNull();
+			}
+			NSCalendar *calendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
+			[calendar setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:0]];
+			NSDateComponents *between = [calendar components:NSCalendarUnitMonth
+			                                         fromDate:[from startOfDay]
+			                                           toDate:[to startOfDay]
+			                                          options:0];
+			return [UDFeelDuration months:[between month]];
+		};
+		f[@"day of week"] = ^id(NSArray *a) {
+			UDFeelDateValue *date = [a count] == 1 && ![[a objectAtIndex:0] isKindOfClass:[NSString class]]
+				? UDDateOf([a objectAtIndex:0]) : nil;
+			if (date == nil) {
+				return UDNull();
+			}
+			NSArray *names = @[ @"Sunday", @"Monday", @"Tuesday", @"Wednesday", @"Thursday", @"Friday",
+				@"Saturday" ];
+			return [names objectAtIndex:(NSUInteger)[UDComponents(NSCalendarUnitWeekday, date) weekday] - 1];
+		};
+		f[@"month of year"] = ^id(NSArray *a) {
+			UDFeelDateValue *date = [a count] == 1 && ![[a objectAtIndex:0] isKindOfClass:[NSString class]]
+				? UDDateOf([a objectAtIndex:0]) : nil;
+			if (date == nil) {
+				return UDNull();
+			}
+			NSArray *names = @[ @"January", @"February", @"March", @"April", @"May", @"June", @"July",
+				@"August", @"September", @"October", @"November", @"December" ];
+			return [names objectAtIndex:(NSUInteger)date.month - 1];
+		};
+		f[@"day of year"] = ^id(NSArray *a) {
+			UDFeelDateValue *date = [a count] == 1 && ![[a objectAtIndex:0] isKindOfClass:[NSString class]]
+				? UDDateOf([a objectAtIndex:0]) : nil;
+			if (date == nil) {
+				return UDNull();
+			}
+			UDFeelDateValue *first = [UDFeelDateValue year:date.year month:1 day:1];
+			return UDWhole((long long)round([[date startOfDay] timeIntervalSinceDate:[first startOfDay]] / 86400) + 1);
+		};
+		f[@"week of year"] = ^id(NSArray *a) {
+			UDFeelDateValue *date = [a count] == 1 && ![[a objectAtIndex:0] isKindOfClass:[NSString class]]
+				? UDDateOf([a objectAtIndex:0]) : nil;
+			/* ISO 8601: weeks start on Monday; week 1 holds the year's
+			 * first Thursday. */
+			return date != nil ? UDWhole([UDComponents(NSCalendarUnitWeekOfYear, date) weekOfYear]) : UDNull();
 		};
 
 		functions = [f copy];

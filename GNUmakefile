@@ -20,7 +20,9 @@ UDWorkflow_OBJC_FILES = \
 	Source/UDFeelParser.m \
 	Source/UDFeelEvaluator.m \
 	Source/UDFeelFunctions.m \
+	Source/UDFeelTemporal.m \
 	Source/UDFeel.m \
+	Source/UDTimers.m \
 	Source/UDProcessDefinition.m \
 	Source/UDHandlers.m \
 	Source/UDStore.m \

@@ -69,6 +69,37 @@
            completionCondition:(UDFeelExpression *)completionCondition NS_DESIGNATED_INITIALIZER;
 @end
 
+typedef NS_ENUM(NSInteger, UDTimerKind) {
+	/* timeDate: at a date and time. */
+	UDTimerKindDate = 0,
+	/* timeDuration: that long after the timer is armed. */
+	UDTimerKindDuration,
+	/* timeCycle: R3/PT10M, R/PT1H (forever), R2/2024-01-01T09:00:00Z/P1D. */
+	UDTimerKindCycle
+};
+
+/*
+ * When a timer event fires: a date, a duration or a cycle, as an
+ * expression evaluated over the variables when the timer is armed -- often
+ * a literal, @"PT5M" or "R3/PT10M". A date and time is an NSDate or its
+ * ISO-8601 text, a duration a FEEL duration or its text, a cycle its text.
+ * A cycle repeats on a timer start event, a non-interrupting boundary
+ * event and a non-interrupting event subprocess; elsewhere a timer fires
+ * once.
+ */
+@interface UDTimer : NSObject
+@property (nonatomic, readonly) UDTimerKind kind;
+@property (nonatomic, readonly, strong) UDFeelExpression *expression;
+- (instancetype)init NS_UNAVAILABLE;
+- (instancetype)initWithKind:(UDTimerKind)kind
+                  expression:(UDFeelExpression *)expression NS_DESIGNATED_INITIALIZER;
+/* A fixed duration. */
++ (instancetype)duration:(NSTimeInterval)seconds;
+/* ISO-8601 text of that kind -- a date and time, a duration (weeks
+ * included), or a cycle -- as a literal; nil when it is not one. */
++ (instancetype)timerWithKind:(UDTimerKind)kind text:(NSString *)text;
+@end
+
 @interface UDEvent : UDFlowNode
 @property (nonatomic, readonly) UDEventKind kind;
 @property (nonatomic, readonly) UDEventTrigger trigger;
@@ -76,7 +107,8 @@
  * event. */
 @property (nonatomic, readonly, copy) NSString *messageName;
 @property (nonatomic, readonly, copy) NSString *signalName;
-@property (nonatomic, readonly) NSTimeInterval timerDuration;
+/* A timer event's timer; nil for other events. */
+@property (nonatomic, readonly, strong) UDTimer *timer;
 @property (nonatomic, readonly, copy) NSString *attachedToId;
 @property (nonatomic, readonly, copy) NSString *errorRef;
 /* A boundary event's cancelActivity, or an event subprocess's start
@@ -87,7 +119,7 @@
                              kind:(UDEventKind)kind
                           trigger:(UDEventTrigger)trigger
                       messageName:(NSString *)messageName
-                    timerDuration:(NSTimeInterval)timerDuration
+                            timer:(UDTimer *)timer
                      attachedToId:(NSString *)attachedToId
                          errorRef:(NSString *)errorRef
                      interrupting:(BOOL)interrupting NS_DESIGNATED_INITIALIZER;

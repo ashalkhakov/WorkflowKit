@@ -143,6 +143,7 @@ UDFeelIsNamePart(unichar c)
 	case '}': return [self token:UDFeelTokenRBrace from:start text:nil];
 	case ',': return [self token:UDFeelTokenComma from:start text:nil];
 	case ':': return [self token:UDFeelTokenColon from:start text:nil];
+	case '@': return [self token:UDFeelTokenAt from:start text:nil];
 	case '+': return [self token:UDFeelTokenPlus from:start text:nil];
 	case '-': return [self token:UDFeelTokenMinus from:start text:nil];
 	case '/': return [self token:UDFeelTokenSlash from:start text:nil];

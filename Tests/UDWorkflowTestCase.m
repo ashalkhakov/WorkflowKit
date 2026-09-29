@@ -296,7 +296,9 @@ UDMappingStrings(NSArray<UDVariableMapping *> *mappings)
 		if (x.trigger == UDEventTriggerError) {
 			XCTAssertEqualObjects(x.errorRef, y.errorRef, @"%@", a.elementId);
 		}
-		XCTAssertEqualWithAccuracy(x.timerDuration, y.timerDuration, 0.001, @"%@", a.elementId);
+		XCTAssertEqual(x.timer.kind, y.timer.kind, @"%@", a.elementId);
+		XCTAssertEqualObjects([x.timer.expression expressionString], [y.timer.expression expressionString],
+			@"%@", a.elementId);
 		XCTAssertEqualObjects(x.attachedToId, y.attachedToId, @"%@", a.elementId);
 		if (x.kind == UDEventKindBoundary || x.kind == UDEventKindStart) {
 			XCTAssertEqual(x.isInterrupting, y.isInterrupting, @"%@", a.elementId);

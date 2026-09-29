@@ -17,6 +17,7 @@
 
 @interface UDEvent (UDBuilderAccess)
 - (void)setInterrupting:(BOOL)interrupting;
+- (void)setTimer:(UDTimer *)timer;
 @end
 
 @interface UDSubProcess (UDBuilderAccess)
@@ -221,7 +222,7 @@
                     kind:(UDEventKind)kind
                  trigger:(UDEventTrigger)trigger
              messageName:(NSString *)messageName
-           timerDuration:(NSTimeInterval)duration
+                   timer:(UDTimer *)timer
             attachedToId:(NSString *)attachedToId
                 errorRef:(NSString *)errorRef
             interrupting:(BOOL)interrupting
@@ -231,7 +232,7 @@
 	                                               kind:kind
 	                                            trigger:trigger
 	                                        messageName:messageName
-	                                      timerDuration:duration
+	                                              timer:timer
 	                                       attachedToId:attachedToId
 	                                           errorRef:errorRef
 	                                       interrupting:interrupting];
@@ -241,76 +242,76 @@
 - (instancetype)addStart:(NSString *)elementId
 {
 	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerNone
-	          messageName:nil timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:nil timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addMessageStart:(NSString *)elementId message:(NSString *)messageName
 {
 	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerMessage
-	          messageName:messageName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:messageName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addTimerStart:(NSString *)elementId duration:(NSTimeInterval)duration
 {
 	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerTimer
-	          messageName:nil timerDuration:duration attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:nil timer:[UDTimer duration:duration] attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addEnd:(NSString *)elementId
 {
 	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerNone
-	          messageName:nil timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:nil timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addMessageEnd:(NSString *)elementId message:(NSString *)messageName
 {
 	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerMessage
-	          messageName:messageName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:messageName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addMessageCatch:(NSString *)elementId message:(NSString *)messageName
 {
 	return [self addEvent:elementId kind:UDEventKindIntermediateCatch
 	              trigger:UDEventTriggerMessage messageName:messageName
-	        timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	        timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addTimerCatch:(NSString *)elementId duration:(NSTimeInterval)duration
 {
 	return [self addEvent:elementId kind:UDEventKindIntermediateCatch
 	              trigger:UDEventTriggerTimer messageName:nil
-	        timerDuration:duration attachedToId:nil errorRef:nil interrupting:YES];
+	        timer:[UDTimer duration:duration] attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addMessageThrow:(NSString *)elementId message:(NSString *)messageName
 {
 	return [self addEvent:elementId kind:UDEventKindIntermediateThrow
 	              trigger:UDEventTriggerMessage messageName:messageName
-	        timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	        timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addSignalStart:(NSString *)elementId signal:(NSString *)signalName
 {
 	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerSignal
-	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:signalName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addSignalCatch:(NSString *)elementId signal:(NSString *)signalName
 {
 	return [self addEvent:elementId kind:UDEventKindIntermediateCatch trigger:UDEventTriggerSignal
-	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:signalName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addSignalThrow:(NSString *)elementId signal:(NSString *)signalName
 {
 	return [self addEvent:elementId kind:UDEventKindIntermediateThrow trigger:UDEventTriggerSignal
-	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:signalName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addSignalEnd:(NSString *)elementId signal:(NSString *)signalName
 {
 	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerSignal
-	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:signalName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addBoundarySignal:(NSString *)elementId
@@ -319,21 +320,21 @@
                      interrupting:(BOOL)interrupting
 {
 	return [self addEvent:elementId kind:UDEventKindBoundary trigger:UDEventTriggerSignal
-	          messageName:signalName timerDuration:0 attachedToId:taskId errorRef:nil
+	          messageName:signalName timer:nil attachedToId:taskId errorRef:nil
 	         interrupting:interrupting];
 }
 
 - (instancetype)addTerminateEnd:(NSString *)elementId
 {
 	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerTerminate
-	          messageName:nil timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+	          messageName:nil timer:nil attachedToId:nil errorRef:nil interrupting:YES];
 }
 
 - (instancetype)addIntermediateThrow:(NSString *)elementId
 {
 	return [self addEvent:elementId kind:UDEventKindIntermediateThrow
 	              trigger:UDEventTriggerNone messageName:nil
-	        timerDuration:0 attachedToId:nil errorRef:nil
+	        timer:nil attachedToId:nil errorRef:nil
 	         interrupting:NO];
 }
 
@@ -344,7 +345,7 @@
 {
 	return [self addEvent:elementId kind:UDEventKindBoundary
 	              trigger:UDEventTriggerMessage messageName:messageName
-	        timerDuration:0 attachedToId:taskId errorRef:nil interrupting:interrupting];
+	        timer:nil attachedToId:taskId errorRef:nil interrupting:interrupting];
 }
 
 - (instancetype)addBoundaryTimer:(NSString *)elementId
@@ -354,7 +355,7 @@
 {
 	return [self addEvent:elementId kind:UDEventKindBoundary
 	              trigger:UDEventTriggerTimer messageName:nil
-	        timerDuration:duration attachedToId:taskId errorRef:nil interrupting:interrupting];
+	        timer:[UDTimer duration:duration] attachedToId:taskId errorRef:nil interrupting:interrupting];
 }
 
 - (instancetype)addUserTask:(NSString *)elementId
@@ -490,7 +491,23 @@
 - (instancetype)addErrorStart:(NSString *)elementId errorRef:(NSString *)errorRef
 {
 	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerError
-	          messageName:errorRef timerDuration:0 attachedToId:nil errorRef:errorRef interrupting:YES];
+	          messageName:errorRef timer:nil attachedToId:nil errorRef:errorRef interrupting:YES];
+}
+
+- (instancetype)setTimer:(UDTimer *)timer forElement:(NSString *)elementId
+{
+	UDFlowNode *node = [self.nodes objectForKey:elementId];
+	if ([node isKindOfClass:[UDEvent class]]) {
+		[(UDEvent *)node setTimer:timer];
+	}
+	return self;
+}
+
+- (instancetype)setTimer:(UDTimerKind)kind expression:(NSString *)expression forElement:(NSString *)elementId
+{
+	UDFeelExpression *feel = [self feel:expression];
+	return feel != nil ? [self setTimer:[[UDTimer alloc] initWithKind:kind expression:feel] forElement:elementId]
+		: self;
 }
 
 - (instancetype)setInterrupting:(BOOL)interrupting forElement:(NSString *)elementId
@@ -509,7 +526,7 @@
 {
 	return [self addEvent:elementId kind:UDEventKindBoundary
 	              trigger:UDEventTriggerError messageName:errorRef
-	        timerDuration:0 attachedToId:taskId errorRef:errorRef
+	        timer:nil attachedToId:taskId errorRef:errorRef
 	         interrupting:interrupting];
 }
 
@@ -846,6 +863,12 @@
 		if ([node isKindOfClass:[UDSubProcess class]] && [(UDSubProcess *)node isTriggeredByEvent]) {
 			/* Checked above; it has no flows to check. */
 			continue;
+		}
+
+		if ([node isKindOfClass:[UDEvent class]] && [(UDEvent *)node trigger] == UDEventTriggerTimer
+		    && [(UDEvent *)node timer] == nil) {
+			return [self fail:error message:[NSString stringWithFormat:@"%@: a timer event needs its timer",
+				node.elementId]];
 		}
 
 		if (node.retryTimeCycle != nil) {

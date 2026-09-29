@@ -25,11 +25,12 @@
 @property (nonatomic, copy) NSString *messageStartName;
 /* The signal a signal start event starts this definition on, if any. */
 @property (nonatomic, copy) NSString *signalStartName;
-/* A timer start event, if any: its id, its delay after deployment, and the
- * attempts its job gets. */
+/* A timer start event, if any: its id, when it first fires, what of its
+ * cycle repeats after that, and the attempts its job gets. */
 @property (nonatomic, strong) NSNumber *historyTimeToLive;
 @property (nonatomic, copy) NSString *timerStartActivityId;
-@property (nonatomic) NSTimeInterval timerStartDelay;
+@property (nonatomic, copy) NSDate *timerStartDue;
+@property (nonatomic, copy) NSString *timerStartRepeat;
 @property (nonatomic) NSInteger timerStartAttempts;
 @end
 

@@ -5,6 +5,7 @@
 #import "UDProcessDefinition.h"
 #import "UDCondition.h"
 #import "UDDuration.h"
+#import "UDTimers.h"
 
 static NSString * const UDExecutionName = @"UDExecution";
 static NSString * const UDVariableName = @"UDVariable";
@@ -455,7 +456,7 @@ UDGone(NSManagedObject *object)
 			[self subscribe:inner type:UDEventTypeSignal name:boundary.signalName
 			       activity:boundary.elementId];
 		} else if (boundary.trigger == UDEventTriggerTimer) {
-			[self timer:inner activity:boundary.elementId duration:boundary.timerDuration];
+			[self timer:inner event:boundary];
 		}
 	}
 }
@@ -515,7 +516,7 @@ UDGone(NSManagedObject *object)
 			[self subscribe:execution type:UDEventTypeSignal name:event.signalName
 			       activity:event.elementId];
 		} else if (event.trigger == UDEventTriggerTimer) {
-			[self timer:execution activity:event.elementId duration:event.timerDuration];
+			[self timer:execution event:event];
 		} else {
 			[self leave:event execution:execution];
 		}
@@ -561,22 +562,40 @@ UDGone(NSManagedObject *object)
 	subscription.execution = execution;
 }
 
-- (void)timer:(UDExecutionEntity *)execution
-     activity:(NSString *)activityId
-     duration:(NSTimeInterval)duration
+/* Arms the event's timer on the execution: its expression is evaluated
+ * now, over the variables visible there. */
+- (void)timer:(UDExecutionEntity *)execution event:(UDEvent *)event
 {
-	[self job:UDJobTypeTimer
-	execution:execution
-	     node:[self node:activityId of:execution]
-	      due:[NSDate dateWithTimeIntervalSinceNow:duration > 0 ? duration : 0]];
+	NSDate *due = nil;
+	NSString *repeat = nil;
+	NSError *error = nil;
+	if (!UDTimerSchedule(event.timer, [self visibleVariables:execution], [NSDate date], &due, &repeat, &error)) {
+		[self fail:UDCommandError(UDWorkflowErrorInvalidState, [NSString stringWithFormat:@"%@: %@",
+			event.elementId, [error localizedDescription]])];
+		return;
+	}
+	UDJobEntity *job = [self job:UDJobTypeTimer execution:execution node:event due:due];
+	job.repeat = repeat;
+}
+
+/* Whether a firing timer's cycle goes on: on a non-interrupting boundary
+ * event, or a non-interrupting event subprocess's start. */
+- (BOOL)timerRepeats:(UDFlowNode *)node
+{
+	if (![node isKindOfClass:[UDEvent class]]) {
+		return NO;
+	}
+	UDEvent *event = (UDEvent *)node;
+	return !event.isInterrupting
+		&& (event.kind == UDEventKindBoundary || event.kind == UDEventKindStart);
 }
 
 /* A job on the node for the execution. Its attempts come from the node's
  * retry cycle; the engine is told once the command commits. */
-- (void)job:(NSString *)type
-  execution:(UDExecutionEntity *)execution
-       node:(UDFlowNode *)node
-        due:(NSDate *)due
+- (UDJobEntity *)job:(NSString *)type
+          execution:(UDExecutionEntity *)execution
+               node:(UDFlowNode *)node
+                due:(NSDate *)due
 {
 	NSInteger attempts = UD_DEFAULT_ATTEMPTS;
 	NSArray *delays = nil;
@@ -602,6 +621,7 @@ UDGone(NSManagedObject *object)
 		              dueDate:due
 		            exclusive:exclusive];
 	}];
+	return job;
 }
 
 - (void)deliverSubscription:(UDEventSubscriptionEntity *)subscription
@@ -619,6 +639,8 @@ UDGone(NSManagedObject *object)
 {
 	[self historyJob:job state:UDJobLogStateSuccessful];
 	NSString *type = job.jobType;
+	NSString *repeat = job.repeat;
+	NSDate *last = job.dueDate ?: [NSDate date];
 	if ([type isEqualToString:UDJobTypeTimerStart]) {
 		NSError *error = nil;
 		UDProcessDefinition *definition =
@@ -630,6 +652,9 @@ UDGone(NSManagedObject *object)
 				@"the timer start event is gone from its definition")];
 			return;
 		}
+		if (repeat != nil) {
+			[self repeatTimerStart:start definition:definition after:last repeat:repeat];
+		}
 		[self startProcessInstance:definition businessKey:nil variables:nil
 		                startEvent:(UDEvent *)start];
 		return;
@@ -639,6 +664,15 @@ UDGone(NSManagedObject *object)
 	[self remove:job];
 	if (node == nil) {
 		return;
+	}
+	if ([type isEqualToString:UDJobTypeTimer] && repeat != nil && [self timerRepeats:node]) {
+		/* The cycle's next firing waits on the same execution. */
+		NSDate *due = nil;
+		NSString *remaining = nil;
+		if (UDTimerNextDue(repeat, last, &due, &remaining)) {
+			UDJobEntity *next = [self job:UDJobTypeTimer execution:execution node:node due:due];
+			next.repeat = remaining;
+		}
 	}
 	BOOL boundary = [node isKindOfClass:[UDEvent class]]
 		&& [(UDEvent *)node kind] == UDEventKindBoundary;
@@ -659,6 +693,38 @@ UDGone(NSManagedObject *object)
 	} else {
 		[self event:(UDEvent *)node triggeredOn:execution subscription:nil];
 	}
+}
+
+/* A timer start event's cycle: the next job that starts an instance. */
+- (void)repeatTimerStart:(UDFlowNode *)start
+              definition:(UDProcessDefinition *)definition
+                   after:(NSDate *)last
+                  repeat:(NSString *)repeat
+{
+	NSDate *due = nil;
+	NSString *remaining = nil;
+	if (!UDTimerNextDue(repeat, last, &due, &remaining)) {
+		return;
+	}
+	NSInteger attempts = UD_DEFAULT_ATTEMPTS;
+	NSArray *delays = nil;
+	UDParseRetryCycle(start.retryTimeCycle, &attempts, &delays);
+	UDJobEntity *job = [self insert:UDJobName];
+	job.jobId = [UDCommandContext newId];
+	job.jobType = UDJobTypeTimerStart;
+	job.activityId = start.elementId;
+	job.definitionId = definition.definitionId;
+	job.dueDate = due;
+	job.createdAt = [NSDate date];
+	job.retries = (int32_t)attempts;
+	job.exclusive = YES;
+	job.repeat = remaining;
+	[self historyJob:job state:UDJobLogStateCreated];
+	NSString *jobId = job.jobId;
+	UDProcessEngine *engine = self.engine;
+	[self afterCommit:^{
+		[engine ud_jobCreated:jobId processInstanceId:nil dueDate:due exclusive:YES];
+	}];
 }
 
 - (void)raiseIncident:(NSString *)type
@@ -1269,7 +1335,7 @@ static NSString * const UDLoopCounter = @"loopCounter";
 		} else if (start.trigger == UDEventTriggerSignal) {
 			[self subscribe:execution type:UDEventTypeSignal name:start.signalName activity:start.elementId];
 		} else if (start.trigger == UDEventTriggerTimer) {
-			[self timer:execution activity:start.elementId duration:start.timerDuration];
+			[self timer:execution event:start];
 		}
 	}
 }
@@ -1822,7 +1888,7 @@ static NSString * const UDLoopCounter = @"loopCounter";
 				[self subscribe:execution message:event.messageName activity:event.elementId];
 			} else if (event.kind == UDEventKindIntermediateCatch
 			           && event.trigger == UDEventTriggerTimer) {
-				[self timer:execution activity:event.elementId duration:event.timerDuration];
+				[self timer:execution event:event];
 			} else if (event.kind == UDEventKindIntermediateCatch
 			           && event.trigger == UDEventTriggerSignal) {
 				[self subscribe:execution type:UDEventTypeSignal name:event.signalName

@@ -678,6 +678,17 @@ UDFeelKeyText(NSString *key)
 	if ([self match:UDFeelTokenLBrace]) {
 		return [self parseContext];
 	}
+	if ([self match:UDFeelTokenAt]) {
+		/* @"2020-01-01", @"2020-01-01T10:00:00Z", @"P1D": a temporal
+		 * literal, read now. */
+		UDFeelToken *text = [self peek];
+		id value = text.kind == UDFeelTokenString ? UDFeelParseTemporal(text.text) : nil;
+		if (value == nil) {
+			return [self fail:@"a date, date and time or duration in quotes after '@'"];
+		}
+		[self eat];
+		return [UDFeelNode literal:value];
+	}
 	return [self fail:@"a value"];
 }
 

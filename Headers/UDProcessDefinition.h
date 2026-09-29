@@ -107,6 +107,11 @@
 /* An event subprocess's start on a BPMN error with that code; nil (or
  * "*") catches any. Always interrupting. */
 - (instancetype)addErrorStart:(NSString *)elementId errorRef:(NSString *)errorRef;
+/* A timer event's timer, replacing the duration it was added with. */
+- (instancetype)setTimer:(UDTimer *)timer forElement:(NSString *)elementId;
+/* The same from FEEL: "due", "@\"R3/PT10M\"", "now() + duration(wait)".
+ * Text that is not FEEL fails -build:. */
+- (instancetype)setTimer:(UDTimerKind)kind expression:(NSString *)expression forElement:(NSString *)elementId;
 /* An event subprocess's start event: whether it interrupts the scope. */
 - (instancetype)setInterrupting:(BOOL)interrupting forElement:(NSString *)elementId;
 - (instancetype)addBoundaryError:(NSString *)elementId

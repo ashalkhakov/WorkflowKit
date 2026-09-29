@@ -129,6 +129,9 @@ extern NSString * const UDEventTypeSignal;
 @property (nonatomic) BOOL exclusive;
 @property (nonatomic) int64_t priority;
 @property (nonatomic, copy) NSString *exceptionMessage;
+/* A timer cycle's rest after this firing: R2/PT10M, R/PT1H; nil for a
+ * timer that fires once. */
+@property (nonatomic, copy) NSString *repeat;
 @property (nonatomic, strong) UDExecutionEntity *execution;
 @end
 

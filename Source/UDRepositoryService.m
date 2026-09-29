@@ -4,6 +4,7 @@
 #import "UDBpmn.h"
 #import "UDFlowElements.h"
 #import "UDDuration.h"
+#import "UDTimers.h"
 #import "UDProcessEngine+Internal.h"
 
 static NSError *
@@ -222,8 +223,20 @@ UDIsBpmnResource(NSString *name)
 			NSInteger attempts = UD_DEFAULT_ATTEMPTS;
 			NSArray *delays = nil;
 			UDParseRetryCycle(start.retryTimeCycle, &attempts, &delays);
+			/* Evaluated at deployment, where there are no variables. */
+			NSDate *due = nil;
+			NSString *repeat = nil;
+			NSError *timerError = nil;
+			if (!UDTimerSchedule(start.timer, @{}, [NSDate date], &due, &repeat, &timerError)) {
+				if (error != NULL) {
+					*error = UDRepositoryError(UDWorkflowErrorInvalidDefinition, [NSString stringWithFormat:
+						@"%@: %@", start.elementId, [timerError localizedDescription]]);
+				}
+				return nil;
+			}
 			record.timerStartActivityId = start.elementId;
-			record.timerStartDelay = start.timerDuration;
+			record.timerStartDue = due;
+			record.timerStartRepeat = repeat;
 			record.timerStartAttempts = attempts;
 		}
 		[records addObject:record];

@@ -186,6 +186,49 @@
 	XCTAssertTrue([[[self parse:@"now()"] valueWithVariables:@{}] isKindOfClass:[NSDate class]]);
 }
 
+- (void)testDatesAndDurations
+{
+	[self check:@"date(\"2024-02-28\") + duration(\"P1D\")" is:@"@\"2024-02-29\""];
+	[self check:@"@\"2024-01-31\" + @\"P1M\"" is:@"@\"2024-02-29\""];
+	[self check:@"@\"2024-03-01\" - @\"2024-02-01\"" is:@"@\"P29D\""];
+	[self check:@"@\"2024-01-01T10:00:00Z\" + @\"PT90M\"" is:@"@\"2024-01-01T11:30:00Z\""];
+	[self check:@"@\"2024-01-01T10:00:00+02:00\" = @\"2024-01-01T08:00:00Z\"" is:@"true"];
+	[self check:@"@\"PT1H\" * 2" is:@"@\"PT2H\""];
+	[self check:@"@\"P1D\" / @\"PT6H\"" is:@"4"];
+	[self check:@"-@\"P1Y\"" is:@"@\"-P1Y\""];
+	[self check:@"@\"P1Y\" + @\"P2M\"" is:@"@\"P1Y2M\""];
+	[self check:@"@\"P1D\" > @\"PT23H\"" is:@"true"];
+	/* The two kinds of duration, and dates and instants, do not mix. */
+	[self check:@"@\"P1M\" > @\"P1D\"" is:@"null"];
+	[self check:@"@\"2024-01-01\" = @\"2024-01-01T00:00:00Z\"" is:@"null"];
+	[self check:@"@\"P1Y\" + @\"P1D\"" is:@"null"];
+	[self check:@"duration(\"P1Y1D\")" is:@"null"];
+	[self check:@"date(\"2021-02-30\")" is:@"null"];
+	[self check:@"date(2024, 2, 29).weekday" is:@"4"];
+	[self check:@"@\"2024-01-01T10:30:00Z\".hour" is:@"10"];
+	[self check:@"@\"P1DT2H\".hours" is:@"2"];
+	[self check:@"@\"P14M\".years" is:@"1"];
+	[self check:@"day of week(date(\"2024-02-29\"))" is:@"\"Thursday\""];
+	[self check:@"month of year(date(\"2024-02-29\"))" is:@"\"February\""];
+	[self check:@"day of year(date(\"2024-02-29\"))" is:@"60"];
+	[self check:@"week of year(date(\"2021-01-03\"))" is:@"53"];
+	[self check:@"years and months duration(date(\"2020-01-15\"), date(\"2021-03-14\"))" is:@"@\"P1Y1M\""];
+	[self check:@"string(@\"P1DT2H30M\")" is:@"\"P1DT2H30M\""];
+	[self check:@"string(date(\"2024-02-29\"))" is:@"\"2024-02-29\""];
+	[self check:@"date(due) < today()" is:@"true"
+	  variables:@{ @"due": [NSDate dateWithTimeIntervalSince1970:0] }];
+	[self check:@"due + @\"PT1S\" > due" is:@"true" variables:@{ @"due": [NSDate date] }];
+	/* What the public API hands out. */
+	XCTAssertEqualObjects([[self parse:@"@\"P1DT2H\""] valueWithVariables:@{}], @"P1DT2H");
+	XCTAssertEqualObjects([[self parse:@"@\"2024-01-01T00:00:00Z\" + @\"P1D\""] valueWithVariables:@{}],
+		[NSDate dateWithTimeIntervalSince1970:1704153600]);
+	XCTAssertEqualObjects([[self parse:@"date(\"2024-01-02\")"] valueWithVariables:@{}],
+		[NSDate dateWithTimeIntervalSince1970:1704153600]);
+	XCTAssertNil([UDFeelExpression expressionWithString:@"@\"tomorrow\"" error:NULL]);
+	XCTAssertEqualObjects([[self parse:@"@\"2024-01-01\" + @\"PT36H\""] expressionString],
+		@"@\"2024-01-01\" + @\"P1DT12H\"");
+}
+
 /* What an expression prints as, and that the printed text parses back to
  * the same thing. */
 - (void)testExpressionsPrintAsCanonicalFeel

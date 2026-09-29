@@ -53,9 +53,9 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 |---|---|---|
 | None start / end | `startEvent` / `endEvent` | Start an instance / end a path; the last path ends the scope. |
 | Message start | `startEvent` + `messageEventDefinition` | A start subscription per deployed latest version; correlating the message starts an instance. |
-| Timer start | `startEvent` + `timerEventDefinition` | A job created on deployment starts an instance when due; a new version replaces it. |
+| Timer start | `startEvent` + `timerEventDefinition` | A job created on deployment starts an instance when due, and with a cycle again each period; a new version replaces it. The timer is evaluated at deployment, with no variables. |
 | Message catch | `intermediateCatchEvent` + message | Wait state with an event subscription. |
-| Timer catch | `intermediateCatchEvent` + timer | Wait state with a timer job at an absolute due date. |
+| Timer catch | `intermediateCatchEvent` + timer | Wait state with a timer job at an absolute due date. Fires once. |
 | Message throw / message end | throw / end + message | `UDProcessEngineDelegate` `didThrowMessage`, after commit. |
 | Boundary message | `boundaryEvent` `attachedToRef` | On a task, subprocess or call activity. Interrupting, or non-interrupting and repeatable. |
 | Boundary timer | `boundaryEvent` + timer | On a task, subprocess or call activity, armed when it is entered; fires once. |
@@ -68,7 +68,7 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 
 ## 2. Event rules
 
-Timers are jobs with an absolute due date; the job executor fires them, so a restart waits only for the time that is left, and even a zero-length timer is a wait state that commits.
+Timers are jobs with an absolute due date; the job executor fires them, so a restart waits only for the time that is left, and even a zero-length timer is a wait state that commits. A timer is `timeDate`, `timeDuration` or `timeCycle`, given as ISO-8601 text (`2030-01-01T09:00:00Z`, `PT5M`, `P2W`, `R3/PT10M`, `R/PT1H`, `R3/2030-01-01T09:00:00Z/P1D`) or as an expression (`${deadline}`, `=now() + duration(wait)`, or plain FEEL) evaluated over the variables when the timer is armed. A cycle repeats on a timer start event, a non-interrupting boundary event and a non-interrupting event subprocess; elsewhere its first firing is its only one. Cron cycles are refused.
 
 Messages are correlated through `runtimeService`: by name, narrowed by business key and by process variables that must be equal, to exactly one recipient (`correlateMessage:`) or to all (`correlateMessageToAll:`). Payload variables are set on the receiving instance.
 
@@ -92,7 +92,9 @@ count(lines[amount > 100]) >= 2
 
 Implemented: null, boolean, decimal number, string, list, context and range values; names, paths and filters (`lines[amount > 100].sku`, `list[1]`, `list[-1]`); `+ - * / **`; `= != < <= > >=`, `between`, `in` with unary tests (`x in [1..10]`, `x in (< 5, > 10)`); `and` and `or` with FEEL's three-valued logic; `if/then/else`, `for/return`, `some`/`every ... satisfies`; the built-in functions for conversion (`not`, `string`, `number`), strings (`string length`, `substring`, `upper case`, `contains`, `starts with`, ...), lists (`count`, `sum`, `min`, `mean`, `all`, `any`, `list contains`, `index of`, `distinct values`, `flatten`, ...), numbers (`decimal`, `floor`, `ceiling`, `abs`, `modulo`, `odd`, `even`) and `now()`. Errors are null, as FEEL has it; a flow whose condition is null is not taken, and a condition whose value is not a boolean fails the command.
 
-Not yet: temporal values and functions (`date`, `duration`, ...) beyond comparing dates held in variables, names with spaces, user-defined functions, `instance of`, named arguments.
+Temporal values: dates and dates and times (`@"2024-02-29"`, `@"2024-02-29T10:00:00Z"`, `date(...)`, `date and time(...)`, `today()`, `now()`), and years-and-months and days-and-time durations (`@"P1Y2M"`, `@"PT90M"`, `duration(...)`, `years and months duration(...)`); their arithmetic (a date plus a duration, the difference of two, a duration times a number), comparison, properties (`.year`, `.weekday`, `.hours`, ...) and `day of week`, `day of year`, `week of year`, `month of year`. A date and time without an offset is UTC; the API gives a date and time back as an `NSDate`, a date as its midnight in UTC, a duration as its ISO-8601 text.
+
+Not yet: times of day without a date, time zones by name, names with spaces, user-defined functions, `instance of`, named arguments.
 
 The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` (or `#{...}`) with a compatibility subset inside -- literals, names and paths, `+ - * /`, `== != < <= > >=` and `eq ne lt le gt ge`, `&& || !` and `and or not`, parentheses -- which becomes the same FEEL. See `docs/execution-model.md` for how the language is chosen.
 
@@ -115,7 +117,7 @@ The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` (or `#{
 Standard BPMN 2.0 (`http://www.omg.org/spec/BPMN/20100524/MODEL`), as Camunda Modeler reads and writes it:
 
 - `message` and `error` elements at the top, referenced by `messageRef` and `errorRef` (an error boundary matches the error's `errorCode`; no `errorRef` catches any error).
-- Timers as `timeDuration` in ISO-8601: weeks, days, hours, minutes, seconds. `timeDate`, `timeCycle` and calendar lengths (years, months) are refused for now.
+- Timers as `timeDate`, `timeDuration` or `timeCycle`, as ISO-8601 text or an expression (see section 2).
 - Embedded subprocesses hold their own flow elements.
 - Settings BPMN has no attribute for use Camunda's namespace (`http://camunda.org/schema/1.0/bpmn`, prefix `camunda`); `ud:` (`https://udworkflow.local/bpmn`) is used only for a script task's action.
 - Layout is BPMN DI: a `BPMNShape` with `dc:Bounds` per node that has bounds, and a straight `BPMNEdge` per flow between two such nodes. The engine keeps no edge waypoints.

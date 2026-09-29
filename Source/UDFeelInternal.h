@@ -40,6 +40,7 @@ typedef NS_ENUM(NSInteger, UDFeelTokenKind) {
 	UDFeelTokenAndAnd,      /* Camunda 7 only */
 	UDFeelTokenOrOr,        /* Camunda 7 only */
 	UDFeelTokenBang,        /* Camunda 7 only */
+	UDFeelTokenAt,          /* @, before a temporal literal's string */
 	UDFeelTokenInvalid      /* a character that begins no token */
 };
 
@@ -128,6 +129,10 @@ id UDFeelEvaluate(UDFeelNode *node, NSDictionary *variables);
 BOOL UDFeelIsBuiltin(NSString *name);
 NSArray<NSString *> *UDFeelMultiWordBuiltins(void);
 
+@interface UDFeelExpression (UDInternal)
+- (UDFeelNode *)root;
+@end
+
 /* A range's value: [1..10], (0..1], x between a and b. */
 @interface UDFeelRange : NSObject
 @property (nonatomic, strong) id start;
@@ -135,6 +140,46 @@ NSArray<NSString *> *UDFeelMultiWordBuiltins(void);
 @property (nonatomic) BOOL startIncluded;
 @property (nonatomic) BOOL endIncluded;
 @end
+
+/* A date without a time. */
+@interface UDFeelDateValue : NSObject
+@property (nonatomic, readonly) NSInteger year;
+@property (nonatomic, readonly) NSInteger month;
+@property (nonatomic, readonly) NSInteger day;
+/* nil for a day the calendar does not have. */
++ (instancetype)year:(NSInteger)year month:(NSInteger)month day:(NSInteger)day;
+/* The date of that instant, in UTC. */
++ (instancetype)dateOf:(NSDate *)date;
+- (NSDate *)startOfDay;
+@end
+
+/* A years-and-months duration (in months) or a days-and-time one (in
+ * seconds); FEEL keeps the two apart. */
+@interface UDFeelDuration : NSObject
+@property (nonatomic, readonly) BOOL yearsAndMonths;
+@property (nonatomic, readonly) long long months;
+@property (nonatomic, readonly) double seconds;
++ (instancetype)months:(long long)months;
++ (instancetype)seconds:(double)seconds;
+@end
+
+/* ISO-8601 text as FEEL reads it: nil when it is not one. */
+UDFeelDateValue *UDFeelParseDate(NSString *text);
+NSDate *UDFeelParseDateTime(NSString *text);
+UDFeelDuration *UDFeelParseDuration(NSString *text);
+/* A date and time, a date, or a duration. */
+id UDFeelParseTemporal(NSString *text);
+/* Its ISO-8601 text; nil for a value that is not temporal. */
+NSString *UDFeelTemporalText(id value);
+BOOL UDFeelIsTemporal(id value);
+BOOL UDFeelTemporalOrder(id a, id b, NSComparisonResult *result);
+/* nil when neither operand is temporal. */
+id UDFeelTemporalArithmetic(UDFeelOperator op, id a, id b);
+id UDFeelTemporalNegate(id value);
+id UDFeelTemporalProperty(id value, NSString *name);
+UDFeelDateValue *UDFeelToday(void);
+/* A value as the public API gives it out. */
+id UDFeelPublicValue(id value);
 
 /* Between the evaluator and the built-in functions. */
 id UDFeelCall(NSString *name, NSArray *arguments);

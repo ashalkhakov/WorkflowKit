@@ -362,6 +362,9 @@ predates FEEL; Camunda 8 moved to FEEL.
   each instance; `camunda:asyncBefore` and `asyncAfter` on the loop
   characteristics (the body's) are refused for now. A sequential loop
   reads its collection again for each instance.
+- **Timers:** a date and time without an offset is taken as UTC; cron
+  cycles are refused. A cycle's next firing is counted from when the last
+  was due, not from when it ran.
 - **History cleanup** runs on demand (`cleanUpHistory:`) or every
   `historyCleanupInterval` seconds, not in a daily batch window, and only
   by end time. A definition without `camunda:historyTimeToLive` keeps its
@@ -414,4 +417,7 @@ the reference's documented behaviour. Phase 5 so far: signal events and
 terminate end events; call activities (bindings, `camunda:in`/`out`,
 business key, errors out of the called instance, cancellation with the
 caller); FEEL (see above); multi-instance; event subprocesses. Still to
-come: FEEL's temporal values, escalation and compensation.
+come: escalation and compensation. FEEL's temporal values brought timers
+with them: `timeDate`, `timeDuration` and `timeCycle`, literal or
+computed, with cycles on timer starts and non-interrupting boundary events
+and event subprocesses.

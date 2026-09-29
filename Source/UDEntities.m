@@ -183,7 +183,7 @@ UDIsIntegerNumber(NSNumber *number)
 @implementation UDJobEntity
 @dynamic jobId, jobType, activityId, processInstanceId, definitionId, dueDate, createdAt;
 @dynamic lockOwner, lockExpiration, retries, exclusive, priority;
-@dynamic exceptionMessage, execution;
+@dynamic exceptionMessage, repeat, execution;
 @end
 
 @implementation UDExternalTaskEntity

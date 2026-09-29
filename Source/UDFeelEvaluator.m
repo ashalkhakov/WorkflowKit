@@ -62,16 +62,6 @@ UDFeelNumberText(NSNumber *number)
 	return decimal != nil ? [decimal descriptionWithLocale:UDFeelDecimalLocale()] : @"null";
 }
 
-static NSDateFormatter *
-UDFeelDateFormatter(void)
-{
-	NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-	[formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
-	[formatter setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:0]];
-	[formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss'Z'"];
-	return formatter;
-}
-
 NSString *
 UDFeelLiteralText(id value)
 {
@@ -101,9 +91,8 @@ UDFeelLiteralText(id value)
 		[text appendString:@"\""];
 		return text;
 	}
-	if ([value isKindOfClass:[NSDate class]]) {
-		return [NSString stringWithFormat:@"date and time(\"%@\")",
-			[UDFeelDateFormatter() stringFromDate:value]];
+	if (UDFeelIsTemporal(value)) {
+		return [NSString stringWithFormat:@"@\"%@\"", UDFeelTemporalText(value)];
 	}
 	if ([value isKindOfClass:[NSArray class]]) {
 		NSMutableArray *items = [NSMutableArray array];
@@ -157,7 +146,7 @@ UDFeelOrder(id a, id b, NSComparisonResult *result)
 		*result = [(NSDate *)a compare:b];
 		return YES;
 	}
-	return NO;
+	return UDFeelTemporalOrder(a, b, result);
 }
 
 /* FEEL's =: 1 equal, 0 not, -1 no answer (values of different kinds). Null
@@ -322,6 +311,10 @@ UDFeelArithmetic(UDFeelOperator op, id a, id b)
 	    && [b isKindOfClass:[NSString class]]) {
 		return [(NSString *)a stringByAppendingString:b];
 	}
+	id temporal = UDFeelTemporalArithmetic(op, a, b);
+	if (temporal != nil) {
+		return temporal;
+	}
 	if (!UDFeelIsNumber(a) || !UDFeelIsNumber(b)) {
 		return [NSNull null];
 	}
@@ -479,6 +472,9 @@ UDFeelFilter(UDFeelNode *node, UDFeelScope *scope)
 static id
 UDFeelPath(id base, NSString *name)
 {
+	if (UDFeelIsTemporal(base)) {
+		return UDFeelTemporalProperty(base, name) ?: [NSNull null];
+	}
 	if ([base isKindOfClass:[NSDictionary class]]) {
 		return [base objectForKey:name] ?: [NSNull null];
 	}
@@ -628,7 +624,8 @@ UDFeelEval(UDFeelNode *node, UDFeelScope *scope)
 	}
 	case UDFeelNodeNegate: {
 		id value = UDFeelEval([c objectAtIndex:0], scope);
-		return UDFeelArithmetic(UDFeelOperatorSubtract, [NSDecimalNumber zero], value);
+		return UDFeelTemporalNegate(value)
+			?: UDFeelArithmetic(UDFeelOperatorSubtract, [NSDecimalNumber zero], value);
 	}
 	case UDFeelNodeBinary:
 		if (node.op == UDFeelOperatorAnd || node.op == UDFeelOperatorOr) {

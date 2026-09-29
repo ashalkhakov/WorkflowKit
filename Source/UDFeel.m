@@ -37,7 +37,7 @@
 
 - (id)valueWithVariables:(NSDictionary *)variables
 {
-	return UDFeelEvaluate(self.root, variables ?: @{});
+	return UDFeelPublicValue(UDFeelEvaluate(self.root, variables ?: @{}));
 }
 
 - (BOOL)evaluateWithVariables:(NSDictionary *)variables error:(NSError **)error

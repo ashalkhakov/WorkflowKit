@@ -287,8 +287,8 @@ static NSString * const UDJobEntityName = @"UDJob";
 				job.activityId = definition.timerStartActivityId;
 				job.definitionId = record.definitionId;
 				job.createdAt = deployment.deployedAt;
-				job.dueDate = [deployment.deployedAt
-					dateByAddingTimeInterval:definition.timerStartDelay];
+				job.dueDate = definition.timerStartDue;
+				job.repeat = definition.timerStartRepeat;
 				job.retries = (int32_t)definition.timerStartAttempts;
 				job.exclusive = YES;
 			}

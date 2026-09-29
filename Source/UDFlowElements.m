@@ -1,5 +1,6 @@
 #import "UDFlowElements.h"
 #import "UDProcessDefinition.h"
+#import "UDTimers.h"
 
 NSString * const UDWorkflowErrorDomain = @"UDWorkflowErrorDomain";
 NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
@@ -72,6 +73,35 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 
 @end
 
+@implementation UDTimer
+
+- (instancetype)initWithKind:(UDTimerKind)kind expression:(UDFeelExpression *)expression
+{
+	self = [super init];
+	if (self) {
+		_kind = kind;
+		_expression = expression;
+	}
+	return self;
+}
+
++ (instancetype)duration:(NSTimeInterval)seconds
+{
+	return [self timerWithKind:UDTimerKindDuration text:UDISODurationText(seconds)];
+}
+
++ (instancetype)timerWithKind:(UDTimerKind)kind text:(NSString *)text
+{
+	NSString *literal = UDTimerLiteral(kind, text);
+	if (literal == nil) {
+		return nil;
+	}
+	UDFeelExpression *expression = [UDFeelExpression expressionWithString:literal error:NULL];
+	return expression != nil ? [[self alloc] initWithKind:kind expression:expression] : nil;
+}
+
+@end
+
 @implementation UDMultiInstance
 
 - (instancetype)initSequential:(BOOL)sequential
@@ -95,6 +125,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 
 @interface UDEvent ()
 @property (nonatomic, readwrite, getter=isInterrupting) BOOL interrupting;
+@property (nonatomic, readwrite, strong) UDTimer *timer;
 @end
 
 @interface UDSubProcess ()
@@ -113,7 +144,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
                              kind:(UDEventKind)kind
                           trigger:(UDEventTrigger)trigger
                       messageName:(NSString *)messageName
-                    timerDuration:(NSTimeInterval)timerDuration
+                            timer:(UDTimer *)timer
                      attachedToId:(NSString *)attachedToId
                          errorRef:(NSString *)errorRef
                      interrupting:(BOOL)interrupting
@@ -123,7 +154,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 		_kind = kind;
 		_trigger = trigger;
 		_messageName = [messageName copy];
-		_timerDuration = timerDuration;
+		_timer = timer;
 		_attachedToId = [attachedToId copy];
 		_errorRef = [errorRef copy];
 		_interrupting = interrupting;
@@ -140,7 +171,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 	                          kind:kind
 	                       trigger:UDEventTriggerNone
 	                   messageName:nil
-	                 timerDuration:0
+	                         timer:nil
 	                  attachedToId:nil
 	                      errorRef:nil
 	                  interrupting:YES];

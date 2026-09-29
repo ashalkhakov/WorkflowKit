@@ -16,6 +16,7 @@
 		addInclusive:@"or2" defaultFlow:nil];
 	[[inner addEnd:@"me"] addEnd:@"reminded"];
 	[inner addBoundaryTimer:@"remind" onTask:@"review" duration:90 interrupting:NO];
+	[inner setTimer:[UDTimer timerWithKind:UDTimerKindCycle text:@"R3/PT1M30S"] forElement:@"remind"];
 	[inner connect:@"ms" to:@"or1"];
 	[inner connect:@"or1" to:@"review" flowId:@"f_or_a"
 	     condition:[UDFeelExpression expressionWithString:@"urgent = true" error:NULL]];
@@ -72,6 +73,7 @@
 		addInput:[UDVariableMapping mappingFrom:@"amount" to:@"sum"] forElement:@"escalate"];
 	[b addOutput:[UDVariableMapping mappingFrom:@"verdict" to:@"escalation"] forElement:@"escalate"];
 	[b addBoundaryTimer:@"stale" onTask:@"escalate" duration:3600 interrupting:YES];
+	[b setTimer:UDTimerKindDate expression:@"escalatedAt + duration(sla)" forElement:@"stale"];
 	[[b connect:@"timeout" to:@"escalate"] connect:@"escalate" to:@"late"];
 	[b connect:@"stale" to:@"late"];
 	[[b connect:@"race" to:@"recalled"] connect:@"recalled" to:@"aborted"];
@@ -108,7 +110,8 @@
 	NSString *xml = [UDBpmnWriter XMLStringFromDefinition:definition error:&error];
 	XCTAssertNotNil(xml, @"%@", error);
 	XCTAssertTrue([xml rangeOfString:@"<bpmn:timeDuration xsi:type=\"bpmn:tFormalExpression\">P7D</bpmn:timeDuration>"].location != NSNotFound);
-	XCTAssertTrue([xml rangeOfString:@"PT1M30S"].location != NSNotFound);
+	XCTAssertTrue([xml rangeOfString:@"<bpmn:timeCycle xsi:type=\"bpmn:tFormalExpression\">R3/PT1M30S</bpmn:timeCycle>"].location != NSNotFound, @"%@", xml);
+	XCTAssertTrue([xml rangeOfString:@"<bpmn:timeDate xsi:type=\"bpmn:tFormalExpression\">escalatedAt + duration(sla)</bpmn:timeDate>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"camunda:topic=\"credit.check\""].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<camunda:failedJobRetryTimeCycle>R5/PT5M</camunda:failedJobRetryTimeCycle>"].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmndi:BPMNShape"].location != NSNotFound);
@@ -231,8 +234,8 @@ static NSString * const UDModelerInvoice =
 		@"amount > 1000");
 	XCTAssertEqualObjects([(UDEvent *)[definition nodeWithId:@"Event_confirmed"] messageName],
 		@"PaymentConfirmed");
-	XCTAssertEqualWithAccuracy([(UDEvent *)[definition nodeWithId:@"Event_reminder"] timerDuration],
-		300.0, 0.001);
+	XCTAssertEqualObjects([[(UDEvent *)[definition nodeWithId:@"Event_reminder"] timer].expression
+		expressionString], @"@\"PT5M\"");
 
 	UDProcessInstance *big = [engine.runtimeService startProcessInstanceByKey:@"invoice"
 	                                                               businessKey:@"INV-7"

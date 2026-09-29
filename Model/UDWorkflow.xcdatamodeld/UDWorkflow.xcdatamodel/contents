@@ -145,6 +145,7 @@
         <attribute name="lockOwner" optional="YES" attributeType="String"/>
         <attribute name="priority" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="repeat" optional="YES" attributeType="String"/>
         <attribute name="retries" attributeType="Integer 32" defaultValueString="3" usesScalarValueType="YES"/>
         <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UDExecution" inverseName="jobs" inverseEntity="UDExecution"/>
         <fetchIndex name="byDue">
