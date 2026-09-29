@@ -11,6 +11,7 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 @property (nonatomic, readwrite, getter=isAsyncAfter) BOOL asyncAfter;
 @property (nonatomic, readwrite, getter=isExclusive) BOOL exclusive;
 @property (nonatomic, readwrite, copy) NSString *retryTimeCycle;
+@property (nonatomic, readwrite, strong) NSNumber *taskPriority;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableIncoming;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableOutgoing;
 - (void)addIncomingFlowId:(NSString *)flowId;

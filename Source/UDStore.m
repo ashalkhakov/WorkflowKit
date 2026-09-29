@@ -175,6 +175,7 @@ static NSString * const UDJobEntityName = @"UDJob";
 	record.deploymentId = [[row valueForKey:@"deployment"] valueForKey:@"deploymentId"];
 	record.resourceName = [row valueForKey:@"resourceName"];
 	record.suspended = [[row valueForKey:@"suspended"] boolValue];
+	record.historyTimeToLive = [row valueForKey:@"historyTimeToLive"];
 	return record;
 }
 
@@ -251,6 +252,7 @@ static NSString * const UDJobEntityName = @"UDJob";
 			[definitionRow setValue:record.name forKey:@"name"];
 			[definitionRow setValue:version forKey:@"version"];
 			[definitionRow setValue:record.resourceName forKey:@"resourceName"];
+			[definitionRow setValue:definition.historyTimeToLive forKey:@"historyTimeToLive"];
 			[definitionRow setValue:row forKey:@"deployment"];
 			[stored addObject:record];
 			/* The latest version starts on the message; earlier ones stop. */

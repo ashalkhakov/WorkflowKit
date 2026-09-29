@@ -47,6 +47,13 @@
                                    workerId:(NSString *)workerId
                                      topics:(NSDictionary<NSString *, NSNumber *> *)lockDurations
                                       error:(NSError **)error;
+/* The same, with the variables to return per topic; a topic not in
+ * variableNames gets all of them. */
+- (NSArray<UDExternalTask *> *)fetchAndLock:(NSUInteger)maxTasks
+                                   workerId:(NSString *)workerId
+                                     topics:(NSDictionary<NSString *, NSNumber *> *)lockDurations
+                              variableNames:(NSDictionary<NSString *, NSArray<NSString *> *> *)variableNames
+                                      error:(NSError **)error;
 
 /* The activity is done: the variables are set on the process (where they
  * exist, else on the process instance) and its path continues. */

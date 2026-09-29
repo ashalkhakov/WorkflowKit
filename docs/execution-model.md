@@ -299,6 +299,17 @@ predates FEEL; Camunda 8 moved to FEEL.
 - **No identity service**, no CMMN, no DMN, no forms engine.
 - **One node first.** The job executor is written for many, but only one is
   tested.
+- **`asyncAfter` with several outgoing flows**, which the reference's
+  documentation leaves open: the node finishes in the current transaction
+  -- a join fires, a task completes -- and one job takes its outgoing flows,
+  evaluating their conditions when it runs. Refused on an event-based
+  gateway, which waits for its events.
+- **Priorities are whole numbers.** `camunda:taskPriority` as an
+  expression is refused on deployment.
+- **History cleanup** runs on demand (`cleanUpHistory:`) or every
+  `historyCleanupInterval` seconds, not in a daily batch window, and only
+  by end time. A definition without `camunda:historyTimeToLive` keeps its
+  history; the reference requires one on every deployment.
 
 ## Implementation order
 
@@ -323,22 +334,23 @@ macOS:
 3. ~~**Jobs.** Timers, async continuations, exclusive execution, retries,
    retry cycles and incidents.~~ Done, with timer start events and
    `managementService` (jobs, incidents, running a job, giving retries
-   back), and `jobExecutorActive` for stepping through jobs in tests. Not
-   yet: `asyncAfter` on gateways and async continuations on boundary
-   events, which the builder refuses rather than ignores.
+   back), and `jobExecutorActive` for stepping through jobs in tests.
+   Later completed: `asyncAfter` on gateways and async continuations on
+   boundary events (see Deviations for how `asyncAfter` behaves).
 4. ~~**External tasks.** Fetch-and-lock, the in-process worker behind
    `UDServiceTaskHandler`, and BPMN errors from workers.~~ Done:
    `externalTaskService` fetches and locks by topic (priority, then age),
    completes, reports failures with a retry timeout and BPMN errors,
    extends and releases locks, and gives retries back, resolving the
-   incident. The in-process worker is a client of it. Not yet: reading
-   `camunda:taskPriority`, so every task has priority 0, and choosing
-   which variables a fetch returns.
+   incident. The in-process worker is a client of it. Later completed:
+   `camunda:taskPriority` on tasks and processes (whole numbers), and the
+   variables a fetch returns, per topic.
 5. ~~**History**, by level.~~ Done: process, activity and task instances
    (canceled ones marked), latest variable values, and at FULL every
    variable update, incidents from open to resolved or deleted, and the
-   job log. Not yet: removing history after a time to live, and recording
-   the level in the database so that engines sharing it agree.
+   job log. Later completed: `camunda:historyTimeToLive` with cleanup of
+   what outlived it, and the level recorded in the store, which refuses an
+   engine configured otherwise.
 
 The token engine is removed at step 2. After that come standard BPMN
 reading (phase 2) and the remaining constructs (phase 5), each one following

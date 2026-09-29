@@ -118,6 +118,12 @@ extern NSString * const UDJobLogStateDeleted;
 - (NSArray<UDHistoricIncident *> *)historicIncidentsForProcessInstance:(NSString *)processInstanceId;
 - (NSArray<UDHistoricJobLog *> *)historicJobLogForProcessInstance:(NSString *)processInstanceId;
 
+/* Removes the history of up to batchSize ended process instances whose
+ * definition's historyTimeToLive has run out since they ended, with
+ * everything recorded about them. An instance whose definition has no time
+ * to live is kept. Answers how many were removed, or -1 with an error. */
+- (NSInteger)cleanUpHistory:(NSUInteger)batchSize error:(NSError **)error;
+
 @end
 
 #endif /* UDHistoryService_h */

@@ -51,8 +51,14 @@ processInstanceEnded:(UDProcessInstance *)instance;
  * restarts takes back what it held. Engines sharing a store need distinct
  * identifiers. */
 @property (nonatomic, copy) NSString *identifier;
-/* How much history is written. Default UDHistoryLevelAudit. */
+/* How much history is written. Default UDHistoryLevelAudit. The first
+ * -openWithError: records it in the store, and later ones refuse a
+ * different level: engines sharing a store write the same history. */
 @property (nonatomic) UDHistoryLevel historyLevel;
+/* How often history cleanup runs by itself, in seconds, after
+ * -openWithError:. 0, the default, leaves it to
+ * -[UDHistoryService cleanUpHistory:error:]. */
+@property (nonatomic) NSTimeInterval historyCleanupInterval;
 /* Whether the job executor runs jobs by itself. With NO, jobs wait until
  * managementService runs them -- for tests that step through async
  * continuations and timers. Default YES. */

@@ -15,6 +15,12 @@
 @property (nonatomic, readonly, copy) NSString *definitionId;
 @property (nonatomic, readonly, copy) NSString *deploymentId;
 @property (nonatomic, readonly, copy) NSString *resourceName;
+/* camunda:taskPriority on the process: the external tasks' priority where
+ * a task sets none. nil when not set; 0 then. */
+@property (nonatomic, readonly, strong) NSNumber *defaultTaskPriority;
+/* camunda:historyTimeToLive, in days: how long history of an ended
+ * instance is kept. nil keeps it. */
+@property (nonatomic, readonly, strong) NSNumber *historyTimeToLive;
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, UDFlowNode *> *nodes;
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, UDSequenceFlow *> *flows;
 @property (nonatomic, readonly, copy) NSArray<NSString *> *flowOrder;
@@ -85,6 +91,10 @@
                      exclusive:(BOOL)exclusive
                     forElement:(NSString *)elementId;
 - (instancetype)setRetryTimeCycle:(NSString *)cycle forElement:(NSString *)elementId;
+- (instancetype)setTaskPriority:(NSInteger)priority forElement:(NSString *)elementId;
+/* Process-level settings. */
+- (instancetype)setDefaultTaskPriority:(NSInteger)priority;
+- (instancetype)setHistoryTimeToLive:(NSInteger)days;
 /* Names a node or a sequence flow already added. */
 - (instancetype)setName:(NSString *)name forElement:(NSString *)elementId;
 - (instancetype)setBoundsFor:(NSString *)elementId

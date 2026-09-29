@@ -762,6 +762,54 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 	}];
 }
 
+- (NSInteger)cleanUpHistory:(NSUInteger)batchSize error:(NSError **)error
+{
+	__block NSInteger removed = 0;
+	NSDate *now = [NSDate date];
+	BOOL ok = [_engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		/* Time to live per definition, read once. */
+		NSMutableDictionary *ttls = [NSMutableDictionary dictionary];
+		NSArray *ended = [command fetch:@"UDHistoricProcessInstance"
+		                      predicate:[NSPredicate predicateWithFormat:@"endTime != nil"]
+		                           sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"endTime" ascending:YES] ]
+		                          limit:0];
+		for (UDHistoricProcessInstanceEntity *instance in ended) {
+			if (batchSize > 0 && (NSUInteger)removed >= batchSize) {
+				break;
+			}
+			id ttl = [ttls objectForKey:instance.definitionId];
+			if (ttl == nil) {
+				NSManagedObject *record = [[command fetch:@"UDDefinitionRecord"
+				                                predicate:[NSPredicate predicateWithFormat:
+				                                    @"definitionId == %@", instance.definitionId]
+				                                     sort:nil
+				                                    limit:1] lastObject];
+				ttl = [record valueForKey:@"historyTimeToLive"] ?: [NSNull null];
+				[ttls setObject:ttl forKey:instance.definitionId];
+			}
+			if (ttl == [NSNull null]
+			    || [[instance.endTime dateByAddingTimeInterval:[ttl doubleValue] * 86400] compare:now]
+			       == NSOrderedDescending) {
+				continue;
+			}
+			NSPredicate *mine = [NSPredicate predicateWithFormat:@"processInstanceId == %@",
+				instance.processInstanceId];
+			for (NSString *entity in @[ @"UDHistoricActivityInstance", @"UDHistoricTaskInstance",
+			                            @"UDHistoricVariable", @"UDHistoricVariableUpdate",
+			                            @"UDHistoricIncident", @"UDHistoricJobLog" ]) {
+				for (NSManagedObject *row in [command fetch:entity predicate:mine sort:nil limit:0]) {
+					[command.context deleteObject:row];
+				}
+			}
+			[command.context deleteObject:instance];
+			removed += 1;
+		}
+		return YES;
+	} error:error];
+	return ok ? removed : -1;
+}
+
 - (NSArray<UDHistoricJobLog *> *)historicJobLogForProcessInstance:(NSString *)processInstanceId
 {
 	return [self rows:@"UDHistoricJobLog" ofInstance:processInstanceId

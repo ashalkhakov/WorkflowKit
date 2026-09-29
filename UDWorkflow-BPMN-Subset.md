@@ -29,9 +29,10 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 
 | Construct | BPMN | Behaviour |
 |---|---|---|
-| Async before | `camunda:asyncBefore="true"` | The command stops before the node; a job enters it. Any node but a boundary event. |
-| Async after | `camunda:asyncAfter="true"` | The command stops after the node; a job takes its outgoing flows. Not on gateways or boundary events yet. |
+| Async before | `camunda:asyncBefore="true"` | The command stops before the node; a job enters it. On a boundary event, the interruption happens at once and the job passes the event. |
+| Async after | `camunda:asyncAfter="true"` | The node finishes (a join fires) and one job takes its outgoing flows. Not on event-based gateways. |
 | Exclusive | `camunda:exclusive="false"` | The node's jobs may run beside the instance's other work. |
+| Task priority | `camunda:taskPriority` | On a service task, or the process as a default: fetch order for external tasks. Whole numbers. |
 | Retry cycle | `camunda:failedJobRetryTimeCycle` | `R<n>/<duration>` or a list of durations. Default three attempts, retried at once. None left raises an incident; `managementService` gives attempts back. |
 
 ### Gateways
@@ -53,9 +54,9 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Message catch | `intermediateCatchEvent` + message | Wait state with an event subscription. |
 | Timer catch | `intermediateCatchEvent` + timer | Wait state with a timer job at an absolute due date. |
 | Message throw / message end | throw / end + message | `UDProcessEngineDelegate` `didThrowMessage`, after commit. |
-| Boundary message | `boundaryEvent` `attachedToRef` | Interrupting, or non-interrupting and repeatable. |
-| Boundary timer | `boundaryEvent` + timer | Armed when the host task is entered; fires once. |
-| Boundary error | `boundaryEvent` + `errorEventDefinition` | Catches a BPMN error with its `errorCode`, or any without `errorRef`. An uncaught error ends its path. |
+| Boundary message | `boundaryEvent` `attachedToRef` | On a task or subprocess. Interrupting, or non-interrupting and repeatable. |
+| Boundary timer | `boundaryEvent` + timer | On a task or subprocess, armed when it is entered; fires once. |
+| Boundary error | `boundaryEvent` + `errorEventDefinition` | Catches a BPMN error with its `errorCode`, or any without `errorRef`, on the task or on any subprocess around it, nearest first. An uncaught error ends its path. |
 
 ## 2. Event rules
 
@@ -94,7 +95,7 @@ The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` syntax 
 | Events | escalation, cancel, compensate, signal, link, terminate, conditional, multiple, parallel multiple |
 | Event use | non-interrupting start in event subprocess |
 | Data | data object, data store, data association, properties as BPMN itemAware |
-| Execution extras | boundary events on subprocesses, full BPMN DI edge waypoints |
+| Execution extras | full BPMN DI edge waypoints |
 
 ## 5. XML shape
 
@@ -125,7 +126,7 @@ Deploying stores the XML, and the engine runs the definition read back from it, 
 | Concurrency | A lost race fails with `UDWorkflowErrorConflict` and changes nothing; the engine retries its own commands. |
 | Worker and jobs | The in-process worker and the job executor run one instance's exclusive work on one serial queue at a time. A job is acquired, run and, on failure, recorded in three transactions. |
 | Public API | `UDProcessEngine` and its services; value objects out. Delegates and target-action. |
-| History | Written in the command's transaction at `historyLevel`: NONE, ACTIVITY (process, activity and task instances), AUDIT (and latest variables; the default), FULL (and variable updates, incidents, the job log). |
+| History | Written in the command's transaction at `historyLevel`: NONE, ACTIVITY (process, activity and task instances), AUDIT (and latest variables; the default), FULL (and variable updates, incidents, the job log). The store keeps the level. `camunda:historyTimeToLive` (days) lets cleanup remove an ended instance's history. |
 | Persistence | `UDStore`: Core Data (`Model/UDWorkflow.xcdatamodeld`) over in-memory, SQLite or a FreeCoreData SQL backend. |
 
 Node layout for the designer is stored on each `UDFlowNode` as `boundsX/Y/Width/Height` and exported as BPMN DI.

@@ -29,6 +29,9 @@
 /* camunda:failedJobRetryTimeCycle: "R5/PT5M", or a list of ISO-8601
  * durations, one per retry. nil for the default of three attempts. */
 @property (nonatomic, readonly, copy) NSString *retryTimeCycle;
+/* camunda:taskPriority: an external task's priority, over the process's.
+ * nil when not set. */
+@property (nonatomic, readonly, strong) NSNumber *taskPriority;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId

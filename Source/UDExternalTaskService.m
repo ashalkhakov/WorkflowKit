@@ -86,17 +86,38 @@ UDTaskError(UDWorkflowErrorCode code, NSString *message)
 - (UDExternalTask *)lock:(UDExternalTaskEntity *)task
                 workerId:(NSString *)workerId
                 duration:(NSTimeInterval)duration
+           variableNames:(NSArray *)names
                  command:(UDCommandContext *)command
 {
 	task.workerId = workerId;
 	task.lockExpiration = [NSDate dateWithTimeIntervalSinceNow:duration];
-	return [UDExternalTask ud_taskWithEntity:task
-	                               variables:[command visibleVariables:task.execution]];
+	NSDictionary *variables = [command visibleVariables:task.execution];
+	if (names != nil) {
+		NSMutableDictionary *chosen = [NSMutableDictionary dictionary];
+		for (NSString *name in names) {
+			id value = [variables objectForKey:name];
+			if (value != nil) {
+				[chosen setObject:value forKey:name];
+			}
+		}
+		variables = chosen;
+	}
+	return [UDExternalTask ud_taskWithEntity:task variables:variables];
 }
 
 - (NSArray<UDExternalTask *> *)fetchAndLock:(NSUInteger)maxTasks
                                    workerId:(NSString *)workerId
                                      topics:(NSDictionary<NSString *, NSNumber *> *)lockDurations
+                                      error:(NSError **)error
+{
+	return [self fetchAndLock:maxTasks workerId:workerId topics:lockDurations
+	            variableNames:nil error:error];
+}
+
+- (NSArray<UDExternalTask *> *)fetchAndLock:(NSUInteger)maxTasks
+                                   workerId:(NSString *)workerId
+                                     topics:(NSDictionary<NSString *, NSNumber *> *)lockDurations
+                              variableNames:(NSDictionary<NSString *, NSArray<NSString *> *> *)variableNames
                                       error:(NSError **)error
 {
 	if ([workerId length] == 0 || [lockDurations count] == 0) {
@@ -118,7 +139,9 @@ UDTaskError(UDWorkflowErrorCode code, NSString *message)
 		                               limit:maxTasks];
 		for (UDExternalTaskEntity *task in candidates) {
 			NSTimeInterval duration = [[lockDurations objectForKey:task.topic] doubleValue];
-			[locked addObject:[self lock:task workerId:workerId duration:duration command:command]];
+			[locked addObject:[self lock:task workerId:workerId duration:duration
+			               variableNames:[variableNames objectForKey:task.topic]
+			                     command:command]];
 		}
 		return YES;
 	} error:error];
@@ -352,7 +375,8 @@ UDTaskError(UDWorkflowErrorCode code, NSString *message)
 		(void)error;
 		UDExternalTaskEntity *task = [self task:externalTaskId in:command];
 		if (task != nil && [self isAvailable:task]) {
-			locked = [self lock:task workerId:workerId duration:duration command:command];
+			locked = [self lock:task workerId:workerId duration:duration
+			      variableNames:nil command:command];
 		}
 		return YES;
 	} error:NULL];

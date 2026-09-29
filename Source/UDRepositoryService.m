@@ -212,6 +212,7 @@ UDIsBpmnResource(NSString *name)
 		record.key = definition.processId;
 		record.name = definition.name;
 		record.resourceName = [pair objectAtIndex:1];
+		record.historyTimeToLive = definition.historyTimeToLive;
 		UDEvent *start = [definition startEvent];
 		if (start.trigger == UDEventTriggerMessage) {
 			record.messageStartName = start.messageName;

@@ -11,6 +11,7 @@
 - (void)setAsyncAfter:(BOOL)asyncAfter;
 - (void)setExclusive:(BOOL)exclusive;
 - (void)setRetryTimeCycle:(NSString *)cycle;
+- (void)setTaskPriority:(NSNumber *)priority;
 @end
 
 @interface UDProcessDefinition ()
@@ -18,6 +19,8 @@
 @property (nonatomic, readwrite, copy) NSString *definitionId;
 @property (nonatomic, readwrite, copy) NSString *deploymentId;
 @property (nonatomic, readwrite, copy) NSString *resourceName;
+@property (nonatomic, readwrite, strong) NSNumber *defaultTaskPriority;
+@property (nonatomic, readwrite, strong) NSNumber *historyTimeToLive;
 /* Node id to @[node, scope definition], for the whole tree. */
 @property (nonatomic, strong) NSDictionary *nodeIndex;
 - (instancetype)initWithProcessId:(NSString *)processId
@@ -88,6 +91,8 @@
 	copy.definitionId = definitionId;
 	copy.deploymentId = deploymentId;
 	copy.resourceName = resourceName;
+	copy.defaultTaskPriority = self.defaultTaskPriority;
+	copy.historyTimeToLive = self.historyTimeToLive;
 	return copy;
 }
 
@@ -159,6 +164,8 @@
 @interface UDDefinitionBuilder ()
 @property (nonatomic, copy) NSString *processId;
 @property (nonatomic, copy) NSString *processName;
+@property (nonatomic, strong) NSNumber *processTaskPriority;
+@property (nonatomic, strong) NSNumber *processTimeToLive;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UDFlowNode *> *nodes;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UDSequenceFlow *> *flows;
 @property (nonatomic, strong) NSMutableArray<NSString *> *flowOrder;
@@ -403,6 +410,24 @@
 	return self;
 }
 
+- (instancetype)setTaskPriority:(NSInteger)priority forElement:(NSString *)elementId
+{
+	[[self.nodes objectForKey:elementId] setTaskPriority:[NSNumber numberWithInteger:priority]];
+	return self;
+}
+
+- (instancetype)setDefaultTaskPriority:(NSInteger)priority
+{
+	self.processTaskPriority = [NSNumber numberWithInteger:priority];
+	return self;
+}
+
+- (instancetype)setHistoryTimeToLive:(NSInteger)days
+{
+	self.processTimeToLive = [NSNumber numberWithInteger:days];
+	return self;
+}
+
 - (instancetype)setName:(NSString *)name forElement:(NSString *)elementId
 {
 	UDFlowNode *node = [self.nodes objectForKey:elementId];
@@ -559,11 +584,11 @@
 		BOOL isBoundary = [node isKindOfClass:[UDEvent class]]
 			&& [(UDEvent *)node kind] == UDEventKindBoundary;
 
-		if ((isBoundary && (node.isAsyncBefore || node.isAsyncAfter))
-		    || ([node isKindOfClass:[UDGateway class]] && node.isAsyncAfter)) {
+		if ([node isKindOfClass:[UDGateway class]] && node.isAsyncAfter
+		    && [(UDGateway *)node kind] == UDGatewayKindEventBased) {
 			return [self fail:error
 			          message:[NSString stringWithFormat:
-					@"%@: async continuations on boundary events and after gateways are not supported yet",
+					@"%@: an event-based gateway waits for its events; asyncAfter has nothing to defer",
 					node.elementId]];
 		}
 
@@ -581,10 +606,10 @@
 		if (isBoundary) {
 			UDEvent *boundary = (UDEvent *)node;
 			UDFlowNode *host = [self.nodes objectForKey:boundary.attachedToId];
-			if (![host isKindOfClass:[UDTask class]]) {
+			if (![host isKindOfClass:[UDTask class]] && ![host isKindOfClass:[UDSubProcess class]]) {
 				return [self fail:error
 				          message:[NSString stringWithFormat:
-						@"boundary %@ needs a task host", node.elementId]];
+						@"boundary %@ needs a task or subprocess host", node.elementId]];
 			}
 			if ([node.outgoingFlowIds count] == 0) {
 				return [self fail:error
@@ -621,12 +646,16 @@
 		return nil;
 	}
 
-	return [[UDProcessDefinition alloc] initWithProcessId:self.processId
-	                                                 name:self.processName
-	                                              version:0
-	                                                nodes:self.nodes
-	                                                flows:self.flows
-	                                            flowOrder:self.flowOrder];
+	UDProcessDefinition *definition =
+		[[UDProcessDefinition alloc] initWithProcessId:self.processId
+		                                          name:self.processName
+		                                       version:0
+		                                         nodes:self.nodes
+		                                         flows:self.flows
+		                                     flowOrder:self.flowOrder];
+	definition.defaultTaskPriority = self.processTaskPriority;
+	definition.historyTimeToLive = self.processTimeToLive;
+	return definition;
 }
 
 @end

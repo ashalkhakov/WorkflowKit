@@ -2,6 +2,7 @@
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="1">
     <entity name="UDDefinitionRecord" representedClassName="NSManagedObject" syncable="YES">
         <attribute name="definitionId" attributeType="String"/>
+        <attribute name="historyTimeToLive" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
         <attribute name="key" attributeType="String"/>
         <attribute name="name" optional="YES" attributeType="String"/>
         <attribute name="resourceName" attributeType="String"/>
@@ -281,5 +282,14 @@
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+    </entity>
+    <entity name="UDProperty" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="name" attributeType="String"/>
+        <attribute name="value" optional="YES" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="name"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
     </entity>
 </model>

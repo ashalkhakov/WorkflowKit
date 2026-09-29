@@ -37,6 +37,7 @@ UDIsConflict(NSError *error)
 	NSCondition *_settle;
 	NSMutableDictionary *_busy;
 	int64_t _sequence;
+	dispatch_source_t _cleanup;
 }
 
 - (instancetype)initWithStore:(UDStore *)store
@@ -576,6 +577,10 @@ UDIsConflict(NSError *error)
 
 - (BOOL)openWithError:(NSError **)error
 {
+	if (![self checkHistoryLevel:error]) {
+		return NO;
+	}
+	[self startHistoryCleanup];
 	NSString *owner = self.identifier;
 	NSMutableArray *available = [NSMutableArray array];
 	BOOL handler = self.serviceHandler != nil;
@@ -628,6 +633,69 @@ UDIsConflict(NSError *error)
 	}
 	_closed = YES;
 	dispatch_source_cancel(_scheduler);
+	if (_cleanup != NULL) {
+		dispatch_source_cancel(_cleanup);
+		UDDispatchRelease(_cleanup);
+		_cleanup = NULL;
+	}
+}
+
+/* The history level is the store's: the first engine to open records it,
+ * and an engine configured otherwise does not open. */
+- (BOOL)checkHistoryLevel:(NSError **)error
+{
+	NSString *mine = [NSString stringWithFormat:@"%ld", (long)self.historyLevel];
+	return [self ud_runCommand:^BOOL(UDCommandContext *command, NSError **commandError) {
+		NSManagedObject *property = [[command fetch:@"UDProperty"
+		                                  predicate:[NSPredicate predicateWithFormat:
+		                                      @"name == %@", @"historyLevel"]
+		                                       sort:nil
+		                                      limit:1] lastObject];
+		if (property == nil) {
+			property = [command insert:@"UDProperty"];
+			[property setValue:@"historyLevel" forKey:@"name"];
+			[property setValue:mine forKey:@"value"];
+			return YES;
+		}
+		if ([[property valueForKey:@"value"] isEqualToString:mine]) {
+			return YES;
+		}
+		if (commandError != NULL) {
+			*commandError = [NSError errorWithDomain:UDWorkflowErrorDomain
+			                                    code:UDWorkflowErrorInvalidState
+			                                userInfo:@{ NSLocalizedDescriptionKey:
+				[NSString stringWithFormat:
+					@"the store records history level %@, the engine is set to %@",
+					[property valueForKey:@"value"], mine] }];
+		}
+		return NO;
+	} error:error];
+}
+
+- (void)startHistoryCleanup
+{
+	NSTimeInterval interval = self.historyCleanupInterval;
+	if (interval <= 0 || _cleanup != NULL) {
+		return;
+	}
+	_cleanup = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+		dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0));
+	__weak UDProcessEngine *weakSelf = self;
+	dispatch_source_set_event_handler(_cleanup, ^{
+		NSError *error = nil;
+		UDProcessEngine *engine = weakSelf;
+		if (engine != nil && [engine.historyService cleanUpHistory:500 error:&error] < 0) {
+			[engine notify:^(id<UDProcessEngineDelegate> delegate) {
+				if ([delegate respondsToSelector:@selector(processEngine:commandFailed:)]) {
+					[delegate processEngine:engine commandFailed:error];
+				}
+			}];
+		}
+	});
+	dispatch_source_set_timer(_cleanup,
+		dispatch_time(DISPATCH_TIME_NOW, (int64_t)(interval * NSEC_PER_SEC)),
+		(uint64_t)(interval * NSEC_PER_SEC), NSEC_PER_SEC);
+	dispatch_resume(_cleanup);
 }
 
 #pragma mark - Settling

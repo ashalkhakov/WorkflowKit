@@ -119,6 +119,15 @@ UDISODuration(NSTimeInterval seconds)
 	return out;
 }
 
+/* A whole number, possibly negative, and nothing else. */
+static BOOL
+UDParseWhole(NSString *text, long long *value)
+{
+	NSScanner *scanner = [NSScanner scannerWithString:
+		[text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+	return [scanner scanLongLong:value] && [scanner isAtEnd];
+}
+
 #pragma mark - Writer
 
 @interface UDBpmnWriteContext : NSObject
@@ -167,10 +176,12 @@ UDISODuration(NSTimeInterval seconds)
 	context.diagram = [NSMutableString string];
 
 	NSMutableString *process = [NSMutableString string];
-	[process appendFormat:@"  <bpmn:process%@%@ isExecutable=\"true\">\n",
+	[process appendFormat:@"  <bpmn:process%@%@ isExecutable=\"true\"%@%@>\n",
 		UDAttr(@"id", definition.processId),
 		[definition.name isEqualToString:definition.processId]
-			? @"" : UDAttr(@"name", definition.name)];
+			? @"" : UDAttr(@"name", definition.name),
+		UDAttr(@"camunda:taskPriority", [definition.defaultTaskPriority stringValue]),
+		UDAttr(@"camunda:historyTimeToLive", [definition.historyTimeToLive stringValue])];
 	if (![self appendScope:definition
 	                    to:process
 	                indent:@"    "
@@ -352,6 +363,7 @@ UDISODuration(NSTimeInterval seconds)
 	if (!node.isExclusive) {
 		[attrs appendString:@" camunda:exclusive=\"false\""];
 	}
+	[attrs appendString:UDAttr(@"camunda:taskPriority", [node.taskPriority stringValue])];
 	NSMutableString *wiring = [NSMutableString string];
 	if (node.retryTimeCycle != nil) {
 		[wiring appendFormat:
@@ -615,6 +627,30 @@ UDIgnoredElements(void)
 		UDDefinitionBuilder *builder =
 			[UDDefinitionBuilder process:processId
 			                        name:[self attr:@"name" of:process] ?: processId];
+		NSString *priority = [self attr:@"taskPriority" namespace:UDCamundaNamespace of:process];
+		if (priority != nil) {
+			long long value = 0;
+			if (!UDParseWhole(priority, &value)) {
+				[self fail:context error:UDBpmnError(
+					@"%@: camunda:taskPriority \"%@\" is not a whole number; expressions are not supported yet",
+					processId, priority)];
+			}
+			[builder setDefaultTaskPriority:(NSInteger)value];
+		}
+		NSString *ttl = [self attr:@"historyTimeToLive" namespace:UDCamundaNamespace of:process];
+		if ([ttl length] > 0) {
+			long long days = 0;
+			if (!UDParseWhole(ttl, &days)) {
+				NSTimeInterval seconds = UDParseISODuration(ttl);
+				days = seconds >= 0 && fmod(seconds, 86400) == 0 ? (long long)(seconds / 86400) : -1;
+			}
+			if (days < 0) {
+				[self fail:context error:UDBpmnError(
+					@"%@: camunda:historyTimeToLive \"%@\" is neither days nor an ISO-8601 duration in whole days",
+					processId, ttl)];
+			}
+			[builder setHistoryTimeToLive:(NSInteger)days];
+		}
 		[self readScope:process into:builder context:context];
 		if (context.error != nil) {
 			if (error != NULL) {
@@ -672,7 +708,7 @@ UDIgnoredElements(void)
 		if (label != nil) {
 			[builder setName:label forElement:elementId];
 		}
-		[self readJobSettings:element id:elementId into:builder];
+		[self readJobSettings:element id:elementId into:builder context:context];
 		NSXMLElement *bounds = [context.shapes objectForKey:elementId];
 		if (bounds != nil) {
 			[builder setBoundsFor:elementId
@@ -687,6 +723,7 @@ UDIgnoredElements(void)
 + (void)readJobSettings:(NSXMLElement *)element
                      id:(NSString *)elementId
                    into:(UDDefinitionBuilder *)builder
+                context:(UDBpmnReadContext *)context
 {
 	BOOL before = [[self attr:@"asyncBefore" namespace:UDCamundaNamespace of:element]
 		isEqualToString:@"true"];
@@ -698,6 +735,17 @@ UDIgnoredElements(void)
 		             asyncAfter:after
 		              exclusive:![exclusive isEqualToString:@"false"]
 		             forElement:elementId];
+	}
+	NSString *priority = [self attr:@"taskPriority" namespace:UDCamundaNamespace of:element];
+	if (priority != nil) {
+		long long value = 0;
+		if (UDParseWhole(priority, &value)) {
+			[builder setTaskPriority:(NSInteger)value forElement:elementId];
+		} else {
+			[self fail:context error:UDBpmnError(
+				@"%@: camunda:taskPriority \"%@\" is not a whole number; expressions are not supported yet",
+				elementId, priority)];
+		}
 	}
 	NSXMLElement *extensions = [self child:element named:@"extensionElements"];
 	for (NSXMLElement *extension in [self children:extensions of:UDCamundaNamespace]) {

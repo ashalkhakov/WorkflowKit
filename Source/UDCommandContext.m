@@ -377,6 +377,13 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	 * exactly that subtree. */
 	UDExecutionEntity *inner = [self newChildOf:execution concurrent:NO];
 	execution.isActive = NO;
+	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
+		if (boundary.trigger == UDEventTriggerMessage) {
+			[self subscribe:inner message:boundary.messageName activity:boundary.elementId];
+		} else if (boundary.trigger == UDEventTriggerTimer) {
+			[self timer:inner activity:boundary.elementId duration:boundary.timerDuration];
+		}
+	}
 	if ([node isKindOfClass:[UDSubProcess class]]) {
 		UDEvent *start = [[(UDSubProcess *)node innerDefinition] startEvent];
 		[self schedule:^{
@@ -386,13 +393,6 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	}
 	inner.activityId = node.elementId;
 	inner.activityInstanceId = execution.activityInstanceId;
-	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
-		if (boundary.trigger == UDEventTriggerMessage) {
-			[self subscribe:inner message:boundary.messageName activity:boundary.elementId];
-		} else if (boundary.trigger == UDEventTriggerTimer) {
-			[self timer:inner activity:boundary.elementId duration:boundary.timerDuration];
-		}
-	}
 	[self execute:node scope:scope execution:inner];
 }
 
@@ -555,8 +555,20 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	if (node == nil) {
 		return;
 	}
-	if ([type isEqualToString:UDJobTypeAsyncBefore]) {
+	BOOL boundary = [node isKindOfClass:[UDEvent class]]
+		&& [(UDEvent *)node kind] == UDEventKindBoundary;
+	if ([type isEqualToString:UDJobTypeAsyncBefore] && boundary) {
+		/* The boundary fired in an earlier command; its path now passes
+		 * the event. */
+		execution.activityInstanceId = [UDCommandContext newId];
+		[self activityStarted:node execution:execution];
+		[self leave:node execution:execution];
+	} else if ([type isEqualToString:UDJobTypeAsyncBefore]) {
 		[self enterNow:node execution:execution];
+	} else if ([type isEqualToString:UDJobTypeAsyncAfter] && [node isKindOfClass:[UDGateway class]]) {
+		[self departNow:(UDGateway *)node
+		          scope:[self scopeOf:node.elementId execution:execution]
+		      execution:execution];
 	} else if ([type isEqualToString:UDJobTypeAsyncAfter]) {
 		[self leaveNow:node execution:execution];
 	} else {
@@ -643,12 +655,12 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	UDExecutionEntity *host = inner.parent;
 	if (boundary.isInterrupting) {
 		[self cancelSubtree:inner];
+		/* The interrupted activity's own instance: the host's, which for a
+		 * subprocess is not the scope's. */
+		[self activityEnded:host.activityInstanceId canceled:YES];
 		[self remove:inner];
 		host.isActive = YES;
-		host.activityId = boundary.elementId;
-		host.activityInstanceId = [UDCommandContext newId];
-		[self activityStarted:boundary execution:host];
-		[self leave:boundary execution:host];
+		[self pass:boundary on:host];
 		return;
 	}
 	/* Non-interrupting: the activity goes on, and the boundary's flow runs
@@ -668,20 +680,30 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		host.isActive = NO;
 		path = [self newChildOf:host concurrent:YES];
 	}
+	[self pass:boundary on:path];
+}
+
+/* The path has left the activity for the boundary event: it passes the
+ * event now, or, with asyncBefore, in a job. */
+- (void)pass:(UDEvent *)boundary on:(UDExecutionEntity *)path
+{
 	path.activityId = boundary.elementId;
+	if (boundary.isAsyncBefore) {
+		path.activityInstanceId = nil;
+		[self job:UDJobTypeAsyncBefore execution:path node:boundary due:[NSDate date]];
+		return;
+	}
 	path.activityInstanceId = [UDCommandContext newId];
 	[self activityStarted:boundary execution:path];
 	[self leave:boundary execution:path];
 }
 
-- (void)throwBpmnError:(NSString *)errorCode fromExecution:(UDExecutionEntity *)execution
+/* The error boundary on the node that catches the code: one for that code,
+ * else a catch-all. */
+- (UDEvent *)errorBoundaryOn:(UDFlowNode *)node
+                       scope:(UDProcessDefinition *)scope
+                        code:(NSString *)errorCode
 {
-	UDFlowNode *node = [self node:execution.activityId of:execution];
-	if (node == nil) {
-		return;
-	}
-	UDProcessDefinition *scope = [self scopeOf:node.elementId execution:execution];
-	UDEvent *catcher = nil;
 	UDEvent *catchAll = nil;
 	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
 		if (boundary.trigger != UDEventTriggerError) {
@@ -690,18 +712,40 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		NSString *ref = boundary.errorRef;
 		if (ref == nil || [ref length] == 0 || [ref isEqualToString:@"*"]) {
 			catchAll = catchAll ?: boundary;
-		} else if ([ref isEqualToString:errorCode] && catcher == nil) {
-			catcher = boundary;
+		} else if ([ref isEqualToString:errorCode]) {
+			return boundary;
 		}
 	}
-	catcher = catcher ?: catchAll;
-	BOOL activityScope = [self isActivityScope:execution node:node];
-	if (catcher != nil && activityScope) {
-		[self boundary:catcher firedOn:execution subscription:nil];
-		return;
+	return catchAll;
+}
+
+- (void)throwBpmnError:(NSString *)errorCode fromExecution:(UDExecutionEntity *)execution
+{
+	/* The error travels outward through the scopes around the activity --
+	 * the activity's own, if it has boundary events, then each enclosing
+	 * subprocess -- and the nearest boundary that catches it wins. */
+	UDProcessDefinition *definition = [self definitionForExecution:execution];
+	for (UDExecutionEntity *scopeExecution = execution; scopeExecution != nil;
+	     scopeExecution = scopeExecution.parent) {
+		if (!scopeExecution.isScope || scopeExecution.parent == nil) {
+			continue;
+		}
+		NSString *ownerId = scopeExecution.parent.activityId;
+		UDFlowNode *owner = [definition flowNodeWithId:ownerId];
+		if (![owner isKindOfClass:[UDTask class]] && ![owner isKindOfClass:[UDSubProcess class]]) {
+			continue;
+		}
+		UDEvent *catcher = [self errorBoundaryOn:owner
+		                                   scope:[definition scopeOfFlowNode:ownerId]
+		                                    code:errorCode];
+		if (catcher != nil) {
+			[self boundary:catcher firedOn:scopeExecution subscription:nil];
+			return;
+		}
 	}
 	/* Nothing catches it: the path ends, as the reference does by default. */
-	if (activityScope) {
+	UDFlowNode *node = [definition flowNodeWithId:execution.activityId];
+	if (node != nil && [self isActivityScope:execution node:node]) {
 		UDExecutionEntity *host = execution.parent;
 		[self cancelSubtree:execution];
 		[self remove:execution];
@@ -746,6 +790,10 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	row.processInstanceId = execution.processInstanceId;
 	row.createdAt = [NSDate date];
 	row.execution = execution;
+	/* The task's own priority, else the process's, else 0. */
+	NSNumber *priority = task.taskPriority
+		?: [[self definitionForExecution:execution] defaultTaskPriority];
+	row.priority = [priority longLongValue];
 	NSString *externalTaskId = row.externalTaskId;
 	NSString *processInstanceId = row.processInstanceId;
 	UDProcessEngine *engine = self.engine;
@@ -1019,18 +1067,14 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	NSArray *incoming = [scope incomingFlowsTo:gateway.elementId];
 	NSArray *outgoing = [scope outgoingFlowsFrom:gateway.elementId];
 	switch (gateway.kind) {
-	case UDGatewayKindExclusive: {
-		UDSequenceFlow *flow = [self chooseExclusive:gateway scope:scope execution:execution];
-		if (flow != nil) {
-			[self take:@[ flow ] scope:scope execution:execution];
-		}
+	case UDGatewayKindExclusive:
+		[self depart:gateway scope:scope execution:execution];
 		return;
-	}
 	case UDGatewayKindParallel:
 		if ([incoming count] > 1) {
 			[self joinParallel:gateway incoming:[incoming count] scope:scope execution:execution];
 		} else {
-			[self take:outgoing scope:scope execution:execution];
+			[self depart:gateway scope:scope execution:execution];
 		}
 		return;
 	case UDGatewayKindInclusive:
@@ -1040,10 +1084,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 			level.lockRevision += 1;
 			[self tryInclusiveJoin:gateway scope:scope level:level];
 		} else {
-			NSArray *flows = [self chooseInclusive:gateway scope:scope execution:execution];
-			if (flows != nil) {
-				[self take:flows scope:scope execution:execution];
-			}
+			[self depart:gateway scope:scope execution:execution];
 		}
 		return;
 	case UDGatewayKindEventBased:
@@ -1064,6 +1105,48 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 				return;
 			}
 		}
+		return;
+	}
+}
+
+/* The path leaves the gateway, after any join: by its choice of flows, or,
+ * with asyncAfter, by a job that makes that choice. */
+- (void)depart:(UDGateway *)gateway
+         scope:(UDProcessDefinition *)scope
+     execution:(UDExecutionEntity *)execution
+{
+	if (gateway.isAsyncAfter) {
+		[self activityEnded:execution.activityInstanceId canceled:NO];
+		[self job:UDJobTypeAsyncAfter execution:execution node:gateway due:[NSDate date]];
+		return;
+	}
+	[self departNow:gateway scope:scope execution:execution];
+}
+
+- (void)departNow:(UDGateway *)gateway
+            scope:(UDProcessDefinition *)scope
+        execution:(UDExecutionEntity *)execution
+{
+	switch (gateway.kind) {
+	case UDGatewayKindExclusive: {
+		UDSequenceFlow *flow = [self chooseExclusive:gateway scope:scope execution:execution];
+		if (flow != nil) {
+			[self take:@[ flow ] scope:scope execution:execution];
+		}
+		return;
+	}
+	case UDGatewayKindParallel:
+		/* Conditions on a parallel gateway's flows are ignored. */
+		[self take:[scope outgoingFlowsFrom:gateway.elementId] scope:scope execution:execution];
+		return;
+	case UDGatewayKindInclusive: {
+		NSArray *flows = [self chooseInclusive:gateway scope:scope execution:execution];
+		if (flows != nil) {
+			[self take:flows scope:scope execution:execution];
+		}
+		return;
+	}
+	case UDGatewayKindEventBased:
 		return;
 	}
 }
@@ -1115,7 +1198,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		}
 	}
 	UDExecutionEntity *path = [self continueAfterJoin:execution level:level];
-	[self take:[scope outgoingFlowsFrom:gateway.elementId] scope:scope execution:path];
+	[self depart:gateway scope:scope execution:path];
 }
 
 /* Can a path at from still arrive at the gateway? Follows sequence flows
@@ -1171,10 +1254,7 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		}
 	}
 	UDExecutionEntity *path = [self continueAfterJoin:survivor level:level];
-	NSArray *flows = [self chooseInclusive:gateway scope:scope execution:path];
-	if (flows != nil) {
-		[self take:flows scope:scope execution:path];
-	}
+	[self depart:gateway scope:scope execution:path];
 }
 
 - (void)retryInclusiveJoinsAt:(UDExecutionEntity *)level
