@@ -56,6 +56,11 @@ This is not Camunda coverage. V2 is the set of constructs the engine will load, 
 | Message throw / message end | throw / end + message | `UDProcessEngineDelegate` `didThrowMessage`, after commit. |
 | Boundary message | `boundaryEvent` `attachedToRef` | On a task or subprocess. Interrupting, or non-interrupting and repeatable. |
 | Boundary timer | `boundaryEvent` + timer | On a task or subprocess, armed when it is entered; fires once. |
+| Signal start | `startEvent` + `signalEventDefinition` | A start subscription per deployed latest version; a signal starts an instance of every definition subscribed. |
+| Signal catch | `intermediateCatchEvent` + signal | Wait state with a signal subscription; also behind an event-based gateway. |
+| Signal throw / signal end | throw / end + signal | Broadcast in the throwing transaction to every waiting catcher, in every instance, and every signal start. |
+| Boundary signal | `boundaryEvent` + signal | On a task or subprocess; interrupting, or non-interrupting and repeatable. |
+| Terminate end | `endEvent` + `terminateEventDefinition` | Ends its scope -- the instance, or the subprocess it is in -- with every path in it. |
 | Boundary error | `boundaryEvent` + `errorEventDefinition` | Catches a BPMN error with its `errorCode`, or any without `errorRef`, on the task or on any subprocess around it, nearest first. An uncaught error ends its path. |
 
 ## 2. Event rules
@@ -92,7 +97,7 @@ The reader also accepts Camunda 8's `=` prefix, and Camunda 7's `${...}` syntax 
 | Gateways | complex |
 | Activities | event subprocess, call activity, transaction, ad-hoc, multi-instance, loop, compensation |
 | Tasks | manual, business rule, send, receive, receive-task as event stand-in |
-| Events | escalation, cancel, compensate, signal, link, terminate, conditional, multiple, parallel multiple |
+| Events | escalation, cancel, compensate, link, conditional, multiple, parallel multiple |
 | Event use | non-interrupting start in event subprocess |
 | Data | data object, data store, data association, properties as BPMN itemAware |
 | Execution extras | full BPMN DI edge waypoints |

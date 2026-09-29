@@ -138,6 +138,14 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	[_agenda addObject:[operation copy]];
 }
 
+/* Removed since the operation was scheduled: a terminate end event or an
+ * interruption took it away. Its operations have nothing left to do. */
+static BOOL
+UDGone(NSManagedObject *object)
+{
+	return [object isDeleted] || [object managedObjectContext] == nil;
+}
+
 - (void)runAgenda
 {
 	while ([_agenda count] > 0 && _failure == nil) {
@@ -326,7 +334,9 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		return nil;
 	}
 	[self schedule:^{
-		[self enter:start execution:root];
+		if (!UDGone(root)) {
+			[self enter:start execution:root];
+		}
 	}];
 	return root;
 }
@@ -380,6 +390,9 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	for (UDEvent *boundary in [scope boundaryEventsAttachedTo:node.elementId]) {
 		if (boundary.trigger == UDEventTriggerMessage) {
 			[self subscribe:inner message:boundary.messageName activity:boundary.elementId];
+		} else if (boundary.trigger == UDEventTriggerSignal) {
+			[self subscribe:inner type:UDEventTypeSignal name:boundary.signalName
+			       activity:boundary.elementId];
 		} else if (boundary.trigger == UDEventTriggerTimer) {
 			[self timer:inner activity:boundary.elementId duration:boundary.timerDuration];
 		}
@@ -387,7 +400,9 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	if ([node isKindOfClass:[UDSubProcess class]]) {
 		UDEvent *start = [[(UDSubProcess *)node innerDefinition] startEvent];
 		[self schedule:^{
-			[self enter:start execution:inner];
+			if (!UDGone(inner)) {
+				[self enter:start execution:inner];
+			}
 		}];
 		return;
 	}
@@ -424,12 +439,20 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	case UDEventKindIntermediateThrow:
 		if (event.trigger == UDEventTriggerMessage) {
 			[self throwMessage:event execution:execution];
+		} else if (event.trigger == UDEventTriggerSignal) {
+			[self broadcastSignal:event.signalName variables:nil processInstanceId:nil];
 		}
 		[self leave:event execution:execution];
 		return;
 	case UDEventKindEnd:
+		if (event.trigger == UDEventTriggerTerminate) {
+			[self terminate:execution];
+			return;
+		}
 		if (event.trigger == UDEventTriggerMessage) {
 			[self throwMessage:event execution:execution];
+		} else if (event.trigger == UDEventTriggerSignal) {
+			[self broadcastSignal:event.signalName variables:nil processInstanceId:nil];
 		}
 		[self activityEnded:execution.activityInstanceId canceled:NO];
 		[self endPath:execution];
@@ -437,6 +460,9 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	case UDEventKindIntermediateCatch:
 		if (event.trigger == UDEventTriggerMessage) {
 			[self subscribe:execution message:event.messageName activity:event.elementId];
+		} else if (event.trigger == UDEventTriggerSignal) {
+			[self subscribe:execution type:UDEventTypeSignal name:event.signalName
+			       activity:event.elementId];
 		} else if (event.trigger == UDEventTriggerTimer) {
 			[self timer:execution activity:event.elementId duration:event.timerDuration];
 		} else {
@@ -466,10 +492,18 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
           message:(NSString *)messageName
          activity:(NSString *)activityId
 {
+	[self subscribe:execution type:UDEventTypeMessage name:messageName activity:activityId];
+}
+
+- (void)subscribe:(UDExecutionEntity *)execution
+             type:(NSString *)eventType
+             name:(NSString *)eventName
+         activity:(NSString *)activityId
+{
 	UDEventSubscriptionEntity *subscription = [self insert:UDSubscriptionName];
 	subscription.subscriptionId = [UDCommandContext newId];
-	subscription.eventType = UDEventTypeMessage;
-	subscription.eventName = messageName;
+	subscription.eventType = eventType;
+	subscription.eventName = eventName;
 	subscription.activityId = activityId;
 	subscription.processInstanceId = execution.processInstanceId;
 	subscription.createdAt = [NSDate date];
@@ -756,6 +790,78 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 	}
 }
 
+#pragma mark - Signals and terminate
+
+- (NSUInteger)broadcastSignal:(NSString *)signalName
+                    variables:(NSDictionary *)variables
+            processInstanceId:(NSString *)processInstanceId
+{
+	/* Everyone waiting now, as the signal is thrown: a path that comes to
+	 * wait for the same signal while it is delivered does not get it. */
+	NSArray *subscriptions = [self fetch:UDSubscriptionName
+	                           predicate:[NSPredicate predicateWithFormat:
+	                               @"eventType == %@ AND eventName == %@",
+	                               UDEventTypeSignal, signalName]
+	                                sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"createdAt"
+	                                                                        ascending:YES] ]
+	                               limit:0];
+	NSUInteger delivered = 0;
+	for (UDEventSubscriptionEntity *subscription in subscriptions) {
+		if ([subscription isDeleted] || _failure != nil) {
+			continue;
+		}
+		if (subscription.execution == nil) {
+			if (processInstanceId != nil) {
+				continue;
+			}
+			NSError *error = nil;
+			UDProcessDefinition *definition =
+				[self.engine.repositoryService definitionWithId:subscription.definitionId error:&error];
+			UDFlowNode *start = [definition flowNodeWithId:
+				[[definition startEvent] elementId]];
+			if (definition == nil || ![start isKindOfClass:[UDEvent class]]) {
+				[self fail:error];
+				return delivered;
+			}
+			[self startProcessInstance:definition businessKey:nil variables:variables
+			                startEvent:(UDEvent *)start];
+			delivered += 1;
+			continue;
+		}
+		if (processInstanceId != nil
+		    && ![subscription.processInstanceId isEqualToString:processInstanceId]) {
+			continue;
+		}
+		[self deliverSubscription:subscription variables:variables];
+		delivered += 1;
+	}
+	return delivered;
+}
+
+/* A terminate end event: its scope -- the process instance or the
+ * subprocess it is in -- ends now, every other path in it canceled. */
+- (void)terminate:(UDExecutionEntity *)execution
+{
+	[self activityEnded:execution.activityInstanceId canceled:NO];
+	UDExecutionEntity *scope = [execution scopeExecution];
+	for (UDExecutionEntity *child in [scope.children allObjects]) {
+		if (![child isDeleted]) {
+			[self cancelSubtree:child];
+			[self remove:child];
+		}
+	}
+	for (NSManagedObject *leftover in [[scope.tasks setByAddingObjectsFromSet:scope.eventSubscriptions]
+	         setByAddingObjectsFromSet:[scope.jobs setByAddingObjectsFromSet:scope.externalTasks]]) {
+		if (![leftover isDeleted]) {
+			[self remove:leftover];
+		}
+	}
+	scope.isActive = NO;
+	scope.activityId = nil;
+	scope.activityInstanceId = nil;
+	[self scopeEnded:scope];
+}
+
 #pragma mark - Tasks
 
 - (void)executeTask:(UDTask *)task execution:(UDExecutionEntity *)execution
@@ -901,7 +1007,9 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		UDFlowNode *target = [scope nodeWithId:[[flows objectAtIndex:i] targetId]];
 		UDExecutionEntity *path = [paths objectAtIndex:i];
 		[self schedule:^{
-			[self enter:target execution:path];
+			if (!UDGone(path)) {
+				[self enter:target execution:path];
+			}
 		}];
 	}
 }
@@ -1097,10 +1205,14 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 			} else if (event.kind == UDEventKindIntermediateCatch
 			           && event.trigger == UDEventTriggerTimer) {
 				[self timer:execution activity:event.elementId duration:event.timerDuration];
+			} else if (event.kind == UDEventKindIntermediateCatch
+			           && event.trigger == UDEventTriggerSignal) {
+				[self subscribe:execution type:UDEventTypeSignal name:event.signalName
+				       activity:event.elementId];
 			} else {
 				[self fail:UDCommandError(UDWorkflowErrorInvalidDefinition,
 					[NSString stringWithFormat:
-						@"event-based gateway %@ may only be followed by message or timer catch events",
+						@"event-based gateway %@ may only be followed by message, timer or signal catch events",
 						gateway.elementId])];
 				return;
 			}
@@ -1274,7 +1386,9 @@ UDCommandError(UDWorkflowErrorCode code, NSString *message)
 		UDGateway *gateway = (UDGateway *)[self node:gatewayId of:level];
 		UDProcessDefinition *scope = [self scopeOf:gatewayId execution:level];
 		[self schedule:^{
-			[self tryInclusiveJoin:gateway scope:scope level:level];
+			if (!UDGone(level)) {
+				[self tryInclusiveJoin:gateway scope:scope level:level];
+			}
 		}];
 	}
 }

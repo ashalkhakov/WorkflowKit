@@ -304,6 +304,10 @@ predates FEEL; Camunda 8 moved to FEEL.
   -- a join fires, a task completes -- and one job takes its outgoing flows,
   evaluating their conditions when it runs. Refused on an event-based
   gateway, which waits for its events.
+- **Signals are thrown synchronously**, within the throwing transaction;
+  the reference's asynchronous throw and `camunda:in` variable passing on
+  signal events are not supported yet. `runtimeService` signals carry
+  variables to every receiver.
 - **Priorities are whole numbers.** `camunda:taskPriority` as an
   expression is refused on deployment.
 - **History cleanup** runs on demand (`cleanUpHistory:`) or every

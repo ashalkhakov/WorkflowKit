@@ -73,6 +73,11 @@ NSString * const UDWorkflowErrorRefKey = @"UDWorkflowErrorRef";
 
 @implementation UDEvent
 
+- (NSString *)signalName
+{
+	return self.trigger == UDEventTriggerSignal ? self.messageName : nil;
+}
+
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name
                              kind:(UDEventKind)kind

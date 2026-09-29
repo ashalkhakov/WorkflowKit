@@ -216,6 +216,8 @@ UDIsBpmnResource(NSString *name)
 		UDEvent *start = [definition startEvent];
 		if (start.trigger == UDEventTriggerMessage) {
 			record.messageStartName = start.messageName;
+		} else if (start.trigger == UDEventTriggerSignal) {
+			record.signalStartName = start.signalName;
 		} else if (start.trigger == UDEventTriggerTimer) {
 			NSInteger attempts = UD_DEFAULT_ATTEMPTS;
 			NSArray *delays = nil;

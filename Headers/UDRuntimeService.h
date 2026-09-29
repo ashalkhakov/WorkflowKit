@@ -73,6 +73,20 @@
                                correlationKeys:(NSDictionary *)correlationKeys
                                      variables:(NSDictionary *)variables
                                          error:(NSError **)error;
+/*
+ * Sends a signal: every path waiting for it, in every process instance,
+ * receives it, and every process whose start event it is starts. Nobody
+ * waiting is not an error. The variables are set on each receiver.
+ */
+- (BOOL)signal:(NSString *)signalName
+     variables:(NSDictionary *)variables
+         error:(NSError **)error;
+/* To the paths of one instance waiting for it. */
+- (BOOL)signal:(NSString *)signalName
+processInstanceId:(NSString *)processInstanceId
+     variables:(NSDictionary *)variables
+         error:(NSError **)error;
+
 /* To a waiting path of that instance. */
 - (BOOL)correlateMessage:(NSString *)messageName
        processInstanceId:(NSString *)processInstanceId

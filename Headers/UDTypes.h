@@ -32,7 +32,11 @@ typedef NS_ENUM(NSInteger, UDEventTrigger) {
 	UDEventTriggerNone = 0,
 	UDEventTriggerMessage,
 	UDEventTriggerTimer,
-	UDEventTriggerError
+	UDEventTriggerError,
+	/* A broadcast, delivered to every waiting catcher. */
+	UDEventTriggerSignal,
+	/* A terminate end event: its scope ends at once. */
+	UDEventTriggerTerminate
 };
 
 typedef NS_ENUM(NSInteger, UDTaskKind) {

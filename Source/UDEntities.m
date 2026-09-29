@@ -2,6 +2,7 @@
 #include <string.h>
 
 NSString * const UDEventTypeMessage = @"message";
+NSString * const UDEventTypeSignal = @"signal";
 NSString * const UDJobTypeTimerName = @"timer";
 NSString * const UDJobTypeTimerStartName = @"timer-start";
 NSString * const UDJobTypeAsyncBeforeName = @"async-before";

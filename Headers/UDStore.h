@@ -26,6 +26,8 @@
 @property (nonatomic) BOOL suspended;
 /* The message a message start event starts this definition on, if any. */
 @property (nonatomic, copy) NSString *messageStartName;
+/* The signal a signal start event starts this definition on, if any. */
+@property (nonatomic, copy) NSString *signalStartName;
 /* A timer start event, if any: its id, its delay after deployment, and the
  * attempts its job gets. */
 @property (nonatomic, strong) NSNumber *historyTimeToLive;

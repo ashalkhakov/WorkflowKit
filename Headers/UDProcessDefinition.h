@@ -53,6 +53,17 @@
 - (instancetype)addMessageCatch:(NSString *)elementId message:(NSString *)messageName;
 - (instancetype)addTimerCatch:(NSString *)elementId duration:(NSTimeInterval)duration;
 - (instancetype)addMessageThrow:(NSString *)elementId message:(NSString *)messageName;
+- (instancetype)addSignalStart:(NSString *)elementId signal:(NSString *)signalName;
+- (instancetype)addSignalCatch:(NSString *)elementId signal:(NSString *)signalName;
+- (instancetype)addSignalThrow:(NSString *)elementId signal:(NSString *)signalName;
+- (instancetype)addSignalEnd:(NSString *)elementId signal:(NSString *)signalName;
+- (instancetype)addBoundarySignal:(NSString *)elementId
+                           onTask:(NSString *)taskId
+                           signal:(NSString *)signalName
+                     interrupting:(BOOL)interrupting;
+/* Ends its scope -- the process instance, or the subprocess it is in --
+ * with every path in it. */
+- (instancetype)addTerminateEnd:(NSString *)elementId;
 /* A none intermediate throw event: a milestone the token passes. */
 - (instancetype)addIntermediateThrow:(NSString *)elementId;
 - (instancetype)addBoundaryMessage:(NSString *)elementId

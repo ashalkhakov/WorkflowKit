@@ -42,7 +42,10 @@
 @interface UDEvent : UDFlowNode
 @property (nonatomic, readonly) UDEventKind kind;
 @property (nonatomic, readonly) UDEventTrigger trigger;
+/* The message's name for a message event, the signal's for a signal
+ * event. */
 @property (nonatomic, readonly, copy) NSString *messageName;
+@property (nonatomic, readonly, copy) NSString *signalName;
 @property (nonatomic, readonly) NSTimeInterval timerDuration;
 @property (nonatomic, readonly, copy) NSString *attachedToId;
 @property (nonatomic, readonly, copy) NSString *errorRef;

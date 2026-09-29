@@ -271,6 +271,46 @@
 	        timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
 }
 
+- (instancetype)addSignalStart:(NSString *)elementId signal:(NSString *)signalName
+{
+	return [self addEvent:elementId kind:UDEventKindStart trigger:UDEventTriggerSignal
+	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addSignalCatch:(NSString *)elementId signal:(NSString *)signalName
+{
+	return [self addEvent:elementId kind:UDEventKindIntermediateCatch trigger:UDEventTriggerSignal
+	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addSignalThrow:(NSString *)elementId signal:(NSString *)signalName
+{
+	return [self addEvent:elementId kind:UDEventKindIntermediateThrow trigger:UDEventTriggerSignal
+	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addSignalEnd:(NSString *)elementId signal:(NSString *)signalName
+{
+	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerSignal
+	          messageName:signalName timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addBoundarySignal:(NSString *)elementId
+                           onTask:(NSString *)taskId
+                           signal:(NSString *)signalName
+                     interrupting:(BOOL)interrupting
+{
+	return [self addEvent:elementId kind:UDEventKindBoundary trigger:UDEventTriggerSignal
+	          messageName:signalName timerDuration:0 attachedToId:taskId errorRef:nil
+	         interrupting:interrupting];
+}
+
+- (instancetype)addTerminateEnd:(NSString *)elementId
+{
+	return [self addEvent:elementId kind:UDEventKindEnd trigger:UDEventTriggerTerminate
+	          messageName:nil timerDuration:0 attachedToId:nil errorRef:nil interrupting:YES];
+}
+
 - (instancetype)addIntermediateThrow:(NSString *)elementId
 {
 	return [self addEvent:elementId kind:UDEventKindIntermediateThrow

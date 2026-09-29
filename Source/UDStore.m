@@ -292,6 +292,17 @@ static NSString * const UDJobEntityName = @"UDJob";
 				job.retries = (int32_t)definition.timerStartAttempts;
 				job.exclusive = YES;
 			}
+			if (definition.signalStartName != nil) {
+				UDEventSubscriptionEntity *start = [NSEntityDescription
+					insertNewObjectForEntityForName:UDSubscriptionEntity
+					         inManagedObjectContext:self->_context];
+				start.subscriptionId = [[NSUUID UUID] UUIDString];
+				start.eventType = UDEventTypeSignal;
+				start.eventName = definition.signalStartName;
+				start.activityId = definition.key;
+				start.definitionId = record.definitionId;
+				start.createdAt = deployment.deployedAt;
+			}
 			if (definition.messageStartName != nil) {
 				UDEventSubscriptionEntity *start = [NSEntityDescription
 					insertNewObjectForEntityForName:UDSubscriptionEntity

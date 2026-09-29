@@ -1589,6 +1589,134 @@
 	[same close];
 }
 
+#pragma mark - Signals and terminate
+
+- (UDProcessDefinition *)waitForSignal:(NSString *)key signal:(NSString *)signal
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:key];
+	[[[b addStart:@"start"] addSignalCatch:@"wait" signal:signal] addEnd:@"end"];
+	[[b connect:@"start" to:@"wait"] connect:@"wait" to:@"end"];
+	UDProcessDefinition *def = [b build:&error];
+	XCTAssertNotNil(def, @"%@", error);
+	return def;
+}
+
+- (void)testSignalReachesEveryWaitingInstance
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	[self deploy:[self waitForSignal:@"listener" signal:@"go"] engine:engine];
+	NSMutableArray *pids = [NSMutableArray array];
+	for (int i = 0; i < 3; i++) {
+		[pids addObject:[engine.runtimeService startProcessInstanceByKey:@"listener"
+		                                                       variables:nil error:&error].processInstanceId];
+	}
+	XCTAssertTrue([engine.runtimeService signal:@"go" variables:@{ @"why": @"launch" } error:&error], @"%@", error);
+	for (NSString *pid in pids) {
+		XCTAssertTrue([self ended:pid engine:engine]);
+		XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"why"], @"launch");
+	}
+	/* Nobody waiting any more: still not an error. */
+	XCTAssertTrue([engine.runtimeService signal:@"go" variables:nil error:&error], @"%@", error);
+}
+
+- (void)testThrownSignalStartsAndWakesInOneTransaction
+{
+	NSError *error = nil;
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	UDDefinitionBuilder *thrower = [UDDefinitionBuilder process:@"alarm"];
+	[[[thrower addStart:@"start"] addSignalThrow:@"ring" signal:@"fire"] addSignalEnd:@"done" signal:@"allClear"];
+	[[thrower connect:@"start" to:@"ring"] connect:@"ring" to:@"done"];
+	UDDefinitionBuilder *starter = [UDDefinitionBuilder process:@"evacuate"];
+	[[[starter addSignalStart:@"heard" signal:@"fire"] addUserTask:@"leave" name:@"Leave" assignee:@"everyone"]
+		addEnd:@"out"];
+	[[starter connect:@"heard" to:@"leave"] connect:@"leave" to:@"out"];
+	[self deploy:[thrower build:&error] engine:engine];
+	[self deploy:[starter build:&error] engine:engine];
+	[self deploy:[self waitForSignal:@"sprinkler" signal:@"fire"] engine:engine];
+	[self deploy:[self waitForSignal:@"reset" signal:@"allClear"] engine:engine];
+	NSString *sprinkler = [engine.runtimeService startProcessInstanceByKey:@"sprinkler"
+	                                                            variables:nil error:&error].processInstanceId;
+	NSString *reset = [engine.runtimeService startProcessInstanceByKey:@"reset"
+	                                                        variables:nil error:&error].processInstanceId;
+
+	UDProcessInstance *alarm = [engine.runtimeService startProcessInstanceByKey:@"alarm"
+	                                                                 variables:nil error:&error];
+	XCTAssertTrue(alarm.isEnded, @"%@", error);
+	XCTAssertTrue([self ended:sprinkler engine:engine]);
+	XCTAssertTrue([self ended:reset engine:engine], @"the signal end event broadcast too");
+	XCTAssertEqual([[engine.taskService tasksForAssignee:@"everyone"] count], (NSUInteger)1,
+		@"the signal start event started an instance");
+}
+
+- (void)testSignalBoundaryAndSignallingOneInstance
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"recallable"];
+	[[[[b addStart:@"start"] addUserTask:@"work" name:@"Work" assignee:@"ann"]
+		addUserTask:@"recheck" name:@"Recheck" assignee:@"ann"] addEnd:@"end"];
+	[b addEnd:@"rechecked"];
+	[b addBoundarySignal:@"recalled" onTask:@"work" signal:@"recall" interrupting:NO];
+	[[b connect:@"start" to:@"work"] connect:@"work" to:@"end"];
+	[[b connect:@"recalled" to:@"recheck"] connect:@"recheck" to:@"rechecked"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *first = [self run:[b build:&error] engine:engine variables:nil];
+	NSString *second = [engine.runtimeService startProcessInstanceByKey:@"recallable"
+	                                                         variables:nil error:&error].processInstanceId;
+	XCTAssertTrue([engine.runtimeService signal:@"recall" processInstanceId:first
+	                                  variables:nil error:&error], @"%@", error);
+	XCTAssertEqualObjects([self active:first engine:engine], (@[ @"recheck", @"work" ]));
+	XCTAssertEqualObjects([self active:second engine:engine], @[ @"work" ]);
+	/* Non-interrupting: it stays armed. */
+	XCTAssertTrue([engine.runtimeService signal:@"recall" variables:nil error:&error], @"%@", error);
+	XCTAssertEqual([[engine.taskService tasksForProcessInstance:first] count], (NSUInteger)3);
+	XCTAssertEqualObjects([self active:second engine:engine], (@[ @"recheck", @"work" ]));
+}
+
+- (void)testTerminateEndEndsEveryPath
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"abort"];
+	[[[[b addStart:@"start"] addParallel:@"fork"] addUserTask:@"slow" name:@"Slow" assignee:@"ann"]
+		addUserTask:@"decide" name:@"Decide" assignee:@"boss"];
+	[[b addEnd:@"done"] addTerminateEnd:@"stop"];
+	[b connect:@"start" to:@"fork"];
+	[[b connect:@"fork" to:@"slow"] connect:@"fork" to:@"decide"];
+	[[b connect:@"slow" to:@"done"] connect:@"decide" to:@"stop"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	[self complete:@"decide" of:pid engine:engine variables:nil];
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqual([[self rows:@"UDExecution" engine:engine] count], (NSUInteger)0);
+	XCTAssertEqual([[self rows:@"UDTask" engine:engine] count], (NSUInteger)0);
+	NSDictionary *reasons = [NSDictionary dictionaryWithObjects:
+			[[engine.historyService historicTaskInstancesForProcessInstance:pid] valueForKey:@"deleteReason"]
+		forKeys:[[engine.historyService historicTaskInstancesForProcessInstance:pid] valueForKey:@"taskDefinitionKey"]];
+	XCTAssertEqualObjects([reasons objectForKey:@"slow"], UDTaskDeleteReasonDeleted);
+	XCTAssertEqualObjects([reasons objectForKey:@"decide"], UDTaskDeleteReasonCompleted);
+}
+
+- (void)testTerminateInsideASubprocessEndsOnlyTheSubprocess
+{
+	NSError *error = nil;
+	UDDefinitionBuilder *inner = [UDDefinitionBuilder process:@"attempt"];
+	[[[[inner addStart:@"s"] addParallel:@"fork"] addUserTask:@"wait" name:@"Wait" assignee:@"ann"]
+		addTerminateEnd:@"enough"];
+	[inner addEnd:@"e"];
+	[inner connect:@"s" to:@"fork"];
+	[[inner connect:@"fork" to:@"wait"] connect:@"fork" to:@"enough"];
+	[inner connect:@"wait" to:@"e"];
+	UDDefinitionBuilder *b = [UDDefinitionBuilder process:@"outer"];
+	[[[[b addStart:@"start"] addSubProcess:@"sub" name:@"Sub" inner:[inner build:&error]]
+		addUserTask:@"after" name:@"After" assignee:@"ann"] addEnd:@"end"];
+	[[[b connect:@"start" to:@"sub"] connect:@"sub" to:@"after"] connect:@"after" to:@"end"];
+	UDProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
+	XCTAssertFalse([self ended:pid engine:engine]);
+}
+
 #pragma mark - BPMN
 
 - (void)assertNode:(UDFlowNode *)a matches:(UDFlowNode *)b
@@ -1702,6 +1830,9 @@
 	[b addBoundaryError:@"onBad" onTask:@"check" errorRef:@"BAD_CREDIT" interrupting:YES];
 	[b addBoundaryError:@"onAny" onTask:@"audit" errorRef:nil interrupting:YES];
 	[b addBoundaryMessage:@"onCancel" onTask:@"fill" message:@"cancel" interrupting:YES];
+	[[b addSignalCatch:@"recalled" signal:@"recall"] addTerminateEnd:@"aborted"];
+	[b addBoundarySignal:@"onStop" onTask:@"manual" signal:@"stop" interrupting:NO];
+	[[b addSignalThrow:@"announce" signal:@"stopped"] addSignalEnd:@"announced" signal:@"over"];
 	[[b connect:@"start" to:@"fill"] connect:@"fill" to:@"split"];
 	[[b connect:@"split" to:@"check"] connect:@"split" to:@"audit"];
 	[[b connect:@"check" to:@"join"] connect:@"audit" to:@"join"];
@@ -1712,6 +1843,8 @@
 	[[b connect:@"race" to:@"paid"] connect:@"race" to:@"timeout"];
 	[[b connect:@"paid" to:@"notify"] connect:@"notify" to:@"done"];
 	[b connect:@"timeout" to:@"late"];
+	[[b connect:@"race" to:@"recalled"] connect:@"recalled" to:@"aborted"];
+	[[b connect:@"onStop" to:@"announce"] connect:@"announce" to:@"announced"];
 	[[[b connect:@"onBad" to:@"badCredit"] connect:@"onAny" to:@"anyError"]
 		connect:@"onCancel" to:@"cancelled"];
 	[b setName:@"Request received" forElement:@"start"];

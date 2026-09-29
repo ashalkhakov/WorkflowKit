@@ -59,6 +59,12 @@
 - (void)throwBpmnError:(NSString *)errorCode fromExecution:(UDExecutionEntity *)execution;
 - (void)deliverSubscription:(UDEventSubscriptionEntity *)subscription
                   variables:(NSDictionary *)variables;
+/* Delivers the signal to every path waiting for it and starts every
+ * process whose start event it is -- or, with processInstanceId, only to
+ * that instance's paths. Answers how many it reached. */
+- (NSUInteger)broadcastSignal:(NSString *)signalName
+                    variables:(NSDictionary *)variables
+            processInstanceId:(NSString *)processInstanceId;
 /* Deletes the job and does what it was for: triggers its timer event,
  * starts an instance for a timer start event, or continues an async
  * continuation. */

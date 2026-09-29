@@ -454,6 +454,28 @@ UDServiceError(UDWorkflowErrorCode code, NSString *message)
 	                 error:error];
 }
 
+- (BOOL)signal:(NSString *)signalName
+     variables:(NSDictionary *)variables
+         error:(NSError **)error
+{
+	return [self signal:signalName processInstanceId:nil variables:variables error:error];
+}
+
+- (BOOL)signal:(NSString *)signalName
+processInstanceId:(NSString *)processInstanceId
+     variables:(NSDictionary *)variables
+         error:(NSError **)error
+{
+	if (![UDCommandContext areStorableVariables:variables error:error]) {
+		return NO;
+	}
+	return [_engine ud_runCommand:^BOOL(UDCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		[command broadcastSignal:signalName variables:variables processInstanceId:processInstanceId];
+		return YES;
+	} error:error];
+}
+
 - (BOOL)correlateMessage:(NSString *)messageName
        processInstanceId:(NSString *)processInstanceId
                variables:(NSDictionary *)variables

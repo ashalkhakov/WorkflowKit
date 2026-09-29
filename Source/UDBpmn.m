@@ -133,6 +133,7 @@ UDParseWhole(NSString *text, long long *value)
 @interface UDBpmnWriteContext : NSObject
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *messages;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *errors;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *signals;
 @property (nonatomic, strong) NSMutableString *diagram;
 @end
 
@@ -173,6 +174,7 @@ UDParseWhole(NSString *text, long long *value)
 	UDBpmnWriteContext *context = [[UDBpmnWriteContext alloc] init];
 	context.messages = [NSMutableDictionary dictionary];
 	context.errors = [NSMutableDictionary dictionary];
+	context.signals = [NSMutableDictionary dictionary];
 	context.diagram = [NSMutableString string];
 
 	NSMutableString *process = [NSMutableString string];
@@ -207,6 +209,12 @@ UDParseWhole(NSString *text, long long *value)
 	         sortedArrayUsingSelector:@selector(compare:)]) {
 		[xml appendFormat:@"  <bpmn:message%@%@/>\n",
 			UDAttr(@"id", [context.messages objectForKey:name]),
+			UDAttr(@"name", name)];
+	}
+	for (NSString *name in [[context.signals allKeys]
+	         sortedArrayUsingSelector:@selector(compare:)]) {
+		[xml appendFormat:@"  <bpmn:signal%@%@/>\n",
+			UDAttr(@"id", [context.signals objectForKey:name]),
 			UDAttr(@"name", name)];
 	}
 	for (NSString *code in [[context.errors allKeys]
@@ -275,6 +283,17 @@ UDParseWhole(NSString *text, long long *value)
 			indent, any ? @"" : UDAttr(@"errorRef",
 				[self errorIdFor:code context:context])];
 	}
+	case UDEventTriggerSignal: {
+		NSString *id = [context.signals objectForKey:event.signalName];
+		if (id == nil) {
+			id = UDXMLId(@"Signal_", event.signalName);
+			[context.signals setObject:id forKey:event.signalName];
+		}
+		return [NSString stringWithFormat:@"%@<bpmn:signalEventDefinition%@/>\n",
+			indent, UDAttr(@"signalRef", id)];
+	}
+	case UDEventTriggerTerminate:
+		return [NSString stringWithFormat:@"%@<bpmn:terminateEventDefinition/>\n", indent];
 	case UDEventTriggerTimer:
 		return [NSString stringWithFormat:
 			@"%@<bpmn:timerEventDefinition>\n"
@@ -492,6 +511,7 @@ UDIgnoredElements(void)
 @interface UDBpmnReadContext : NSObject
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *messages;
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *errors;
+@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *signals;
 @property (nonatomic, strong) NSDictionary<NSString *, NSXMLElement *> *shapes;
 @property (nonatomic, copy) NSString *expressionLanguage;
 @property (nonatomic, strong) NSError *error;
@@ -587,6 +607,7 @@ UDIgnoredElements(void)
 	context.expressionLanguage = [self attr:@"expressionLanguage" of:root];
 	NSMutableDictionary *messages = [NSMutableDictionary dictionary];
 	NSMutableDictionary *errors = [NSMutableDictionary dictionary];
+	NSMutableDictionary *signals = [NSMutableDictionary dictionary];
 	NSMutableArray *processes = [NSMutableArray array];
 	for (NSXMLElement *element in [self children:root of:UDBpmnNamespace]) {
 		NSString *name = [element localName];
@@ -594,6 +615,8 @@ UDIgnoredElements(void)
 		if ([name isEqualToString:@"message"] && elementId != nil) {
 			[messages setObject:[self attr:@"name" of:element] ?: elementId
 			             forKey:elementId];
+		} else if ([name isEqualToString:@"signal"] && elementId != nil) {
+			[signals setObject:[self attr:@"name" of:element] ?: elementId forKey:elementId];
 		} else if ([name isEqualToString:@"error"] && elementId != nil) {
 			[errors setObject:[self attr:@"errorCode" of:element]
 				?: [self attr:@"name" of:element] ?: elementId
@@ -605,6 +628,7 @@ UDIgnoredElements(void)
 	}
 	context.messages = messages;
 	context.errors = errors;
+	context.signals = signals;
 	NSMutableDictionary *shapes = [NSMutableDictionary dictionary];
 	[self collectShapes:root into:shapes];
 	context.shapes = shapes;
@@ -775,7 +799,9 @@ UDIgnoredElements(void)
 		}
 		if (![name isEqualToString:@"messageEventDefinition"]
 		    && ![name isEqualToString:@"timerEventDefinition"]
-		    && ![name isEqualToString:@"errorEventDefinition"]) {
+		    && ![name isEqualToString:@"errorEventDefinition"]
+		    && ![name isEqualToString:@"signalEventDefinition"]
+		    && ![name isEqualToString:@"terminateEventDefinition"]) {
 			*unsupported = name;
 			return nil;
 		}
@@ -840,6 +866,17 @@ UDIgnoredElements(void)
 	BOOL message = [trigger isEqualToString:@"messageEventDefinition"];
 	BOOL timer = [trigger isEqualToString:@"timerEventDefinition"];
 	BOOL errorTrigger = [trigger isEqualToString:@"errorEventDefinition"];
+	BOOL signal = [trigger isEqualToString:@"signalEventDefinition"];
+	BOOL terminate = [trigger isEqualToString:@"terminateEventDefinition"];
+	NSString *signalName = nil;
+	if (signal) {
+		NSString *ref = [self attr:@"signalRef" of:definition];
+		if (ref == nil) {
+			[self fail:context error:UDBpmnError(@"%@: signal event without signalRef", elementId)];
+			return NO;
+		}
+		signalName = [context.signals objectForKey:ref] ?: ref;
+	}
 
 	if ([name isEqualToString:@"startEvent"]) {
 		if (message) {
@@ -848,6 +885,8 @@ UDIgnoredElements(void)
 		} else if (timer) {
 			[builder addTimerStart:elementId
 			              duration:[self durationOf:definition id:elementId context:context]];
+		} else if (signal) {
+			[builder addSignalStart:elementId signal:signalName];
 		} else if (errorTrigger) {
 			[self fail:context error:UDBpmnError(
 				@"%@: error start events are not supported yet", elementId)];
@@ -858,6 +897,10 @@ UDIgnoredElements(void)
 		if (message) {
 			[builder addMessageEnd:elementId
 			               message:[self messageNameOf:definition id:elementId context:context]];
+		} else if (signal) {
+			[builder addSignalEnd:elementId signal:signalName];
+		} else if (terminate) {
+			[builder addTerminateEnd:elementId];
 		} else if (definition != nil) {
 			[self fail:context error:UDBpmnError(
 				@"%@: error end events are not supported yet", elementId)];
@@ -871,19 +914,23 @@ UDIgnoredElements(void)
 		} else if (timer) {
 			[builder addTimerCatch:elementId
 			              duration:[self durationOf:definition id:elementId context:context]];
+		} else if (signal) {
+			[builder addSignalCatch:elementId signal:signalName];
 		} else {
 			[self fail:context error:UDBpmnError(
-				@"%@: a catch event needs a message or timer", elementId)];
+				@"%@: a catch event needs a message, timer or signal", elementId)];
 		}
 	} else if ([name isEqualToString:@"intermediateThrowEvent"]) {
 		if (message) {
 			[builder addMessageThrow:elementId
 			                 message:[self messageNameOf:definition id:elementId context:context]];
+		} else if (signal) {
+			[builder addSignalThrow:elementId signal:signalName];
 		} else if (definition == nil) {
 			[builder addIntermediateThrow:elementId];
 		} else {
 			[self fail:context error:UDBpmnError(
-				@"%@: only message and none throw events are supported", elementId)];
+				@"%@: only message, signal and none throw events are supported", elementId)];
 		}
 	} else if ([name isEqualToString:@"boundaryEvent"]) {
 		NSString *host = [self attr:@"attachedToRef" of:element];
@@ -899,6 +946,9 @@ UDIgnoredElements(void)
 			                   onTask:host
 			                 duration:[self durationOf:definition id:elementId context:context]
 			             interrupting:interrupting];
+		} else if (signal) {
+			[builder addBoundarySignal:elementId onTask:host signal:signalName
+			              interrupting:interrupting];
 		} else if (errorTrigger) {
 			NSString *ref = [self attr:@"errorRef" of:definition];
 			[builder addBoundaryError:elementId
@@ -908,7 +958,7 @@ UDIgnoredElements(void)
 			             interrupting:YES];
 		} else {
 			[self fail:context error:UDBpmnError(
-				@"%@: a boundary event needs a message, timer or error", elementId)];
+				@"%@: a boundary event needs a message, timer, signal or error", elementId)];
 		}
 	} else if ([name isEqualToString:@"userTask"]) {
 		[builder addUserTask:elementId

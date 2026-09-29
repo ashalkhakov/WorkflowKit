@@ -88,6 +88,7 @@ typedef NS_ENUM(int16_t, UDVariableType) {
 @end
 
 extern NSString * const UDEventTypeMessage;
+extern NSString * const UDEventTypeSignal;
 
 @interface UDEventSubscriptionEntity : NSManagedObject
 @property (nonatomic, copy) NSString *subscriptionId;
