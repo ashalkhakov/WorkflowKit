@@ -1,6 +1,3 @@
-#ifndef UDManagementService_h
-#define UDManagementService_h
-
 #import "UDTypes.h"
 
 extern NSString * const UDJobTypeTimerName;
@@ -59,5 +56,3 @@ extern NSString * const UDIncidentTypeFailedExternalTaskName;
 - (NSArray<UDIncident *> *)incidentsForProcessInstance:(NSString *)processInstanceId;
 
 @end
-
-#endif /* UDManagementService_h */

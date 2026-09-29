@@ -1,6 +1,3 @@
-#ifndef UDHandlers_h
-#define UDHandlers_h
-
 #import "UDTypes.h"
 
 @class UDServiceInvocation;
@@ -52,5 +49,3 @@
 @protocol UDServiceTaskHandler <NSObject>
 - (void)performInvocation:(UDServiceInvocation *)invocation;
 @end
-
-#endif /* UDHandlers_h */

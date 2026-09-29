@@ -1,6 +1,3 @@
-#ifndef UDTaskService_h
-#define UDTaskService_h
-
 #import "UDTypes.h"
 
 /* An open user task: a work item for a person. */
@@ -34,5 +31,3 @@
                error:(NSError **)error;
 
 @end
-
-#endif /* UDTaskService_h */

@@ -1,6 +1,3 @@
-#ifndef UDBpmn_h
-#define UDBpmn_h
-
 #import "UDProcessDefinition.h"
 
 extern NSString * const UDBpmnNamespace;
@@ -46,5 +43,3 @@ extern NSString * const UDFeelLanguage;
 + (UDProcessDefinition *)definitionFromURL:(NSURL *)url
                                      error:(NSError **)error;
 @end
-
-#endif /* UDBpmn_h */

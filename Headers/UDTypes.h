@@ -1,6 +1,3 @@
-#ifndef UDTypes_h
-#define UDTypes_h
-
 #import <Foundation/Foundation.h>
 #import <dispatch/dispatch.h>
 
@@ -82,5 +79,3 @@ typedef NS_ENUM(NSInteger, UDWorkflowErrorCode) {
 
 extern NSString * const UDWorkflowErrorDomain;
 extern NSString * const UDWorkflowErrorRefKey;
-
-#endif /* UDTypes_h */

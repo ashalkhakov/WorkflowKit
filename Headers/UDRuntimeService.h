@@ -1,6 +1,3 @@
-#ifndef UDRuntimeService_h
-#define UDRuntimeService_h
-
 #import "UDTypes.h"
 
 @class UDProcessEngine;
@@ -100,5 +97,3 @@ processInstanceId:(NSString *)processInstanceId
                    error:(NSError **)error;
 
 @end
-
-#endif /* UDRuntimeService_h */

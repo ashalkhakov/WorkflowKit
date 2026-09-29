@@ -1,6 +1,3 @@
-#ifndef UDStore_h
-#define UDStore_h
-
 #import "UDTypes.h"
 
 @class NSManagedObjectModel;
@@ -82,5 +79,3 @@
 - (UDDefinitionRecord *)definitionRecordWithId:(NSString *)definitionId;
 
 @end
-
-#endif /* UDStore_h */

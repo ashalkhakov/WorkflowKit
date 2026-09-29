@@ -1,6 +1,3 @@
-#ifndef UDDuration_h
-#define UDDuration_h
-
 #import <Foundation/Foundation.h>
 
 /* ISO-8601 durations in weeks, days, hours, minutes and seconds. Years and
@@ -25,5 +22,3 @@ BOOL UDParseRetryCycle(NSString *cycle, NSInteger *attempts, NSArray<NSNumber *>
 /* The wait before the next attempt, given the attempts left before the one
  * that just failed. */
 NSTimeInterval UDRetryDelay(NSString *cycle, NSInteger attemptsLeft);
-
-#endif /* UDDuration_h */

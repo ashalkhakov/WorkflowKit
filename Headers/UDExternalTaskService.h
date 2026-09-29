@@ -1,6 +1,3 @@
-#ifndef UDExternalTaskService_h
-#define UDExternalTaskService_h
-
 #import "UDTypes.h"
 
 /* A service task's work, waiting under a topic for a worker. */
@@ -98,5 +95,3 @@
 - (NSArray<UDExternalTask *> *)externalTasksForProcessInstance:(NSString *)processInstanceId;
 
 @end
-
-#endif /* UDExternalTaskService_h */

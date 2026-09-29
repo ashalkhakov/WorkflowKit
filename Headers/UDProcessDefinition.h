@@ -1,6 +1,3 @@
-#ifndef UDProcessDefinition_h
-#define UDProcessDefinition_h
-
 #import "UDFlowElements.h"
 #import "UDCondition.h"
 
@@ -144,5 +141,3 @@
 - (UDProcessDefinition *)build:(NSError **)error;
 
 @end
-
-#endif /* UDProcessDefinition_h */

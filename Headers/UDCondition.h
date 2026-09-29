@@ -1,6 +1,3 @@
-#ifndef UDCondition_h
-#define UDCondition_h
-
 #import "UDTypes.h"
 
 @protocol UDCondition <NSObject>
@@ -30,5 +27,3 @@
 - (NSString *)expressionString;
 
 @end
-
-#endif /* UDCondition_h */

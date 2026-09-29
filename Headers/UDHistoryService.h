@@ -1,6 +1,3 @@
-#ifndef UDHistoryService_h
-#define UDHistoryService_h
-
 #import "UDTypes.h"
 
 /* How much history the engine writes, as the reference's levels. */
@@ -131,5 +128,3 @@ extern NSString * const UDJobLogStateDeleted;
 - (NSInteger)cleanUpHistory:(NSUInteger)batchSize error:(NSError **)error;
 
 @end
-
-#endif /* UDHistoryService_h */

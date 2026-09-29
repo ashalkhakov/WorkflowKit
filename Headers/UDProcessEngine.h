@@ -1,6 +1,3 @@
-#ifndef UDProcessEngine_h
-#define UDProcessEngine_h
-
 #import "UDStore.h"
 #import "UDHandlers.h"
 #import "UDRepositoryService.h"
@@ -95,5 +92,3 @@ processInstanceEnded:(UDProcessInstance *)instance;
 - (BOOL)waitUntilSettled:(NSString *)processInstanceId timeout:(NSTimeInterval)timeout;
 
 @end
-
-#endif /* UDProcessEngine_h */

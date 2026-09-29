@@ -1,6 +1,3 @@
-#ifndef UDProcessDefinition_Repository_h
-#define UDProcessDefinition_Repository_h
-
 #import "UDProcessDefinition.h"
 
 /* For the repository only: a definition as deployed, stamped with the
@@ -11,5 +8,3 @@
                                         deploymentId:(NSString *)deploymentId
                                         resourceName:(NSString *)resourceName;
 @end
-
-#endif /* UDProcessDefinition_Repository_h */

@@ -1,6 +1,3 @@
-#ifndef UDProcessEngine_Internal_h
-#define UDProcessEngine_Internal_h
-
 #import "UDProcessEngine.h"
 
 @class UDCommandContext;
@@ -85,5 +82,3 @@
 @interface UDHistoryService (UDInternal)
 - (instancetype)initWithProcessEngine:(UDProcessEngine *)engine;
 @end
-
-#endif /* UDProcessEngine_Internal_h */

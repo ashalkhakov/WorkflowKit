@@ -1,6 +1,3 @@
-#ifndef UDRepositoryService_h
-#define UDRepositoryService_h
-
 #import "UDProcessDefinition.h"
 
 @class UDStore;
@@ -52,5 +49,3 @@
 - (UDProcessDefinition *)definitionWithId:(NSString *)definitionId error:(NSError **)error;
 
 @end
-
-#endif /* UDRepositoryService_h */

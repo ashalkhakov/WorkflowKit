@@ -1,6 +1,3 @@
-#ifndef UDCommandContext_h
-#define UDCommandContext_h
-
 #import <CoreData/CoreData.h>
 #import "UDTypes.h"
 
@@ -90,5 +87,3 @@
 - (BOOL)setVariables:(NSDictionary *)variables from:(UDExecutionEntity *)execution;
 
 @end
-
-#endif /* UDCommandContext_h */

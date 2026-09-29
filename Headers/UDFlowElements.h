@@ -1,6 +1,3 @@
-#ifndef UDFlowElements_h
-#define UDFlowElements_h
-
 #import "UDTypes.h"
 
 @protocol UDFlowElement <NSObject>
@@ -169,5 +166,3 @@ typedef NS_ENUM(NSInteger, UDCalledElementBinding) {
                       defaultFlow:(BOOL)defaultFlow NS_DESIGNATED_INITIALIZER;
 
 @end
-
-#endif /* UDFlowElements_h */

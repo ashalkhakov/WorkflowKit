@@ -1,6 +1,3 @@
-#ifndef UDEntities_h
-#define UDEntities_h
-
 #import <CoreData/CoreData.h>
 #import "UDTypes.h"
 #import "UDManagementService.h"
@@ -245,5 +242,3 @@ extern NSString * const UDHistoricStateInternallyTerminated;
 @property (nonatomic) int32_t retries;
 @property (nonatomic) int64_t sequence;
 @end
-
-#endif /* UDEntities_h */

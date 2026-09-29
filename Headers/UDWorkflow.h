@@ -1,6 +1,3 @@
-#ifndef UDWorkflow_h
-#define UDWorkflow_h
-
 #import "UDTypes.h"
 #import "UDCondition.h"
 #import "UDFlowElements.h"
@@ -15,5 +12,3 @@
 #import "UDExternalTaskService.h"
 #import "UDProcessEngine.h"
 #import "UDBpmn.h"
-
-#endif /* UDWorkflow_h */
