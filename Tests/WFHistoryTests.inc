@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFHistoryTests : WFTestCase
-@end
-
-@implementation WFHistoryTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 #pragma mark - History
 
@@ -210,20 +205,18 @@
 - (void)testTheStoreKeepsItsHistoryLevel
 {
 	NSError *error = nil;
-	NSURL *url = [self temporarySQLiteURL];
+	NSURL *url = [self temporaryStoreURL];
 	@autoreleasepool {
-		WFProcessEngine *first = [self SQLiteEngineAtURL:url handler:nil];
+		WFProcessEngine *first = [self durableEngineAtURL:url handler:nil];
 		XCTAssertTrue([first openWithError:&error], @"%@", error);
 		[first close];
 	}
-	WFProcessEngine *full = [self SQLiteEngineAtURL:url handler:nil];
+	WFProcessEngine *full = [self durableEngineAtURL:url handler:nil];
 	full.historyLevel = WFHistoryLevelFull;
 	XCTAssertFalse([full openWithError:&error]);
 	XCTAssertEqual([error code], (NSInteger)WFErrorInvalidState);
 	[full close];
-	WFProcessEngine *same = [self SQLiteEngineAtURL:url handler:nil];
+	WFProcessEngine *same = [self durableEngineAtURL:url handler:nil];
 	XCTAssertTrue([same openWithError:&error], @"%@", error);
 	[same close];
 }
-
-@end

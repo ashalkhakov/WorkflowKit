@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFMultiInstanceTests : WFTestCase
-@end
-
-@implementation WFMultiInstanceTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* start -> work (made multi-instance by loop) -> after (a user task) -> end.
  * kind: "service" (topic work), "user", or "subprocess" (a service task
@@ -107,7 +102,7 @@
 - (void)testInstancesFinishingAtOnceAreAllCounted
 {
 	NSError *error = nil;
-	WFProcessEngine *engine = [self SQLiteEngineAtURL:[self temporarySQLiteURL] handler:nil];
+	WFProcessEngine *engine = [self durableEngineAtURL:[self temporaryStoreURL] handler:nil];
 	[self deploy:[self loop:^(WFDefinitionBuilder *b) {
 		[b setMultiInstanceSequential:NO loopCardinality:@"4" collection:nil elementVariable:nil
 		          completionCondition:nil forElement:@"work"];
@@ -119,12 +114,13 @@
 		XCTAssertEqual([tasks count], (NSUInteger)4);
 		dispatch_group_t group = dispatch_group_create();
 		for (WFWorkItem *task in tasks) {
-			dispatch_group_async(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+			/* In a pool of its own: see WFGatewayTests.inc. */
+			dispatch_group_async(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ @autoreleasepool {
 				NSError *completeError = nil;
 				while (![engine.taskService completeTask:task.taskId variables:nil error:&completeError]
 				       && [completeError code] == WFErrorConflict) {
 				}
-			});
+			}});
 		}
 		dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
 		WFDispatchRelease(group);
@@ -365,5 +361,3 @@ WFLoopDocument(NSString *loop)
 			@"nrOfCompletedInstances / nrOfInstances >= 0.6");
 	}
 }
-
-@end

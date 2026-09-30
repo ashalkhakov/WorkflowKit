@@ -5,27 +5,35 @@ include $(GNUSTEP_MAKEFILES)/common.make
 
 BUNDLE_NAME = WorkflowKitTests
 
+# One class per area and backend: the areas' tests are in WF*Tests.inc,
+# included by each backend's file (see WFTestCase.h).
 WorkflowKitTests_OBJC_FILES = \
 	WFTestCase.m \
-	WFGatewayTests.m \
-	WFEventTests.m \
-	WFSubprocessTests.m \
-	WFCallActivityTests.m \
-	WFExternalTaskTests.m \
-	WFJobTests.m \
-	WFHistoryTests.m \
-	WFDeploymentTests.m \
-	WFDurabilityTests.m \
-	WFBpmnTests.m \
 	WFFeelTests.m \
-	WFMultiInstanceTests.m \
-	WFEventSubProcessTests.m \
-	WFTimerTests.m \
-	WFEscalationTests.m \
-	WFCompensationTests.m \
-	WFOperationsTests.m \
-	WFTaskAssignmentTests.m \
-	WFInputOutputTests.m
+	WFInMemoryTests.m \
+	WFSQLiteTests.m
+
+# The database servers, each tested when its URL is given, through the
+# FreeCoreData store installed for it (make -C Backends/PostgreSQL install,
+# or MySQL). Each test works in a schema of its own, dropped afterwards.
+#
+#   make test WORKFLOWKIT_TEST_POSTGRES_URL=postgresql://user:secret@host/db \
+#             WORKFLOWKIT_TEST_MYSQL_URL=mysql://user:secret@host/db
+#
+# The classes are compiled in or left out by the URL, so after changing
+# which are given, make clean first.
+export WORKFLOWKIT_TEST_POSTGRES_URL WORKFLOWKIT_TEST_MYSQL_URL
+ifneq ($(WORKFLOWKIT_TEST_POSTGRES_URL),)
+WorkflowKitTests_OBJC_FILES += WFPostgreSQLTests.m
+WorkflowKitTests_BUNDLE_LIBS += -lCDPostgreSQLStore
+endif
+ifneq ($(WORKFLOWKIT_TEST_MYSQL_URL),)
+WorkflowKitTests_OBJC_FILES += WFMySQLTests.m
+WorkflowKitTests_BUNDLE_LIBS += -lCDMySQLStore
+endif
+ifneq ($(WORKFLOWKIT_TEST_POSTGRES_URL)$(WORKFLOWKIT_TEST_MYSQL_URL),)
+WorkflowKitTests_BUNDLE_LIBS += -lCDSQLStore
+endif
 WorkflowKitTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 WorkflowKitTests_INCLUDE_DIRS = -I../Headers
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)

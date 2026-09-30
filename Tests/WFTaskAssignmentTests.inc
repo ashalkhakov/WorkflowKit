@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFTaskAssignmentTests : WFTestCase
-@end
-
-@implementation WFTaskAssignmentTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* start -> approve (a user task with the assignment) -> end */
 - (WFProcessDefinition *)approval:(NSDictionary *)assignment
@@ -134,5 +129,3 @@
 	WFProcessDefinition *again = [WFBpmnReader definitionFromXMLString:written error:&error];
 	[self assertNode:task matches:[again nodeWithId:@"t"]];
 }
-
-@end

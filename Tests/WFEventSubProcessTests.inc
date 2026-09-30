@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFEventSubProcessTests : WFTestCase
-@end
-
-@implementation WFEventSubProcessTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* An event subprocess: its start (added by start), then a user task
  * named task, then an end. */
@@ -321,5 +316,3 @@ WFEventSubProcessDocument(NSString *inside)
 			!= NSNotFound, @"%@: %@", [refused objectForKey:inside], error);
 	}
 }
-
-@end

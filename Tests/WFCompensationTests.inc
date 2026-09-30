@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFCompensationTests : WFTestCase
-@end
-
-@implementation WFCompensationTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* A user task with a compensation handler, itself a user task. */
 - (void)add:(NSString *)task undoneBy:(NSString *)handler to:(WFDefinitionBuilder *)b
@@ -191,5 +186,3 @@
 	XCTAssertTrue([[error localizedDescription] rangeOfString:@"waitForCompletion"].location != NSNotFound,
 		@"%@", error);
 }
-
-@end

@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFBpmnTests : WFTestCase
-@end
-
-@implementation WFBpmnTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* Every construct the engine runs, subprocess included. */
 - (WFProcessDefinition *)everyConstruct
@@ -268,5 +263,3 @@ static NSString * const WFModelerInvoice =
 	XCTAssertEqualObjects([self active:small engine:engine], @[ @"Event_confirmed" ],
 		@"under 1000 skips approval");
 }
-
-@end

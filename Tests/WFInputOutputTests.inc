@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFInputOutputTests : WFTestCase
-@end
-
-@implementation WFInputOutputTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* start -> work (a service task, topic work, mapped by map) -> after -> end */
 - (WFProcessDefinition *)mapped:(void (^)(WFDefinitionBuilder *b))map
@@ -155,5 +150,3 @@
 	XCTAssertNil([WFBpmnReader definitionFromXMLString:script error:&error]);
 	XCTAssertTrue([[error localizedDescription] rangeOfString:@"script"].location != NSNotFound, @"%@", error);
 }
-
-@end

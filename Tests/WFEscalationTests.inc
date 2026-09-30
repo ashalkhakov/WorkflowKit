@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFEscalationTests : WFTestCase
-@end
-
-@implementation WFEscalationTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* start -> sub -> after -> end; inside sub: s -> [inside sub] -> e, and
  * catch adds what catches. */
@@ -132,5 +127,3 @@
 	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"rework" ]);
 	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"why"], @"REJECTED");
 }
-
-@end

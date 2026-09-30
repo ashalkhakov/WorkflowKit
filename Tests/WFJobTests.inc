@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFJobTests : WFTestCase
-@end
-
-@implementation WFJobTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 #pragma mark - Jobs
 
@@ -184,5 +179,3 @@
 	XCTAssertTrue([engine.managementService executeJob:before.jobId error:&error], @"%@", error);
 	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"escalated" ]);
 }
-
-@end

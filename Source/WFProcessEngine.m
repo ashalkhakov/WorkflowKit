@@ -16,6 +16,19 @@
  * conflict. */
 #define WF_CONFLICT_ATTEMPTS 5
 
+/* Runs the block on the queue inside a pool of its own. Apple's libdispatch
+ * drains one after each block; on GNUstep what a block autoreleases waits
+ * for its worker thread to go idle, and a busy engine keeps it busy. */
+static void
+WFAsync(dispatch_queue_t queue, dispatch_block_t block)
+{
+	dispatch_async(queue, ^{
+		@autoreleasepool {
+			block();
+		}
+	});
+}
+
 static BOOL
 WFIsConflict(NSError *error)
 {
@@ -75,7 +88,9 @@ WFIsConflict(NSError *error)
 	_scheduler = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _schedulerQueue);
 	__weak WFProcessEngine *weakSelf = self;
 	dispatch_source_set_event_handler(_scheduler, ^{
-		[weakSelf schedulerFired];
+		@autoreleasepool {
+			[weakSelf schedulerFired];
+		}
 	});
 	dispatch_source_set_timer(_scheduler, DISPATCH_TIME_FOREVER, DISPATCH_TIME_FOREVER, 0);
 	dispatch_resume(_scheduler);
@@ -178,7 +193,7 @@ WFIsConflict(NSError *error)
 	if (delegate == nil) {
 		return;
 	}
-	dispatch_async(self.callbackQueue, ^{
+	WFAsync(self.callbackQueue, ^{
 		call(delegate);
 	});
 }
@@ -225,7 +240,7 @@ WFIsConflict(NSError *error)
 		return;
 	}
 	[self beginWork:processInstanceId];
-	dispatch_async([self stripeFor:processInstanceId], ^{
+	WFAsync([self stripeFor:processInstanceId], ^{
 		[self lockAndInvoke:externalTaskId processInstanceId:processInstanceId];
 	});
 }
@@ -253,7 +268,7 @@ WFIsConflict(NSError *error)
 	[self beginWork:key];
 	dispatch_queue_t queue = exclusive ? [self stripeFor:key]
 		: dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-	dispatch_async(queue, ^{
+	WFAsync(queue, ^{
 		[self wf_runJob:jobId force:NO error:NULL];
 		[self reschedule];
 		[self endWork:key];
@@ -283,7 +298,7 @@ WFIsConflict(NSError *error)
 		                                         activityId:task.activityId];
 	invocation.target = self;
 	invocation.action = @selector(wf_invocation:didFinish:);
-	dispatch_async(self.workerQueue, ^{
+	WFAsync(self.workerQueue, ^{
 		[handler performInvocation:invocation];
 	});
 	[self reschedule];
@@ -292,7 +307,7 @@ WFIsConflict(NSError *error)
 - (void)wf_invocation:(WFServiceInvocation *)invocation didFinish:(WFServiceResult *)result
 {
 	NSString *processInstanceId = invocation.processInstanceId;
-	dispatch_async([self stripeFor:processInstanceId], ^{
+	WFAsync([self stripeFor:processInstanceId], ^{
 		[self reportResult:result forExternalTask:invocation.externalTaskId];
 		[self endWork:processInstanceId];
 	});
@@ -462,7 +477,7 @@ WFIsConflict(NSError *error)
 
 - (void)reschedule
 {
-	dispatch_async(_schedulerQueue, ^{
+	WFAsync(_schedulerQueue, ^{
 		[self rearmScheduler];
 	});
 }
@@ -624,7 +639,7 @@ WFIsConflict(NSError *error)
 	for (NSArray *task in available) {
 		[self wf_externalTaskCreated:[task objectAtIndex:0] processInstanceId:[task objectAtIndex:1]];
 	}
-	dispatch_async(_schedulerQueue, ^{
+	WFAsync(_schedulerQueue, ^{
 		[self schedulerFired];
 	});
 	return YES;
@@ -686,14 +701,16 @@ WFIsConflict(NSError *error)
 		dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0));
 	__weak WFProcessEngine *weakSelf = self;
 	dispatch_source_set_event_handler(_cleanup, ^{
-		NSError *error = nil;
-		WFProcessEngine *engine = weakSelf;
-		if (engine != nil && [engine.historyService cleanUpHistory:500 error:&error] < 0) {
-			[engine notify:^(id<WFProcessEngineDelegate> delegate) {
-				if ([delegate respondsToSelector:@selector(processEngine:commandFailed:)]) {
-					[delegate processEngine:engine commandFailed:error];
-				}
-			}];
+		@autoreleasepool {
+			NSError *error = nil;
+			WFProcessEngine *engine = weakSelf;
+			if (engine != nil && [engine.historyService cleanUpHistory:500 error:&error] < 0) {
+				[engine notify:^(id<WFProcessEngineDelegate> delegate) {
+					if ([delegate respondsToSelector:@selector(processEngine:commandFailed:)]) {
+						[delegate processEngine:engine commandFailed:error];
+					}
+				}];
+			}
 		}
 	});
 	dispatch_source_set_timer(_cleanup,

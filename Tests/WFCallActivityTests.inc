@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFCallActivityTests : WFTestCase
-@end
-
-@implementation WFCallActivityTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* A process that waits in a user task and then ends. */
 - (WFProcessDefinition *)waitingProcess:(NSString *)key task:(NSString *)taskId
@@ -359,5 +354,3 @@ WFCallActivityXML(NSString *elementId, NSString *attributes, NSString *extension
 			!= NSNotFound, @"%@: %@", [c objectAtIndex:2], error);
 	}
 }
-
-@end

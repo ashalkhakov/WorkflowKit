@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFGatewayTests : WFTestCase
-@end
-
-@implementation WFGatewayTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 #pragma mark - Gateways
 
@@ -135,7 +130,7 @@
 	[[b connect:@"left" to:@"join"] connect:@"right" to:@"join"];
 	[[b connect:@"join" to:@"after"] connect:@"after" to:@"end"];
 	WFProcessDefinition *definition = [b build:&error];
-	WFProcessEngine *engine = [self SQLiteEngineAtURL:[self temporarySQLiteURL] handler:nil];
+	WFProcessEngine *engine = [self durableEngineAtURL:[self temporaryStoreURL] handler:nil];
 	[self deploy:definition engine:engine];
 	__block NSUInteger conflicts = 0;
 	for (int round = 0; round < 20; round++) {
@@ -145,7 +140,9 @@
 		XCTAssertEqual([tasks count], (NSUInteger)2);
 		dispatch_group_t group = dispatch_group_create();
 		for (WFWorkItem *task in tasks) {
-			dispatch_group_async(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+			/* In a pool of its own, as the engine's own blocks are: on
+			 * GNUstep a worker thread drains only when it goes idle. */
+			dispatch_group_async(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ @autoreleasepool {
 				NSError *completeError = nil;
 				/* A lost race changed nothing: the caller tries again. */
 				while (![engine.taskService completeTask:task.taskId variables:nil error:&completeError]) {
@@ -156,7 +153,7 @@
 						conflicts += 1;
 					}
 				}
-			});
+			}});
 		}
 		dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
 		WFDispatchRelease(group);
@@ -166,5 +163,3 @@
 	}
 	NSLog(@"conflicts resolved by retrying: %lu", (unsigned long)conflicts);
 }
-
-@end

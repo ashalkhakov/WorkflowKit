@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFEventTests : WFTestCase
-@end
-
-@implementation WFEventTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 #pragma mark - Events
 
@@ -351,5 +346,3 @@
 	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
 	XCTAssertFalse([self ended:pid engine:engine]);
 }
-
-@end

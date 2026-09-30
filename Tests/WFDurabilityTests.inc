@@ -1,17 +1,12 @@
-#import "WFTestCase.h"
-
-@interface WFDurabilityTests : WFTestCase
-@end
-
-@implementation WFDurabilityTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 - (void)testUserTaskSurvivesRestart
 {
 	NSError *error = nil;
-	NSURL *url = [self temporarySQLiteURL];
+	NSURL *url = [self temporaryStoreURL];
 	NSString *pid = nil;
 	@autoreleasepool {
-		WFProcessEngine *first = [self SQLiteEngineAtURL:url handler:nil];
+		WFProcessEngine *first = [self durableEngineAtURL:url handler:nil];
 		[self deploy:[self approvalDefinition] engine:first];
 		pid = [first.runtimeService startProcessInstanceByKey:@"approval"
 		                                            variables:@{ @"amount": @2500 }
@@ -22,7 +17,7 @@
 	WFMapHandler *h = [[WFMapHandler alloc] init];
 	[h.results setObject:@{ @"booked": @YES } forKey:@"book"];
 	/* Nothing deployed: the definition comes back from the store. */
-	WFProcessEngine *second = [self SQLiteEngineAtURL:url handler:h];
+	WFProcessEngine *second = [self durableEngineAtURL:url handler:h];
 	XCTAssertTrue([second openWithError:&error], @"%@", error);
 	XCTAssertEqualObjects([[second.runtimeService variablesForProcessInstance:pid error:&error]
 		objectForKey:@"amount"], @2500);
@@ -35,13 +30,13 @@
 - (void)testExternalTaskIsOfferedAgainAfterRestart
 {
 	NSError *error = nil;
-	NSURL *url = [self temporarySQLiteURL];
+	NSURL *url = [self temporaryStoreURL];
 	NSString *pid = nil;
 	NSString *taskId = nil;
 	@autoreleasepool {
 		WFMapHandler *dropping = [[WFMapHandler alloc] init];
 		dropping.drops = YES;
-		WFProcessEngine *first = [self SQLiteEngineAtURL:url handler:dropping];
+		WFProcessEngine *first = [self durableEngineAtURL:url handler:dropping];
 		[self deploy:[self approvalDefinition] engine:first];
 		pid = [first.runtimeService startProcessInstanceByKey:@"approval"
 		                                            variables:nil error:&error].processInstanceId;
@@ -57,7 +52,7 @@
 	}
 	WFMapHandler *h = [[WFMapHandler alloc] init];
 	[h.results setObject:@{ @"booked": @YES } forKey:@"book"];
-	WFProcessEngine *second = [self SQLiteEngineAtURL:url handler:h];
+	WFProcessEngine *second = [self durableEngineAtURL:url handler:h];
 	/* Same identifier on the same host: the engine takes its lock back. */
 	XCTAssertTrue([second openWithError:&error], @"%@", error);
 	XCTAssertTrue([second waitUntilSettled:pid timeout:10.0]);
@@ -69,7 +64,7 @@
 - (void)testTimerKeepsItsDueTimeAcrossRestart
 {
 	NSError *error = nil;
-	NSURL *url = [self temporarySQLiteURL];
+	NSURL *url = [self temporaryStoreURL];
 	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"sleepy"];
 	[[[b addStart:@"start"] addTimerCatch:@"nap" duration:1.0] addEnd:@"end"];
 	[[b connect:@"start" to:@"nap"] connect:@"nap" to:@"end"];
@@ -77,7 +72,7 @@
 	NSString *pid = nil;
 	NSDate *due = nil;
 	@autoreleasepool {
-		WFProcessEngine *first = [self SQLiteEngineAtURL:url handler:nil];
+		WFProcessEngine *first = [self durableEngineAtURL:url handler:nil];
 		[self deploy:def engine:first];
 		pid = [first.runtimeService startProcessInstanceByKey:@"sleepy"
 		                                            variables:nil error:&error].processInstanceId;
@@ -86,7 +81,7 @@
 		[first close];
 	}
 	[NSThread sleepForTimeInterval:0.5];
-	WFProcessEngine *second = [self SQLiteEngineAtURL:url handler:nil];
+	WFProcessEngine *second = [self durableEngineAtURL:url handler:nil];
 	XCTAssertTrue([second openWithError:&error], @"%@", error);
 	XCTAssertTrue([self waitForEnd:pid engine:second seconds:5.0]);
 	/* Fired at the stored due time, not a full duration after the restart. */
@@ -116,5 +111,3 @@
 	XCTAssertTrue([self ended:pid engine:engine]);
 	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"byDelegate"], @YES);
 }
-
-@end

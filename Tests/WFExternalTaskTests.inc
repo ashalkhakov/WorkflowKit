@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFExternalTaskTests : WFTestCase
-@end
-
-@implementation WFExternalTaskTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 #pragma mark - Service tasks
 
@@ -246,5 +241,3 @@
 	XCTAssertEqualObjects([tasks valueForKey:@"priority"], (@[ @10, @5 ]));
 	XCTAssertEqualObjects([[tasks firstObject] variables], @{ @"b": @2 });
 }
-
-@end

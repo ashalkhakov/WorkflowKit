@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFSubprocessTests : WFTestCase
-@end
-
-@implementation WFSubprocessTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 #pragma mark - Subprocesses and variables
 
@@ -146,5 +141,3 @@
 	XCTAssertFalse([engine.runtimeService correlateMessage:@"poke" processInstanceId:pid
 	                                             variables:nil error:&error]);
 }
-
-@end

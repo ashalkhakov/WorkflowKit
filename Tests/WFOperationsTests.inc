@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFOperationsTests : WFTestCase
-@end
-
-@implementation WFOperationsTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 /* start -> review (a user task) -> end, waiting also for a message
  * "nudge" on the way, beside the task. */
@@ -171,5 +166,3 @@
 	XCTAssertTrue([engine.managementService executeJob:tick.jobId error:&error], @"%@", error);
 	XCTAssertEqual([[self rows:@"WFTask" engine:engine] count], (NSUInteger)1);
 }
-
-@end

@@ -48,6 +48,24 @@ build a model in code. Uninstalled, the library finds the model through
 `WORKFLOWKIT_MODEL` (`make -C Examples run` sets it) or a copy in the calling
 bundle (the test bundle carries one).
 
+The tests run on every store: each area's tests are in `Tests/WF*Tests.inc`,
+and each backend's file (`WFInMemoryTests.m`, `WFSQLiteTests.m`,
+`WFPostgreSQLTests.m`, `WFMySQLTests.m`) gives every area a class that
+includes them; `Tests/WFTestCase.h` says why they are included and not
+inherited. A new area is a new `.inc` and one class in each backend's file.
+The server backends are built in when their URLs are given, through
+FreeCoreData's stores installed for them, and each test works in a schema of
+its own:
+
+```sh
+.tools/gnustep.sh make test \
+    WORKFLOWKIT_TEST_POSTGRES_URL=postgresql://postgres:test@172.17.0.4/workflowkit_test \
+    WORKFLOWKIT_TEST_MYSQL_URL=mysql://root:test@172.17.0.3/coredata_test
+```
+
+In `ois-dev` those are the `cdpgtest` and `cdmytest` containers; CI starts
+its own.
+
 ## macOS
 
 `WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`
@@ -68,6 +86,12 @@ xcodebuild -workspace WorkflowKit.xcworkspace -scheme WorkflowKit \
   into a collection. Properties use `WF_DISPATCH_PROPERTY` with setters that
   retain, owners release with `WFDispatchRelease`, and a timer source goes
   into the engine's table inside a `WFTimerHandle`.
+- libdispatch on GNUstep drains a worker thread's autorelease pool only when
+  the thread goes idle, not after each block as Apple's does, so whatever a
+  busy engine's blocks autorelease - command contexts, and through their
+  after-commit blocks the engine and its store's connection - lives on.
+  Every block the engine dispatches runs in a pool of its own (`WFAsync`),
+  and so must a test's.
 - tools-xctest's `XCTAssertEqualWithAccuracy` needs floating-point
   arguments: write `10.0`, not `10`.
 - gnustep-base's `NSPredicate` parser takes only object arguments: pass

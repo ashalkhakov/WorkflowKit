@@ -74,19 +74,48 @@
 }
 @end
 
-@implementation WFTestCase
+@implementation WFTestCase {
+	NSHashTable *_engines;
+}
 
-- (WFProcessEngine *)engineWithHandler:(WFMapHandler *)handler
+/* Engines still alive when a test ends stop here, so that they do no more
+ * work while the next one runs. */
+- (void)tearDown
 {
-	NSError *error = nil;
-	WFStore *store = [WFStore inMemoryStore:&error];
-	XCTAssertNotNil(store, @"%@", error);
+	for (WFProcessEngine *engine in [_engines allObjects]) {
+		[engine close];
+	}
+	[super tearDown];
+}
+
+- (WFStore *)storeAtURL:(NSURL *)url
+{
+	(void)url;
+	[self doesNotRecognizeSelector:_cmd];
+	return nil;
+}
+
+- (WFProcessEngine *)engineOnStoreAtURL:(NSURL *)url handler:(WFMapHandler *)handler
+{
+	WFStore *store = [self storeAtURL:url];
+	if (store == nil) {
+		return nil;
+	}
 	WFProcessEngine *engine = [[WFProcessEngine alloc] initWithStore:store];
 	engine.serviceHandler = handler;
+	if (_engines == nil) {
+		_engines = [NSHashTable weakObjectsHashTable];
+	}
+	[_engines addObject:engine];
 	return engine;
 }
 
-- (NSURL *)temporarySQLiteURL
+- (WFProcessEngine *)engineWithHandler:(WFMapHandler *)handler
+{
+	return [self engineOnStoreAtURL:nil handler:handler];
+}
+
+- (NSURL *)temporaryStoreURL
 {
 	NSString *name = [NSString stringWithFormat:@"workflowkit-%@.sqlite",
 		[[NSUUID UUID] UUIDString]];
@@ -94,14 +123,9 @@
 		[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
 }
 
-- (WFProcessEngine *)SQLiteEngineAtURL:(NSURL *)url handler:(WFMapHandler *)handler
+- (WFProcessEngine *)durableEngineAtURL:(NSURL *)url handler:(WFMapHandler *)handler
 {
-	NSError *error = nil;
-	WFStore *store = [WFStore SQLiteStoreAtURL:url error:&error];
-	XCTAssertNotNil(store, @"%@", error);
-	WFProcessEngine *engine = [[WFProcessEngine alloc] initWithStore:store];
-	engine.serviceHandler = handler;
-	return engine;
+	return [self engineOnStoreAtURL:url handler:handler];
 }
 
 - (void)deploy:(WFProcessDefinition *)definition engine:(WFProcessEngine *)engine
@@ -364,6 +388,97 @@ WFMappingStrings(NSArray<WFVariableMapping *> *mappings)
 		XCTAssertEqualObjects([x.condition expressionString], [y.condition expressionString],
 			@"%@", flowId);
 	}
+}
+
+@end
+
+/* What FreeCoreData's SQL stores answer, declared here so that this file
+ * needs none of their headers: only the backends' files do. */
+@protocol WFServerStore
++ (BOOL)destroyStoreAtURL:(NSURL *)url options:(NSDictionary *)options error:(NSError **)error;
+@end
+
+@implementation WFServerTestCase {
+	NSMutableArray *_schemas;
+}
+
+- (Class)storeClass
+{
+	[self doesNotRecognizeSelector:_cmd];
+	return Nil;
+}
+
+- (NSString *)storeType
+{
+	[self doesNotRecognizeSelector:_cmd];
+	return nil;
+}
+
+- (NSString *)schemaNameOptionKey
+{
+	[self doesNotRecognizeSelector:_cmd];
+	return nil;
+}
+
+- (NSString *)URLEnvironmentVariableName
+{
+	[self doesNotRecognizeSelector:_cmd];
+	return nil;
+}
+
+/* The bundle has this backend's classes only when it was built with the
+ * server's URL (see the GNUmakefile), so running it without one is a
+ * mistake, not a machine without a server. */
+- (NSURL *)serverURL
+{
+	NSString *name = [self URLEnvironmentVariableName];
+	NSString *text = [[[NSProcessInfo processInfo] environment] objectForKey:name];
+	if ([text length] == 0) {
+		[NSException raise:NSInternalInconsistencyException
+		            format:@"%@ is not set, but the bundle was built to test against it", name];
+	}
+	return [NSURL URLWithString:text];
+}
+
+- (void)setUp
+{
+	[super setUp];
+	[self serverURL];
+}
+
+- (void)tearDown
+{
+	[super tearDown];
+	for (NSDictionary *options in _schemas) {
+		NSError *error = nil;
+		XCTAssertTrue([(Class<WFServerStore>)[self storeClass] destroyStoreAtURL:[self serverURL]
+		                                                                 options:options
+		                                                                   error:&error],
+			@"%@", error);
+	}
+}
+
+/* Named after the URL, so that a second engine at the same URL finds the
+ * same schema. */
+- (WFStore *)storeAtURL:(NSURL *)url
+{
+	NSString *schema = [[[[(url ?: [self temporaryStoreURL]) lastPathComponent]
+		stringByDeletingPathExtension]
+		stringByReplacingOccurrencesOfString:@"-" withString:@"_"] lowercaseString];
+	NSDictionary *options = @{ [self schemaNameOptionKey]: schema };
+	if (_schemas == nil) {
+		_schemas = [NSMutableArray array];
+	}
+	if (![_schemas containsObject:options]) {
+		[_schemas addObject:options];
+	}
+	NSError *error = nil;
+	WFStore *store = [[WFStore alloc] initWithStoreType:[self storeType]
+	                                               URL:[self serverURL]
+	                                           options:options
+	                                             error:&error];
+	XCTAssertNotNil(store, @"%@", error);
+	return store;
 }
 
 @end

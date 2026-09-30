@@ -7,6 +7,7 @@ Regenerate after adding a source file rather than editing project.pbxproj by
 hand; object ids are derived from names, so the output is stable and diffs
 stay small. GNUstep does not read any of this -- it builds with make.
 """
+import glob
 import hashlib
 import os
 import re
@@ -27,6 +28,8 @@ def make_list(path, var):
 SOURCES = make_list("GNUmakefile", "WorkflowKit_OBJC_FILES")            # Source/X.m
 HEADERS = make_list("GNUmakefile", "WorkflowKit_HEADER_FILES")          # X.h
 TESTS = make_list("Tests/GNUmakefile", "WorkflowKitTests_OBJC_FILES")   # X.m
+# The areas' tests, which the backends' files include: shown, not compiled.
+TEST_BODIES = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "Tests", "*.inc")))
 DEMO = make_list("Examples/GNUmakefile", "PurchaseRequestDemo_OBJC_FILES")
 MODELS = make_list("GNUmakefile", "WorkflowKit_XCDATAMODELD_FILES")     # Model/X.xcdatamodeld
 DOCS = ["CLAUDE.md", "WorkflowKit-BPMN-Subset.md", "GNUmakefile"]
@@ -58,14 +61,14 @@ def fileref(path, name, ftype):
 
 def ftype(name):
     return {
-        ".m": "sourcecode.c.objc", ".h": "sourcecode.c.h",
+        ".m": "sourcecode.c.objc", ".h": "sourcecode.c.h", ".inc": "sourcecode.c.objc",
         ".md": "net.daringfireball.markdown", ".xcconfig": "text.xcconfig",
     }.get(os.path.splitext(name)[1], "text")
 
 
 src_refs = {s: fileref(s, os.path.basename(s), ftype(s)) for s in SOURCES}
 hdr_refs = {h: fileref("Headers/" + h, h, ftype(h)) for h in HEADERS}
-test_refs = {t: fileref("Tests/" + t, t, ftype(t)) for t in TESTS}
+test_refs = {t: fileref("Tests/" + t, t, ftype(t)) for t in TESTS + TEST_BODIES}
 demo_refs = {d: fileref("Examples/" + d, d, ftype(d)) for d in DEMO}
 doc_refs = {d: fileref(d, d, ftype(d)) for d in DOCS}
 cfg_refs = {c: fileref("Xcode/Configs/" + c, c, "text.xcconfig") for c in CONFIGS}
@@ -178,7 +181,7 @@ def group(key, name, children, path=None):
 
 g_headers = group("Headers", "Headers", [hdr_refs[h] for h in HEADERS], "Headers")
 g_source = group("Source", "Source", [src_refs[s] for s in SOURCES], "Source")
-g_tests = group("Tests", "Tests", [test_refs[t] for t in TESTS], "Tests")
+g_tests = group("Tests", "Tests", [test_refs[t] for t in TESTS + TEST_BODIES], "Tests")
 g_examples = group("Examples", "Examples", [demo_refs[d] for d in DEMO], "Examples")
 g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")

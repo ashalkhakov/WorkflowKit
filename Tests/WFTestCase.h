@@ -22,14 +22,30 @@
 @property (nonatomic, strong) NSMutableArray *ended;
 @end
 
-/* The engine fixtures and helpers every test case shares. */
+/* The engine fixtures and helpers every test case shares.
+ *
+ * The store the engines run on is a backend's choice. Each backend's file
+ * (WFInMemoryTests.m, WFSQLiteTests.m, WFPostgreSQLTests.m, WFMySQLTests.m)
+ * subclasses this once, saying how to open a store, and gives every area
+ * a class of its own - WFGatewayInMemoryTests, WFGatewaySQLiteTests, ... -
+ * whose @implementation #includes the area's tests from WFGatewayTests.inc.
+ * They are included rather than inherited because tools-xctest runs only
+ * the test methods a class declares itself: a subclass of a class full of
+ * tests runs none of them. */
 @interface WFTestCase : XCTestCase
 
+/* What a backend supplies: a store at url, one that outlives its engine
+ * so that a second engine opened there sees what the first saved, or a
+ * store of its own when url is nil. */
+- (WFStore *)storeAtURL:(NSURL *)url;
+
+/* A fresh engine on a store of its own. */
 - (WFProcessEngine *)engineWithHandler:(WFMapHandler *)handler;
 
-- (NSURL *)temporarySQLiteURL;
+/* A new name for a store, to open with -durableEngineAtURL:. */
+- (NSURL *)temporaryStoreURL;
 
-- (WFProcessEngine *)SQLiteEngineAtURL:(NSURL *)url handler:(WFMapHandler *)handler;
+- (WFProcessEngine *)durableEngineAtURL:(NSURL *)url handler:(WFMapHandler *)handler;
 
 - (void)deploy:(WFProcessDefinition *)definition engine:(WFProcessEngine *)engine;
 
@@ -71,5 +87,17 @@
 - (void)assertNode:(WFFlowNode *)a matches:(WFFlowNode *)b;
 
 - (void)assertDefinition:(WFProcessDefinition *)a matches:(WFProcessDefinition *)b;
+
+@end
+
+/* A backend on a database server, reached through one of FreeCoreData's
+ * SQL stores: each store is a schema of its own in the database the
+ * environment names, dropped after the test. */
+@interface WFServerTestCase : WFTestCase
+
+- (Class)storeClass;
+- (NSString *)storeType;
+- (NSString *)schemaNameOptionKey;
+- (NSString *)URLEnvironmentVariableName;
 
 @end

@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFTimerTests : WFTestCase
-@end
-
-@implementation WFTimerTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 - (WFProcessEngine *)steppedEngine
 {
@@ -190,5 +185,3 @@ WFTimerDocument(NSString *timer)
 			!= NSNotFound, @"%@: %@", timer, error);
 	}
 }
-
-@end

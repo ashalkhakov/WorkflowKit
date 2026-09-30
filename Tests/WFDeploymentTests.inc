@@ -1,9 +1,4 @@
-#import "WFTestCase.h"
-
-@interface WFDeploymentTests : WFTestCase
-@end
-
-@implementation WFDeploymentTests
+/* Included into a class of each backend's suite: see WFTestCase.h. */
 
 - (void)testDeploymentsAreVersioned
 {
@@ -54,5 +49,3 @@
 		!= NSNotFound, @"%@", error);
 	XCTAssertNil([engine.repositoryService latestDefinitionForKey:@"calls" error:NULL]);
 }
-
-@end

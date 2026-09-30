@@ -15,8 +15,10 @@ jobs:
   # Built against the patched stack from gnustep-patches, by that
   # repository's own Scripts/build-gnustep.sh -- the shape ODataStore uses --
   # never a distro GNUstep. The engine needs Foundation and, for its store,
-  # FreeCoreData over SQLite; the designer will add libs-gui and libs-back
-  # when it lands.
+  # FreeCoreData; the designer will add libs-gui and libs-back when it
+  # lands. The tests run on every store the engine can use: in memory,
+  # SQLite, and FreeCoreData's PostgreSQL and MySQL stores against the
+  # servers below.
   gnustep:
     name: Ubuntu (GNUstep, FreeCoreData, clang, gnustep-2.0)
     runs-on: ubuntu-24.04
@@ -35,12 +37,40 @@ jobs:
       # A commit, not a branch: it decides the recipe hash the stack is
       # cached under. The same pin as ODataStore.
       GNUSTEP_PATCHES_REF: 0211d2cda98a8a71648204e1dd35bc46572b46eb
-      # FreeCoreData, pinned to a commit like the stack: #53, optimistic
-      # locking for the SQLite store, which the engine's joins rely on.
-      FREECOREDATA_REF: 3c547abc4f402e6b871dbc44586f87fd416f08b4
+      # FreeCoreData, pinned to a commit like the stack: #55, which
+      # serializes every store round trip (the PostgreSQL store has one
+      # connection) and installs the backends' headers where they import,
+      # on top of #53's optimistic locking, which the engine's joins rely on.
+      FREECOREDATA_REF: 36645cfad092584fd2b6458805a85882f6462852
     defaults:
       run:
         working-directory: ${{ github.workspace }}/source
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: workflowkit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: workflowkit
+          MYSQL_DATABASE: workflowkit
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
 
     steps:
       - uses: actions/checkout@v4
@@ -64,8 +94,11 @@ jobs:
           ./.github/scripts/apt-update.sh
           sudo apt-get -q -y install \
             pkg-config libgnutls28-dev libffi-dev libicu-dev libxml2-dev libxslt1-dev \
-            libssl-dev zlib1g-dev libcurl4-gnutls-dev libsqlite3-dev
-          # libsqlite3-dev is FreeCoreData's: NSSQLitePersistentStore links it.
+            libssl-dev zlib1g-dev libcurl4-gnutls-dev libsqlite3-dev \
+            libpq-dev libmariadb-dev
+          # The last three are FreeCoreData's: NSSQLitePersistentStore links
+          # libsqlite3, its PostgreSQL store libpq, and its MySQL store
+          # MariaDB Connector/C, which speaks to MySQL servers too.
           # The gnustep-2.0 runtime needs ld.gold or lld; ld.gold is gone
           # from binutils on 24.04.
           if [ -x /usr/bin/ld.gold ]; then
@@ -112,6 +145,8 @@ jobs:
           make install
           make -C Tools/momc
           make -C Tools/momc install
+          make -C Backends/PostgreSQL install
+          make -C Backends/MySQL install
 
       # On its own, so a compile error is reported as that and not as a
       # test failure.
@@ -126,6 +161,9 @@ jobs:
           make examples
 
       - name: Unit tests
+        env:
+          WORKFLOWKIT_TEST_POSTGRES_URL: postgresql://postgres:workflowkit@127.0.0.1:5432/postgres
+          WORKFLOWKIT_TEST_MYSQL_URL: mysql://root:workflowkit@127.0.0.1:3306/workflowkit
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make test
