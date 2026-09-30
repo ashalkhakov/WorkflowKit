@@ -166,6 +166,7 @@ jobs:
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make -j"$(nproc)"
+          make -C Server -j"$(nproc)"
 
       # On its own, so a compile error is reported as that and not as a
       # test failure. With ODATAKIT set, WorkflowKitOData too.
@@ -186,6 +187,14 @@ jobs:
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make test
+
+      # wf-serve on the example deployment: a purchase request started,
+      # approved and completed over HTTP (Server/check.sh).
+      - name: Server
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make server postgresql=yes mysql=yes
+          make -C Server check
 
       - name: Purchase request demo
         run: |

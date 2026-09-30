@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="purchase-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:process id="purchase" name="Purchase request" isExecutable="true">
+    <bpmn:startEvent id="request" name="Request">
+      <bpmn:extensionElements>
+        <camunda:formData businessKey="reference">
+          <camunda:formField id="reference" label="Reference" type="string">
+            <camunda:validation><camunda:constraint name="required"/></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="item" label="Item" type="string">
+            <camunda:validation><camunda:constraint name="required"/></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="amount" label="Amount" type="long">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+              <camunda:constraint name="min" config="1"/>
+            </camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:startEvent>
+    <bpmn:userTask id="approve" name="Approve purchase" camunda:candidateGroups="managers">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="item" label="Item" type="string">
+            <camunda:validation><camunda:constraint name="readonly"/></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="amount" label="Amount" type="long">
+            <camunda:validation><camunda:constraint name="readonly"/></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="approved" label="Approved" type="boolean">
+            <camunda:validation><camunda:constraint name="required"/></camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="decision" name="Approved?" default="rejectedFlow"/>
+    <bpmn:endEvent id="ordered" name="Ordered"/>
+    <bpmn:endEvent id="rejected" name="Rejected"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="request" targetRef="approve"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="approve" targetRef="decision"/>
+    <bpmn:sequenceFlow id="approvedFlow" sourceRef="decision" targetRef="ordered">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">=approved</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="rejectedFlow" sourceRef="decision" targetRef="rejected"/>
+  </bpmn:process>
+</bpmn:definitions>

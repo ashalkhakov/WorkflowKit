@@ -1,0 +1,6 @@
+{
+    StoreType = InMemory;
+    Deployments = Examples/deployments;
+    HistoryLevel = full;
+    Port = 8080;
+}

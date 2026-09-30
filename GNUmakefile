@@ -110,9 +110,13 @@ include $(GNUSTEP_MAKEFILES)/coredata-model.make
 
 include $(GNUSTEP_MAKEFILES)/library.make
 
-.PHONY: examples test
+.PHONY: examples test server
 examples: all
 	$(MAKE) -C Examples
+
+# wf-serve (Server/), with the OData API: needs ODATAKIT.
+server: all
+	$(MAKE) -C Server
 
 test: all
 	$(MAKE) -C Tests run-tests

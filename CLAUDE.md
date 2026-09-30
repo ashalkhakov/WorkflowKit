@@ -79,6 +79,21 @@ ODataKit: `ODATAKIT` names a built checkout (`/w/odatakit-*` in
 CI builds ODataKit at the commit pinned by `ODATAKIT_REF` in
 `.github/workflows/ci.yml`, and the OData API with it.
 
+`wf-serve` (`Server/`) is the engine served over HTTP: it opens a store,
+deploys a directory, loads plugins, runs the job executor and serves the
+OData API through ODataKit's `ODataHTTPServer` (its settings are at the top
+of `Server/wf-serve.m`). It needs ODataKit's `Server/` built too; with
+`postgresql=yes` and `mysql=yes` it has FreeCoreData's server stores.
+`make -C Server check` drives a purchase request through it with curl:
+
+```sh
+.tools/gnustep.sh "make -C /w/odatakit-master/Server && make server ODATAKIT=/w/odatakit-master \
+    && make -C Server check ODATAKIT=/w/odatakit-master"
+```
+
+On macOS it is the `wf-serve` scheme, which compiles ODataKit's HTTP
+adapter and the GCDWebServer sources it vendors from `../ODataKit`.
+
 ## macOS
 
 `WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`

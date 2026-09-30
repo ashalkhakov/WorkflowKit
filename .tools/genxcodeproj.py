@@ -36,6 +36,14 @@ MODELS = make_list("GNUmakefile", "WorkflowKit_XCDATAMODELD_FILES")     # Model/
 # ../ODataKit/ODataKit.xcodeproj.
 ODATA_SOURCES = make_list("GNUmakefile", "WorkflowKitOData_OBJC_FILES")  # OData/X.m
 ODATA_HEADERS = make_list("GNUmakefile", "WorkflowKitOData_HEADER_FILES")  # X.h
+# wf-serve, and what it compiles in from ODataKit: its HTTP adapter and the
+# GCDWebServer sources ODataKit vendors, as ODataKit's own macOS server
+# build does.
+SERVE = make_list("Server/GNUmakefile", "wf-serve_OBJC_FILES")             # X.m
+ODATAKIT = "../ODataKit"
+GCD = [f.replace("$(GCDWebServer_DIR)", ODATAKIT + "/ThirdParty/GCDWebServer")
+       for f in make_list(ODATAKIT + "/ThirdParty/GCDWebServer/GCDWebServer.make", "GCDWebServer_OBJC_FILES")]
+SERVE_EXTERNAL = [ODATAKIT + "/Server/ODataHTTPServer.m"] + GCD
 ODATA_OTHERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "OData", "*.h"))
                       if os.path.basename(p) not in ODATA_HEADERS)
 DOCS = ["CLAUDE.md", "WorkflowKit-BPMN-Subset.md", "GNUmakefile"]
@@ -80,6 +88,21 @@ doc_refs = {d: fileref(d, d, ftype(d)) for d in DOCS}
 cfg_refs = {c: fileref("Xcode/Configs/" + c, c, "text.xcconfig") for c in CONFIGS}
 odata_refs = {o: fileref(o, os.path.basename(o), ftype(o)) for o in ODATA_SOURCES}
 odata_hdr_refs = {h: fileref("OData/" + h, h, ftype(h)) for h in ODATA_HEADERS + ODATA_OTHERS}
+serve_refs = {s: fileref("Server/" + s, s, ftype(s)) for s in SERVE}
+
+
+# A file of another checkout, by its path from this one.
+def external_ref(path):
+    return add(oid("ref", path), os.path.basename(path), [
+        ("isa", "PBXFileReference"),
+        ("lastKnownFileType", ftype(path)),
+        ("name", q(os.path.basename(path))),
+        ("path", q(path)),
+        ("sourceTree", "SOURCE_ROOT"),
+    ])
+
+
+external_refs = {e: external_ref(e) for e in SERVE_EXTERNAL}
 
 
 
@@ -146,6 +169,7 @@ p_fw = product("WorkflowKit", ".framework", "wrapper.framework")
 p_odata = product("WorkflowKitOData", ".framework", "wrapper.framework")
 p_tests = product("WorkflowKitTests", ".xctest", "wrapper.cfbundle")
 p_demo = product("PurchaseRequestDemo", "", '"compiled.mach-o.executable"')
+p_serve = product("wf-serve", "", '"compiled.mach-o.executable"')
 
 
 # ---------------------------------------------------------------- build files
@@ -200,6 +224,17 @@ t_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKitTests", "Frameworks"
      buildfile("WorkflowKitTests", odatakit, "ODataKit.framework"),
      buildfile("WorkflowKitTests", odataservice, "ODataService.framework")]))
 
+s_sources = phase("PBXSourcesBuildPhase", "wf-serve", "Sources", names(
+    [buildfile("wf-serve", serve_refs[s], s) for s in SERVE] +
+    [buildfile("wf-serve", external_refs[e], os.path.basename(e)) for e in SERVE_EXTERNAL]))
+s_frameworks = phase("PBXFrameworksBuildPhase", "wf-serve", "Frameworks", names(
+    [buildfile("wf-serve", p_fw, "WorkflowKit.framework"),
+     buildfile("wf-serve", p_odata, "WorkflowKitOData.framework"),
+     buildfile("wf-serve", odatakit, "ODataKit.framework"),
+     buildfile("wf-serve", odataservice, "ODataService.framework"),
+     buildfile("wf-serve", foundation, "Foundation.framework"),
+     buildfile("wf-serve", coredata, "CoreData.framework")]))
+
 d_sources = phase("PBXSourcesBuildPhase", "PurchaseRequestDemo", "Sources", names(
     [buildfile("PurchaseRequestDemo", demo_refs[d], d) for d in DEMO]))
 d_frameworks = phase("PBXFrameworksBuildPhase", "PurchaseRequestDemo", "Frameworks", names(
@@ -223,12 +258,15 @@ g_odata = group("OData", "OData", [odata_hdr_refs[h] for h in ODATA_HEADERS + OD
                 [odata_refs[s] for s in ODATA_SOURCES], "OData")
 g_tests = group("Tests", "Tests", [test_refs[t] for t in TESTS + TEST_BODIES], "Tests")
 g_examples = group("Examples", "Examples", [demo_refs[d] for d in DEMO], "Examples")
+g_server = group("Server", "Server", [serve_refs[s] for s in SERVE], "Server")
+g_odatakit = group("ODataKitServer", "ODataKit Server", [external_refs[e] for e in SERVE_EXTERNAL])
 g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
-g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo])
+g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, odatakit, odataservice])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
-               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_configs, g_frameworks, g_products])
+               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_odatakit, g_configs,
+                g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
 
@@ -274,6 +312,19 @@ TESTS_S = {
     "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
+SERVE_S = {
+    # ODataHTTPServer.m names ODataKit's headers bare, as its tree has them.
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData", "$(SRCROOT)/%s/Server", '
+                           '"$(SRCROOT)/%s/Source/ODataKit/include", "$(SRCROOT)/%s/Source/ODataService/include", '
+                           '"$(SRCROOT)/%s/Source/ODataKit/include/ODataKit", '
+                           '"$(SRCROOT)/%s/Source/ODataService/include/ODataService", '
+                           '"$(SRCROOT)/%s/ThirdParty/GCDWebServer/Core", '
+                           '"$(SRCROOT)/%s/ThirdParty/GCDWebServer/Requests", '
+                           '"$(SRCROOT)/%s/ThirdParty/GCDWebServer/Responses")' % ((ODATAKIT,) * 8),
+    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
+    # What GCDWebServer uses of the system.
+    "OTHER_LDFLAGS": '("-framework", Security, "-framework", SystemConfiguration, "-framework", CoreServices, "-lz")',
+}
 DEMO_S = {
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
@@ -289,6 +340,7 @@ cl_fw = configs("WorkflowKit", settings(FW), settings(FW))
 cl_odata = configs("WorkflowKitOData", settings(ODATA_FW), settings(ODATA_FW))
 cl_tests = configs("WorkflowKitTests", settings(TESTS_S), settings(TESTS_S))
 cl_demo = configs("PurchaseRequestDemo", settings(DEMO_S), settings(DEMO_S))
+cl_serve = configs("wf-serve", settings(SERVE_S), settings(SERVE_S))
 
 project_id = oid("project")
 
@@ -336,6 +388,9 @@ t_tests = target("WorkflowKitTests", cl_tests, [t_sources, t_frameworks],
 t_demo = target("PurchaseRequestDemo", cl_demo, [d_sources, d_frameworks],
                 [dependency("PurchaseRequestDemo", t_fw, "WorkflowKit")],
                 p_demo, "com.apple.product-type.tool")
+t_serve = target("wf-serve", cl_serve, [s_sources, s_frameworks],
+                 [dependency("wf-serve", t_fw, "WorkflowKit"), dependency("wf-serve", t_odata, "WorkflowKitOData")],
+                 p_serve, "com.apple.product-type.tool")
 
 add(project_id, "Project object", [
     ("isa", "PBXProject"),
@@ -349,7 +404,7 @@ add(project_id, "Project object", [
     ("productRefGroup", "%s /* Products */" % g_products),
     ("projectDirPath", '""'),
     ("projectRoot", '""'),
-    ("targets", names([t_fw, t_odata, t_tests, t_demo])),
+    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve])),
 ])
 
 
@@ -400,12 +455,18 @@ def ref(tid, name, product_name):
             % (tid, product_name, name))
 
 
-def scheme(name, build, test=None, run=None):
+def scheme(name, build, test=None, run=None, directory=None, arguments=None):
     entries = "".join(
         '<BuildActionEntry buildForTesting = "YES" buildForRunning = "YES" buildForProfiling = "YES" '
         'buildForArchiving = "YES" buildForAnalyzing = "YES">%s</BuildActionEntry>' % r for r in build)
     testables = ('<TestableReference skipped = "NO">%s</TestableReference>' % test) if test else ""
     runnable = ('<BuildableProductRunnable runnableDebuggingMode = "0">%s</BuildableProductRunnable>' % run) if run else ""
+    if arguments:
+        runnable += '<CommandLineArguments>%s</CommandLineArguments>' % "".join(
+            '<CommandLineArgument argument = "%s" isEnabled = "YES"></CommandLineArgument>' % a for a in arguments)
+    workdir = ('useCustomWorkingDirectory = "YES" customWorkingDirectory = "%s"' % directory) if directory \
+        else 'useCustomWorkingDirectory = "NO"'
+
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
            '<Scheme LastUpgradeVersion = "1600" version = "1.7">'
            '<BuildAction parallelizeBuildables = "YES" buildImplicitDependencies = "YES">'
@@ -414,14 +475,14 @@ def scheme(name, build, test=None, run=None):
            'selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES">'
            '<Testables>%s</Testables></TestAction>'
            '<LaunchAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" '
-           'selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" useCustomWorkingDirectory = "NO" '
+           'selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" %s '
            'ignoresPersistentStateOnLaunch = "NO" debugDocumentVersioning = "YES" debugServiceExtension = "internal" '
            'allowLocationSimulation = "YES">%s</LaunchAction>'
            '<ProfileAction buildConfiguration = "Release" shouldUseLaunchSchemeArgsEnv = "YES" savedToolIdentifier = "" '
            'useCustomWorkingDirectory = "NO" debugDocumentVersioning = "YES"></ProfileAction>'
            '<AnalyzeAction buildConfiguration = "Debug"></AnalyzeAction>'
            '<ArchiveAction buildConfiguration = "Release" revealArchiveInOrganizer = "YES"></ArchiveAction>'
-           '</Scheme>\n') % (entries, testables, runnable)
+           '</Scheme>\n') % (entries, testables, workdir, runnable)
     with open(os.path.join(proj, "xcshareddata", "xcschemes", name + ".xcscheme"), "w") as f:
         f.write(xml)
 
@@ -430,6 +491,10 @@ fw_ref = ref(t_fw, "WorkflowKit", "WorkflowKit.framework")
 odata_ref = ref(t_odata, "WorkflowKitOData", "WorkflowKitOData.framework")
 tests_ref = ref(t_tests, "WorkflowKitTests", "WorkflowKitTests.xctest")
 demo_ref = ref(t_demo, "PurchaseRequestDemo", "PurchaseRequestDemo")
+serve_ref = ref(t_serve, "wf-serve", "wf-serve")
 scheme("WorkflowKit", [fw_ref, odata_ref], test=tests_ref)
 scheme("PurchaseRequestDemo", [demo_ref], run=demo_ref)
+# Run from Server/, on the example deployment, as `make -C Server run` does.
+scheme("wf-serve", [serve_ref], run=serve_ref, directory="$(PROJECT_DIR)/Server",
+       arguments=["-Config Examples/server.plist"])
 print("wrote", proj)
