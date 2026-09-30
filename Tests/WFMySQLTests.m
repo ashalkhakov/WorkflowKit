@@ -191,3 +191,10 @@
 @implementation WFDelegationMySQLTests
 #include "WFDelegationTests.inc"
 @end
+
+@interface WFTaskQueryMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFTaskQueryMySQLTests
+#include "WFTaskQueryTests.inc"
+@end

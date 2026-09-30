@@ -1,4 +1,5 @@
 #import "WFTypes.h"
+#import "WFTaskQuery.h"
 
 /* An open user task: a work item for a person. */
 @interface WFWorkItem : NSObject
@@ -33,6 +34,16 @@
  * service. */
 - (NSArray<WFWorkItem *> *)tasksForCandidateUser:(NSString *)userId groups:(NSArray<NSString *> *)groupIds;
 - (NSArray<WFWorkItem *> *)tasksForCandidateGroup:(NSString *)groupId;
+
+/* The open tasks the query finds, in its order: max of them from the
+ * first (0 for all of them). nil, with an error, for a query the engine
+ * cannot evaluate. */
+- (NSArray<WFWorkItem *> *)tasksMatching:(WFTaskQuery *)query
+                                   first:(NSUInteger)first
+                                     max:(NSUInteger)max
+                                   error:(NSError **)error;
+/* How many it finds; NSNotFound, with an error, as above. */
+- (NSUInteger)countOfTasksMatching:(WFTaskQuery *)query error:(NSError **)error;
 
 /* Takes the task: it becomes the user's. Fails when someone else has it. */
 - (BOOL)claimTask:(NSString *)taskId user:(NSString *)userId error:(NSError **)error;

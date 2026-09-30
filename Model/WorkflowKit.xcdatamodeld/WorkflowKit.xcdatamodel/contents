@@ -64,6 +64,7 @@
         <relationship name="eventSubscriptions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFEventSubscription" inverseName="execution" inverseEntity="WFEventSubscription"/>
         <relationship name="externalTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFExternalTask" inverseName="execution" inverseEntity="WFExternalTask"/>
         <relationship name="incidents" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFIncident" inverseName="execution" inverseEntity="WFIncident"/>
+        <relationship name="instanceTasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="WFTask" inverseName="processInstance" inverseEntity="WFTask"/>
         <relationship name="jobs" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFJob" inverseName="execution" inverseEntity="WFJob"/>
         <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="children" inverseEntity="WFExecution"/>
         <relationship name="subProcessInstance" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="WFExecution" inverseName="superExecution" inverseEntity="WFExecution"/>
@@ -126,6 +127,7 @@
         <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="tasks" inverseEntity="WFExecution"/>
         <relationship name="identityLinks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFIdentityLink" inverseName="task" inverseEntity="WFIdentityLink"/>
+        <relationship name="processInstance" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="instanceTasks" inverseEntity="WFExecution"/>
         <fetchIndex name="byTaskId">
             <fetchIndexElement property="taskId" type="Binary" order="ascending"/>
         </fetchIndex>

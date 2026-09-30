@@ -34,7 +34,9 @@
 		738E0A833B52B15316C602AD /* WFProcessDefinition.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = A06E910058F56C5670511532 /* WFProcessDefinition.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		74153B5566E751CBF5BB8387 /* WFFeelLexer.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 350118AD585544C074216A6D /* WFFeelLexer.m */; };
 		7E1890E7CA8ED649C3760ED6 /* WFExternalTaskService.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 3262393709D3B8619F13D3D3 /* WFExternalTaskService.m */; };
+		8E0B88B8C0EB745A09586093 /* WFTaskQuery.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = B3B0F8D62D83EA1F357CC5B5 /* WFTaskQuery.m */; };
 		934C02E7F8DD42E16C49585C /* WFFeelTests.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = E2B4B237BDA002E05DD8C104 /* WFFeelTests.m */; };
+		967C321CBF0CB818D7006865 /* WFTaskQuery.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 1289DE37EC202E36DE9793B1 /* WFTaskQuery.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		9680E7E0B664F918E2163DB9 /* WFSQLiteTests.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = 82A4864EAEF5AEB472FAF8F3 /* WFSQLiteTests.m */; };
 		9B2109DA4FA38D78E47C4F18 /* WFEntities.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 46562FCAF74704E8DA28E482 /* WFEntities.m */; };
 		9EFC88AC8AC6805FB078B889 /* WorkflowKit.framework in PurchaseRequestDemo */ = { isa = PBXBuildFile; fileRef = 26EF78F0632519432985E683 /* WorkflowKit.framework */; };
@@ -85,6 +87,7 @@
 		0D9E881A6CBBB60E5366EA0B /* GNUmakefile */ = { isa = PBXFileReference; lastKnownFileType = text; path = GNUmakefile; sourceTree = "<group>"; };
 		0DE2A8B934CE80EDBCE4F927 /* WFMultiInstanceTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFMultiInstanceTests.inc; sourceTree = "<group>"; };
 		0FBE0B36CE777D3717DE2714 /* WFCompensationTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFCompensationTests.inc; sourceTree = "<group>"; };
+		1289DE37EC202E36DE9793B1 /* WFTaskQuery.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFTaskQuery.h; sourceTree = "<group>"; };
 		14623503F8D06CC9A54D2436 /* WFDmn.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDmn.m; sourceTree = "<group>"; };
 		14C3A8952B45C2F1F18C2F0A /* WFBpmn.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFBpmn.h; sourceTree = "<group>"; };
 		153EB9D97DC2549983EE37E9 /* WFProcessDefinition.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFProcessDefinition.m; sourceTree = "<group>"; };
@@ -140,6 +143,7 @@
 		A9B0C42046EF49A1107A930C /* WFTaskService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFTaskService.h; sourceTree = "<group>"; };
 		AE65B7CC7F6769D3281593A8 /* WFBpmnTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFBpmnTests.inc; sourceTree = "<group>"; };
 		B29454D488C4F49E273C15A0 /* Foundation.framework */ = { isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		B3B0F8D62D83EA1F357CC5B5 /* WFTaskQuery.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTaskQuery.m; sourceTree = "<group>"; };
 		B43FEF13E290AC18B2A04146 /* WFDeploymentTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDeploymentTests.inc; sourceTree = "<group>"; };
 		B866FAA5349791DCA0D5B61E /* WFEventSubProcessTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFEventSubProcessTests.inc; sourceTree = "<group>"; };
 		B889BD1773784D5B911A2332 /* WFTestCase.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTestCase.m; sourceTree = "<group>"; };
@@ -152,6 +156,7 @@
 		D83E2818811F67EF54938FC7 /* WFGatewayTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFGatewayTests.inc; sourceTree = "<group>"; };
 		DFC8CC2FFB1029A61E406DE9 /* WorkflowKitTests.xctest */ = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkflowKitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E019399656F10AACD6743EB4 /* WFFlowElements.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFlowElements.m; sourceTree = "<group>"; };
+		E1D81AEC76F2D4CF11A1C7E6 /* WFTaskQueryTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTaskQueryTests.inc; sourceTree = "<group>"; };
 		E2B4B237BDA002E05DD8C104 /* WFFeelTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFeelTests.m; sourceTree = "<group>"; };
 		E395F9BB0612F9119F6D7D37 /* WFRepositoryService.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFRepositoryService.m; sourceTree = "<group>"; };
 		E48A11917589E3A37C0F4190 /* WFFeelEvaluator.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFeelEvaluator.m; sourceTree = "<group>"; };
@@ -214,6 +219,7 @@
 				09C94C2B2CF68470F191FFF5 /* WFStore.h */,
 				59630E0E416E1E31E471B6E2 /* WFRepositoryService.h */,
 				61105A30BA3840DBFB00DA37 /* WFRuntimeService.h */,
+				1289DE37EC202E36DE9793B1 /* WFTaskQuery.h */,
 				A9B0C42046EF49A1107A930C /* WFTaskService.h */,
 				396282C4A5E97D9C66F1AA38 /* WFHistoryService.h */,
 				23908830DA51E97C102E5DAB /* WFManagementService.h */,
@@ -268,6 +274,7 @@
 				6BEC7F52D7040725EEB5536E /* WFSubprocessTests.inc */,
 				44A3FD1AC6AC91A463437904 /* WFTaskAssignmentTests.inc */,
 				4A8866F19E8989B9F0BFC597 /* WFTaskKindsTests.inc */,
+				E1D81AEC76F2D4CF11A1C7E6 /* WFTaskQueryTests.inc */,
 				256993C8A240F5C1E562CB7A /* WFTimerTests.inc */,
 			);
 			path = Tests;
@@ -336,6 +343,7 @@
 				46562FCAF74704E8DA28E482 /* WFEntities.m */,
 				73088BE5CB96B1B9B60C9199 /* WFCommandContext.m */,
 				A99FA1FDB589AA19D5B73BB8 /* WFServices.m */,
+				B3B0F8D62D83EA1F357CC5B5 /* WFTaskQuery.m */,
 				3262393709D3B8619F13D3D3 /* WFExternalTaskService.m */,
 				7B77D7E5D0BDF933CF77FF96 /* WFProcessEngine.m */,
 			);
@@ -360,6 +368,7 @@
 				1B5255276409615011BDB720 /* WFStore.h in WorkflowKit */,
 				B50DB206BE50D8BF4BE9675A /* WFRepositoryService.h in WorkflowKit */,
 				23EC5DB65F46CE005D62EFD4 /* WFRuntimeService.h in WorkflowKit */,
+				967C321CBF0CB818D7006865 /* WFTaskQuery.h in WorkflowKit */,
 				E7AD0FF5EA227F288119CE60 /* WFTaskService.h in WorkflowKit */,
 				F561F9B5B6C1B00BED4CA7F5 /* WFHistoryService.h in WorkflowKit */,
 				0C70A1AA60C2FBDC3622853E /* WFManagementService.h in WorkflowKit */,
@@ -489,6 +498,7 @@
 				9B2109DA4FA38D78E47C4F18 /* WFEntities.m in WorkflowKit */,
 				6E1AA21AE7EA28F91B1ECDD1 /* WFCommandContext.m in WorkflowKit */,
 				6E96E2FF000FC70BE28FB51F /* WFServices.m in WorkflowKit */,
+				8E0B88B8C0EB745A09586093 /* WFTaskQuery.m in WorkflowKit */,
 				7E1890E7CA8ED649C3760ED6 /* WFExternalTaskService.m in WorkflowKit */,
 				FB47DD84902C98DE6B40B8ED /* WFProcessEngine.m in WorkflowKit */,
 				F416088620E26E1CFEFB72F3 /* WorkflowKit.xcdatamodeld in WorkflowKit */,

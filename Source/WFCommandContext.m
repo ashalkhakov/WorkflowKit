@@ -3256,6 +3256,7 @@ WFSameKind(WFFlowNode *a, WFFlowNode *b)
 		row.createdAt = [NSDate date];
 		row.priority = 50;
 		row.execution = execution;
+		row.processInstance = [execution processInstance];
 		if (![self assign:task to:row]) {
 			return;
 		}

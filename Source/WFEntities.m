@@ -76,7 +76,7 @@ NSString * const WFHistoricStateExternallyTerminated = @"EXTERNALLY_TERMINATED";
 
 @end
 
-static BOOL
+BOOL
 WFIsBooleanNumber(NSNumber *number)
 {
 	const char *type = [number objCType];
@@ -84,7 +84,7 @@ WFIsBooleanNumber(NSNumber *number)
 		|| strcmp(type, "B") == 0;
 }
 
-static BOOL
+BOOL
 WFIsIntegerNumber(NSNumber *number)
 {
 	const char *type = [number objCType];
@@ -178,7 +178,7 @@ WFIsIntegerNumber(NSNumber *number)
 @implementation WFTaskEntity
 @dynamic taskId, name, taskDefinitionKey, assignee, processInstanceId;
 @dynamic definitionId, activityInstanceId, createdAt, dueDate, followUpDate, priority, suspended;
-@dynamic execution, identityLinks;
+@dynamic execution, processInstance, identityLinks;
 @end
 
 NSString * const WFIdentityLinkCandidate = @"candidate";

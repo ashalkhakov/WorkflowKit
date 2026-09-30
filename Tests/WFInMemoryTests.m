@@ -193,3 +193,10 @@
 @implementation WFDelegationInMemoryTests
 #include "WFDelegationTests.inc"
 @end
+
+@interface WFTaskQueryInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFTaskQueryInMemoryTests
+#include "WFTaskQueryTests.inc"
+@end

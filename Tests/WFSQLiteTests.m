@@ -191,3 +191,10 @@
 @implementation WFDelegationSQLiteTests
 #include "WFDelegationTests.inc"
 @end
+
+@interface WFTaskQuerySQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFTaskQuerySQLiteTests
+#include "WFTaskQueryTests.inc"
+@end

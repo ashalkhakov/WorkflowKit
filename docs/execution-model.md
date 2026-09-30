@@ -280,6 +280,18 @@ groups, passwords) is out of scope. Assignees and groups are plain strings,
 resolved by the application: a query for a candidate user takes that
 user's groups as an argument. Claiming a task someone else holds fails.
 
+**Queries** (`WFTaskQuery`) find open tasks by what the task holds, who
+it is offered to, its process, and its process instance's variables,
+sorted and paged. A query is one fetch: its conditions are one predicate
+over task rows, so the store evaluates it, and a variable condition is a
+subquery over the variables of the task's process instance, reached by a
+relationship from the task to the instance's root execution. It asks the
+instance's own variables, not a scope's inside it. A variable row keeps
+its value in a column by type (text, whole or real number), so a
+condition is typed by its value: a number matches a whole or a real
+number, a date the real number it is kept as. The same predicate serves
+whatever else filters tasks by variables, such as an API.
+
 **Input/output mappings** make an activity a scope: its inputs are its
 own variables, set as it is entered, and its outputs are evaluated in
 that scope when it completes normally -- a task or call activity as its

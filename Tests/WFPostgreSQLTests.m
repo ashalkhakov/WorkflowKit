@@ -191,3 +191,10 @@
 @implementation WFDelegationPostgreSQLTests
 #include "WFDelegationTests.inc"
 @end
+
+@interface WFTaskQueryPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFTaskQueryPostgreSQLTests
+#include "WFTaskQueryTests.inc"
+@end

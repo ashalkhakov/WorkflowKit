@@ -89,7 +89,10 @@ typedef NS_ENUM(NSInteger, WFErrorCode) {
 	WFErrorInvalidDmn,
 	/* A decision could not be evaluated: an input or output that is not
 	 * of its type, several rules where one may match. */
-	WFErrorDecision
+	WFErrorDecision,
+	/* A query condition the engine cannot evaluate: an operator the value
+	 * has no order for, a value of a type variables do not hold. */
+	WFErrorInvalidQuery
 };
 
 extern NSString * const WFErrorDomain;

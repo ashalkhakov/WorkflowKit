@@ -64,6 +64,10 @@ typedef NS_ENUM(int16_t, WFVariableType) {
 	WFVariableTypeJSON
 };
 
+/* How a number is stored: a boolean (@YES), a whole number, else a real. */
+BOOL WFIsBooleanNumber(NSNumber *number);
+BOOL WFIsIntegerNumber(NSNumber *number);
+
 /* A typed value, as both variable rows store it. */
 @interface NSManagedObject (WFTypedValue)
 - (id)wf_value;
@@ -97,6 +101,8 @@ typedef NS_ENUM(int16_t, WFVariableType) {
 @property (nonatomic) int32_t priority;
 @property (nonatomic) BOOL suspended;
 @property (nonatomic, strong) WFExecutionEntity *execution;
+/* The root of its process instance, whose variables a query asks about. */
+@property (nonatomic, strong) WFExecutionEntity *processInstance;
 @property (nonatomic, strong) NSSet *identityLinks;
 @end
 

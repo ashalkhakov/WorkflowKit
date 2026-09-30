@@ -1,6 +1,7 @@
 #import "WFProcessEngine+Internal.h"
 #import "WFCommandContext.h"
 #import "WFEntities.h"
+#import "WFTaskQuery+Internal.h"
 #import "WFFlowElements.h"
 #import "WFProcessDefinition.h"
 
@@ -816,6 +817,67 @@ processInstanceId:(NSString *)processInstanceId
 		return YES;
 	} error:NULL];
 	return tasks;
+}
+
+/* The query's fetch of WFTask rows, in the command; nil, with an error. */
+- (NSFetchRequest *)fetchOf:(WFTaskQuery *)query command:(WFCommandContext *)command error:(NSError **)error
+{
+	NSArray *definitionIds = nil;
+	NSString *key = query.wf_processDefinitionKey;
+	if (key != nil) {
+		definitionIds = [[command fetch:@"WFDefinitionRecord"
+		                      predicate:[NSPredicate predicateWithFormat:@"key == %@", key]
+		                           sort:nil
+		                          limit:0] valueForKey:@"definitionId"];
+	}
+	NSPredicate *predicate = [query wf_predicateWithDefinitionIds:definitionIds error:error];
+	if (predicate == nil) {
+		return nil;
+	}
+	NSFetchRequest *fetch = [NSFetchRequest fetchRequestWithEntityName:@"WFTask"];
+	[fetch setPredicate:predicate];
+	[fetch setSortDescriptors:[query wf_sortDescriptors]];
+	return fetch;
+}
+
+- (NSArray<WFWorkItem *> *)tasksMatching:(WFTaskQuery *)query
+                                   first:(NSUInteger)first
+                                     max:(NSUInteger)max
+                                   error:(NSError **)error
+{
+	NSMutableArray *tasks = [NSMutableArray array];
+	BOOL found = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		NSFetchRequest *fetch = [self fetchOf:query command:command error:commandError];
+		if (fetch == nil) {
+			return NO;
+		}
+		[fetch setFetchOffset:first];
+		[fetch setFetchLimit:max];
+		NSArray *rows = [command.context executeFetchRequest:fetch error:commandError];
+		if (rows == nil) {
+			return NO;
+		}
+		for (WFTaskEntity *entity in rows) {
+			[tasks addObject:[WFWorkItem wf_workItemWithEntity:entity]];
+		}
+		return YES;
+	} error:error];
+	return found ? tasks : nil;
+}
+
+- (NSUInteger)countOfTasksMatching:(WFTaskQuery *)query error:(NSError **)error
+{
+	__block NSUInteger count = NSNotFound;
+	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		NSFetchRequest *fetch = [self fetchOf:query command:command error:commandError];
+		if (fetch == nil) {
+			return NO;
+		}
+		[fetch setSortDescriptors:nil];
+		count = [command.context countForFetchRequest:fetch error:commandError];
+		return count != NSNotFound;
+	} error:error];
+	return count;
 }
 
 - (WFWorkItem *)taskWithId:(NSString *)taskId error:(NSError **)error
