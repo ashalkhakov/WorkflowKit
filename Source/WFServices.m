@@ -907,7 +907,7 @@ processInstanceId:(NSString *)processInstanceId
 		}
 		task.assignee = userId;
 		[command historyTask:task.taskId assignee:userId];
-		return YES;
+		return [command taskAssigned:task];
 	} error:error];
 }
 
@@ -953,7 +953,7 @@ processInstanceId:(NSString *)processInstanceId
 			return NO;
 		}
 		WFExecutionEntity *execution = task.execution;
-		if (![command setVariables:variables from:execution]) {
+		if (![command setVariables:variables from:execution] || ![command taskCompleting:task]) {
 			return NO;
 		}
 		[command historyTaskCompleted:task.taskId];

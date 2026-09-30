@@ -18,6 +18,8 @@
 /* camunda:historyTimeToLive, in days: how long history of an ended
  * instance is kept. nil keeps it. */
 @property (nonatomic, readonly, strong) NSNumber *historyTimeToLive;
+/* The process's start and end listeners. */
+@property (nonatomic, readonly, copy) NSArray<WFListener *> *executionListeners;
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, WFFlowNode *> *nodes;
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, WFSequenceFlow *> *flows;
 @property (nonatomic, readonly, copy) NSArray<NSString *> *flowOrder;
@@ -93,6 +95,15 @@
 - (instancetype)setDecisionBinding:(WFCalledElementBinding)binding
                            version:(NSInteger)version
                         forElement:(NSString *)elementId;
+/* A service task running code the host brings: see WFDelegation.h. */
+- (instancetype)addServiceTask:(NSString *)elementId delegate:(WFDelegateReference *)delegate;
+/* The code a service, send or business rule task runs instead of being an
+ * external task. */
+- (instancetype)setDelegate:(WFDelegateReference *)delegate forElement:(NSString *)elementId;
+/* A listener: an execution listener on a node (start, end), a sequence
+ * flow (take) or, given the process's id, the process (start, end); a
+ * task listener on a user task (create, assignment, complete, delete). */
+- (instancetype)addListener:(WFListener *)listener forElement:(NSString *)elementId;
 /* Waits for the message, as a message catch event does. */
 - (instancetype)addReceiveTask:(NSString *)elementId message:(NSString *)messageName;
 /* A manual task, or a plain task: the path passes through. */

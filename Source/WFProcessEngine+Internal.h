@@ -26,6 +26,10 @@
  * record it. force ignores the due date, retries and other owners' locks. */
 - (BOOL)wf_runJob:(NSString *)jobId force:(BOOL)force error:(NSError **)error;
 - (void)wf_reschedule;
+/* What a reference names: an instance of its class, made now, or the
+ * registered object. nil, with an error, when it names nothing that
+ * conforms to the protocol. */
+- (id)wf_delegateFor:(WFDelegateReference *)reference protocol:(Protocol *)protocol error:(NSError **)error;
 /* Orders history written in the same instant. */
 - (int64_t)wf_nextSequence;
 /* The serial queue a process instance's work runs on. */

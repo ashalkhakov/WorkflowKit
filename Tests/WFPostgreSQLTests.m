@@ -184,3 +184,10 @@
 @implementation WFMigrationPostgreSQLTests
 #include "WFMigrationTests.inc"
 @end
+
+@interface WFDelegationPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFDelegationPostgreSQLTests
+#include "WFDelegationTests.inc"
+@end

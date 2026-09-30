@@ -137,7 +137,7 @@
 	}
 
 	NSString *internal = [xml stringByReplacingOccurrencesOfString:@"<bpmn:sendTask id=\"send\" camunda:type=\"external\" camunda:topic=\"mail\"/>"
-	                                                    withString:@"<bpmn:sendTask id=\"send\" camunda:class=\"Mailer\"/>"];
+	                                                    withString:@"<bpmn:sendTask id=\"send\"/>"];
 	XCTAssertNil([WFBpmnReader definitionFromXMLString:internal error:&error]);
 	XCTAssertTrue([[error localizedDescription] rangeOfString:@"external"].location != NSNotFound, @"%@", error);
 	NSString *instantiating = [xml stringByReplacingOccurrencesOfString:@"messageRef=\"Message_1\""

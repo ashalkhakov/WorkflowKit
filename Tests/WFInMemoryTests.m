@@ -186,3 +186,10 @@
 @implementation WFMigrationInMemoryTests
 #include "WFMigrationTests.inc"
 @end
+
+@interface WFDelegationInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFDelegationInMemoryTests
+#include "WFDelegationTests.inc"
+@end

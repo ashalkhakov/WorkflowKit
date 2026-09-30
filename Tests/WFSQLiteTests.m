@@ -184,3 +184,10 @@
 @implementation WFMigrationSQLiteTests
 #include "WFMigrationTests.inc"
 @end
+
+@interface WFDelegationSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFDelegationSQLiteTests
+#include "WFDelegationTests.inc"
+@end

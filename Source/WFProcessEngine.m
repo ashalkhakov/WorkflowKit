@@ -51,6 +51,10 @@ WFIsConflict(NSError *error)
 	NSMutableDictionary *_busy;
 	int64_t _sequence;
 	dispatch_source_t _cleanup;
+	/* Name to a registered delegate object, and to a registered class. */
+	NSMutableDictionary *_delegates;
+	NSMutableDictionary *_delegateClasses;
+	NSMutableArray *_plugins;
 }
 
 - (instancetype)initWithStore:(WFStore *)store
@@ -68,6 +72,9 @@ WFIsConflict(NSError *error)
 	_managementService = [[WFManagementService alloc] initWithProcessEngine:self];
 	_externalTaskService = [[WFExternalTaskService alloc] initWithProcessEngine:self];
 	_decisionService = [[WFDecisionService alloc] initWithProcessEngine:self];
+	_delegates = [NSMutableDictionary dictionary];
+	_delegateClasses = [NSMutableDictionary dictionary];
+	_plugins = [NSMutableArray array];
 	_jobExecutorActive = YES;
 	_historyLevel = WFHistoryLevelAudit;
 	_identifier = [NSString stringWithFormat:@"workflowkit@%@",
@@ -153,6 +160,100 @@ WFIsConflict(NSError *error)
 - (dispatch_queue_t)wf_queueFor:(NSString *)key
 {
 	return [self stripeFor:key];
+}
+
+#pragma mark - Delegates and plugins
+
+- (void)registerDelegate:(id)delegate forName:(NSString *)name
+{
+	@synchronized (_delegates) {
+		if (delegate == nil) {
+			[_delegates removeObjectForKey:name];
+		} else {
+			[_delegates setObject:delegate forKey:name];
+		}
+	}
+}
+
+- (void)registerDelegateClass:(Class)delegateClass forName:(NSString *)name
+{
+	@synchronized (_delegates) {
+		if (delegateClass == Nil) {
+			[_delegateClasses removeObjectForKey:name];
+		} else {
+			[_delegateClasses setObject:delegateClass forKey:name];
+		}
+	}
+}
+
+- (void)addPlugin:(id<WFEnginePlugin>)plugin
+{
+	@synchronized (_delegates) {
+		[_plugins addObject:plugin];
+	}
+	[plugin registerWithEngine:self];
+}
+
+- (BOOL)loadPluginsInDirectory:(NSURL *)directory error:(NSError **)error
+{
+	NSArray *entries = [[NSFileManager defaultManager] contentsOfDirectoryAtURL:directory
+	                                                 includingPropertiesForKeys:nil
+	                                                                    options:0
+	                                                                      error:error];
+	if (entries == nil) {
+		return NO;
+	}
+	NSArray *sorted = [entries sortedArrayUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b) {
+		return [[a lastPathComponent] compare:[b lastPathComponent]];
+	}];
+	for (NSURL *url in sorted) {
+		NSString *extension = [url pathExtension];
+		if (![extension isEqualToString:@"plugin"] && ![extension isEqualToString:@"bundle"]) {
+			continue;
+		}
+		NSBundle *bundle = [NSBundle bundleWithURL:url];
+		NSError *loadError = nil;
+		Class principal = [bundle loadAndReturnError:&loadError] ? [bundle principalClass] : Nil;
+		if (principal == Nil || ![principal conformsToProtocol:@protocol(WFEnginePlugin)]) {
+			if (error != NULL) {
+				*error = [NSError errorWithDomain:WFErrorDomain code:WFErrorInvalidState userInfo:@{
+					NSLocalizedDescriptionKey: [NSString stringWithFormat:
+						@"%@ is not a plugin: %@", [url lastPathComponent],
+						loadError != nil ? [loadError localizedDescription]
+							: @"its principal class does not conform to WFEnginePlugin"] }];
+			}
+			return NO;
+		}
+		[self addPlugin:[[principal alloc] init]];
+	}
+	return YES;
+}
+
+- (id)wf_delegateFor:(WFDelegateReference *)reference protocol:(Protocol *)protocol error:(NSError **)error
+{
+	id delegate = nil;
+	if (reference.delegateName != nil) {
+		@synchronized (_delegates) {
+			delegate = [_delegates objectForKey:reference.delegateName];
+		}
+	} else {
+		Class delegateClass = Nil;
+		@synchronized (_delegates) {
+			delegateClass = [_delegateClasses objectForKey:reference.className];
+		}
+		delegateClass = delegateClass ?: NSClassFromString(reference.className);
+		delegate = [[delegateClass alloc] init];
+	}
+	if (delegate == nil || ![delegate conformsToProtocol:protocol]) {
+		if (error != NULL) {
+			*error = [NSError errorWithDomain:WFErrorDomain code:WFErrorHandler userInfo:@{
+				NSLocalizedDescriptionKey: [NSString stringWithFormat:delegate == nil
+					? @"%@ is not registered, loaded or linked" : @"%@ does not conform to %@",
+					reference, NSStringFromProtocol(protocol)] }];
+		}
+		return nil;
+	}
+	return delegate;
 }
 
 #pragma mark - Commands

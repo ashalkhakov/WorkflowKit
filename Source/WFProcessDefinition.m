@@ -17,9 +17,16 @@
 - (void)setForCompensation:(BOOL)forCompensation;
 - (void)addInputParameter:(WFParameter *)parameter;
 - (void)addOutputParameter:(WFParameter *)parameter;
+- (void)addExecutionListener:(WFListener *)listener;
+@end
+
+@interface WFSequenceFlow (WFBuilderAccess)
+- (void)addListener:(WFListener *)listener;
 @end
 
 @interface WFTask (WFBuilderAccess)
+- (void)setDelegate:(WFDelegateReference *)delegate;
+- (void)addTaskListener:(WFListener *)listener;
 - (void)setDecisionRef:(NSString *)decisionRef;
 - (void)setDecisionBinding:(WFCalledElementBinding)binding;
 - (void)setDecisionVersion:(NSInteger)version;
@@ -59,6 +66,7 @@
 @property (nonatomic, readwrite, copy) NSString *resourceName;
 @property (nonatomic, readwrite, strong) NSNumber *defaultTaskPriority;
 @property (nonatomic, readwrite, strong) NSNumber *historyTimeToLive;
+@property (nonatomic, readwrite, copy) NSArray<WFListener *> *executionListeners;
 /* Node id to @[node, scope definition], for the whole tree. */
 @property (nonatomic, strong) NSDictionary *nodeIndex;
 - (instancetype)initWithProcessId:(NSString *)processId
@@ -131,6 +139,7 @@
 	copy.resourceName = resourceName;
 	copy.defaultTaskPriority = self.defaultTaskPriority;
 	copy.historyTimeToLive = self.historyTimeToLive;
+	copy.executionListeners = self.executionListeners;
 	return copy;
 }
 
@@ -204,6 +213,7 @@
 @property (nonatomic, copy) NSString *processName;
 @property (nonatomic, strong) NSNumber *processTaskPriority;
 @property (nonatomic, strong) NSNumber *processTimeToLive;
+@property (nonatomic, strong) NSMutableArray<WFListener *> *processListeners;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WFFlowNode *> *nodes;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WFSequenceFlow *> *flows;
 @property (nonatomic, strong) NSMutableArray<NSString *> *flowOrder;
@@ -414,6 +424,61 @@
 	                                       actionKey:actionKey
 	                                        assignee:nil];
 	return [self addNode:task];
+}
+
+- (instancetype)addServiceTask:(NSString *)elementId delegate:(WFDelegateReference *)delegate
+{
+	[self addTask:elementId kind:WFTaskKindService actionKey:nil];
+	return [self setDelegate:delegate forElement:elementId];
+}
+
+- (instancetype)setDelegate:(WFDelegateReference *)delegate forElement:(NSString *)elementId
+{
+	WFTask *task = (WFTask *)[self.nodes objectForKey:elementId];
+	if ([task isKindOfClass:[WFTask class]]) {
+		[task setDelegate:delegate];
+	}
+	return self;
+}
+
+- (instancetype)addListener:(WFListener *)listener forElement:(NSString *)elementId
+{
+	WFFlowNode *node = [self.nodes objectForKey:elementId];
+	WFSequenceFlow *flow = [self.flows objectForKey:elementId];
+	BOOL taskEvent = listener.event >= WFListenerEventCreate;
+	NSString *problem = nil;
+	if ([elementId isEqualToString:self.processId] && node == nil) {
+		if (listener.event != WFListenerEventStart && listener.event != WFListenerEventEnd) {
+			problem = @"a process has start and end listeners";
+		} else {
+			self.processListeners = self.processListeners ?: [NSMutableArray array];
+			[self.processListeners addObject:listener];
+		}
+	} else if (flow != nil) {
+		if (listener.event != WFListenerEventTake) {
+			problem = @"a sequence flow has take listeners";
+		} else {
+			[flow addListener:listener];
+		}
+	} else if (node == nil) {
+		problem = @"there is no such element";
+	} else if (taskEvent) {
+		if (![node isKindOfClass:[WFTask class]] || [(WFTask *)node kind] != WFTaskKindUser) {
+			problem = @"only a user task has task listeners";
+		} else {
+			[(WFTask *)node addTaskListener:listener];
+		}
+	} else if (listener.event == WFListenerEventTake) {
+		problem = @"take listeners are on sequence flows";
+	} else {
+		[node addExecutionListener:listener];
+	}
+	if (problem != nil) {
+		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain code:WFErrorInvalidDefinition
+			userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@: a %@ listener: %@",
+				elementId, [WFListener nameOfEvent:listener.event], problem] }];
+	}
+	return self;
 }
 
 - (instancetype)addTask:(NSString *)elementId kind:(WFTaskKind)kind actionKey:(NSString *)actionKey
@@ -1163,8 +1228,15 @@
 			return [self fail:error message:[NSString stringWithFormat:
 				@"%@: a conditional event needs its condition", node.elementId]];
 		}
+		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node delegate] != nil
+		    && [(WFTask *)node kind] != WFTaskKindService && [(WFTask *)node kind] != WFTaskKindSend
+		    && [(WFTask *)node kind] != WFTaskKindBusinessRule) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: only service, send and business rule tasks run a delegate", node.elementId]];
+		}
 		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindBusinessRule
-		    && [[(WFTask *)node decisionRef] length] == 0 && [[(WFTask *)node actionKey] length] == 0) {
+		    && [[(WFTask *)node decisionRef] length] == 0 && [[(WFTask *)node actionKey] length] == 0
+		    && [(WFTask *)node delegate] == nil) {
 			return [self fail:error message:[NSString stringWithFormat:
 				@"%@: a business rule task needs a decision or an external task's topic", node.elementId]];
 		}
@@ -1320,6 +1392,7 @@
 		                                     flowOrder:self.flowOrder];
 	definition.defaultTaskPriority = self.processTaskPriority;
 	definition.historyTimeToLive = self.processTimeToLive;
+	definition.executionListeners = self.processListeners ?: @[];
 	return definition;
 }
 

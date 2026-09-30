@@ -1,4 +1,5 @@
 #import "WFTypes.h"
+#import "WFDelegation.h"
 
 @class WFFeelExpression;
 @class WFMultiInstance;
@@ -46,6 +47,8 @@
  * activity interrupted by a boundary event maps no outputs. */
 @property (nonatomic, readonly, copy) NSArray<WFParameter *> *inputParameters;
 @property (nonatomic, readonly, copy) NSArray<WFParameter *> *outputParameters;
+/* camunda:executionListener: start and end listeners. */
+@property (nonatomic, readonly, copy) NSArray<WFListener *> *executionListeners;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId
@@ -209,6 +212,11 @@ typedef NS_ENUM(NSInteger, WFDecisionResultMapping) {
 @property (nonatomic, readonly, copy) NSString *actionKey;
 /* The message a receive task waits for: the actionKey it was made with. */
 @property (nonatomic, readonly, copy) NSString *messageName;
+/* A service, send or business rule task's code: camunda:class or
+ * camunda:delegateExpression; nil for an external task. */
+@property (nonatomic, readonly, strong) WFDelegateReference *delegate;
+/* camunda:taskListener on a user task. */
+@property (nonatomic, readonly, copy) NSArray<WFListener *> *taskListeners;
 /* A business rule task's decision, camunda:decisionRef, which version
  * of it, and where its result goes: camunda:resultVariable, set as the
  * mapping has it, or nowhere when nil. A business rule task without a
@@ -324,6 +332,8 @@ typedef NS_ENUM(NSInteger, WFDecisionResultMapping) {
 @property (nonatomic, readonly, copy) NSString *targetId;
 @property (nonatomic, readonly, strong) id condition;
 @property (nonatomic, readonly, getter=isDefaultFlow) BOOL defaultFlow;
+/* camunda:executionListener: take listeners. */
+@property (nonatomic, readonly, copy) NSArray<WFListener *> *listeners;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId

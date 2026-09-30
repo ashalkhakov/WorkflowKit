@@ -163,6 +163,13 @@ static NSString * const WFBusinessKeyExpression = @"#{execution.processBusinessK
 	WFSet(process, @"isExecutable", @"true");
 	WFSet(process, @"camunda:taskPriority", [definition.defaultTaskPriority stringValue]);
 	WFSet(process, @"camunda:historyTimeToLive", [definition.historyTimeToLive stringValue]);
+	if ([definition.executionListeners count] > 0) {
+		NSXMLElement *extensions = WFElement(@"bpmn:extensionElements");
+		for (WFListener *listener in definition.executionListeners) {
+			[extensions addChild:[self listener:listener named:@"camunda:executionListener"]];
+		}
+		[process addChild:extensions];
+	}
 	if (![self appendScope:definition to:process context:context error:error]) {
 		return nil;
 	}
@@ -401,6 +408,45 @@ WFCaughtCode(NSString *code)
 	return element;
 }
 
+/* camunda:class or camunda:delegateExpression, as attributes. */
++ (NSArray *)attributesOf:(WFDelegateReference *)delegate
+{
+	return delegate.className != nil ? @[ @[ @"camunda:class", delegate.className ] ]
+		: @[ @[ @"camunda:delegateExpression", [NSString stringWithFormat:@"${%@}", delegate.delegateName] ] ];
+}
+
+/* A delegate's fields: literal text as camunda:string, anything else as
+ * camunda:expression holding =FEEL. */
++ (void)appendFieldsOf:(WFDelegateReference *)delegate to:(NSXMLElement *)container
+{
+	for (WFParameter *field in delegate.fields) {
+		NSXMLElement *element = WFElement(@"camunda:field");
+		WFSet(element, @"name", field.name);
+		WFFeelNode *root = [field.expression root];
+		NSXMLElement *value = nil;
+		if (root.kind == WFFeelNodeLiteral && [root.value isKindOfClass:[NSString class]]) {
+			value = WFElement(@"camunda:string");
+			[value setStringValue:root.value];
+		} else {
+			value = WFElement(@"camunda:expression");
+			[value setStringValue:[@"=" stringByAppendingString:[field.expression expressionString]]];
+		}
+		[element addChild:value];
+		[container addChild:element];
+	}
+}
+
++ (NSXMLElement *)listener:(WFListener *)listener named:(NSString *)name
+{
+	NSXMLElement *element = WFElement(name);
+	WFSet(element, @"event", [WFListener nameOfEvent:listener.event]);
+	for (NSArray *attribute in [self attributesOf:listener.delegate]) {
+		WFSet(element, [attribute objectAtIndex:0], [attribute objectAtIndex:1]);
+	}
+	[self appendFieldsOf:listener.delegate to:element];
+	return element;
+}
+
 + (BOOL)appendNode:(WFFlowNode *)node
                 to:(NSXMLElement *)parent
            context:(WFBpmnWriteContext *)context
@@ -470,6 +516,10 @@ WFCaughtCode(NSString *code)
 				[attributes addObject:@[ @"camunda:mapDecisionResult",
 					[mappings objectAtIndex:(NSUInteger)task.mapDecisionResult] ]];
 			}
+		} else if (task.delegate != nil) {
+			tag = task.kind == WFTaskKindService ? @"bpmn:serviceTask"
+				: task.kind == WFTaskKindSend ? @"bpmn:sendTask" : @"bpmn:businessRuleTask";
+			[attributes addObjectsFromArray:[self attributesOf:task.delegate]];
 		} else if (task.kind == WFTaskKindService || task.kind == WFTaskKindSend
 		           || task.kind == WFTaskKindBusinessRule) {
 			tag = task.kind == WFTaskKindService ? @"bpmn:serviceTask"
@@ -565,6 +615,16 @@ WFCaughtCode(NSString *code)
 		}
 		[extensions addChild:inputOutput];
 	}
+	if ([node isKindOfClass:[WFTask class]]) {
+		WFTask *task = (WFTask *)node;
+		[self appendFieldsOf:task.delegate to:extensions];
+		for (WFListener *listener in task.taskListeners) {
+			[extensions addChild:[self listener:listener named:@"camunda:taskListener"]];
+		}
+	}
+	for (WFListener *listener in node.executionListeners) {
+		[extensions addChild:[self listener:listener named:@"camunda:executionListener"]];
+	}
 	if ([node isKindOfClass:[WFCallActivity class]]) {
 		WFCallActivity *call = (WFCallActivity *)node;
 		for (WFVariableMapping *mapping in call.inputs) {
@@ -629,6 +689,13 @@ WFCaughtCode(NSString *code)
 	}
 	WFSet(element, @"sourceRef", flow.sourceId);
 	WFSet(element, @"targetRef", flow.targetId);
+	if ([flow.listeners count] > 0) {
+		NSXMLElement *extensions = WFElement(@"bpmn:extensionElements");
+		for (WFListener *listener in flow.listeners) {
+			[extensions addChild:[self listener:listener named:@"camunda:executionListener"]];
+		}
+		[element addChild:extensions];
+	}
 	id condition = flow.condition;
 	if (condition != nil) {
 		if (![condition conformsToProtocol:@protocol(WFCondition)]) {
@@ -873,6 +940,7 @@ WFIgnoredElements(void)
 			[builder setHistoryTimeToLive:(NSInteger)days];
 		}
 		[self readScope:process into:builder context:context];
+		[self readListenersOf:process id:processId into:builder context:context];
 		if (context.error != nil) {
 			if (error != NULL) {
 				*error = context.error;
@@ -1016,6 +1084,127 @@ WFIgnoredElements(void)
 			}
 		}
 	}
+	[self readListenersOf:element id:elementId into:builder context:context];
+}
+
+/* camunda:executionListener and camunda:taskListener in the element's
+ * extensionElements. */
++ (void)readListenersOf:(NSXMLElement *)element
+                     id:(NSString *)elementId
+                   into:(WFDefinitionBuilder *)builder
+                context:(WFBpmnReadContext *)context
+{
+	NSDictionary *events = @{ @"start": @(WFListenerEventStart), @"end": @(WFListenerEventEnd),
+		@"take": @(WFListenerEventTake), @"create": @(WFListenerEventCreate),
+		@"assignment": @(WFListenerEventAssignment), @"complete": @(WFListenerEventComplete),
+		@"delete": @(WFListenerEventDelete) };
+	NSXMLElement *extensions = [self child:element named:@"extensionElements"];
+	for (NSXMLElement *extension in [self children:extensions of:WFCamundaNamespace]) {
+		NSString *kind = [extension localName];
+		if (![kind isEqualToString:@"executionListener"] && ![kind isEqualToString:@"taskListener"]) {
+			continue;
+		}
+		BOOL isFlow = [[element localName] isEqualToString:@"sequenceFlow"];
+		NSString *event = [self attr:@"event" of:extension] ?: (isFlow ? @"take" : nil);
+		NSNumber *value = [events objectForKey:event ?: @""];
+		BOOL taskEvent = [value integerValue] >= WFListenerEventCreate;
+		if (value == nil || taskEvent != [kind isEqualToString:@"taskListener"]) {
+			[self fail:context error:WFBpmnError(@"%@: camunda:%@ event \"%@\" is not supported",
+				elementId, kind, event ?: @"")];
+			return;
+		}
+		WFDelegateReference *delegate = [self delegateOf:extension fieldsIn:extension id:elementId context:context];
+		if (delegate == nil) {
+			if (context.error == nil) {
+				[self fail:context error:WFBpmnError(
+					@"%@: a camunda:%@ needs camunda:class or camunda:delegateExpression", elementId, kind)];
+			}
+			return;
+		}
+		[builder addListener:[WFListener listenerOn:(WFListenerEvent)[value integerValue] delegate:delegate]
+		          forElement:elementId];
+	}
+}
+
+/* camunda:class or camunda:delegateExpression="${name}" on the element,
+ * with the camunda:field elements in container; nil when it has neither,
+ * and nil with the read failed for what the engine does not take. */
++ (WFDelegateReference *)delegateOf:(NSXMLElement *)element
+                           fieldsIn:(NSXMLElement *)container
+                                 id:(NSString *)elementId
+                            context:(WFBpmnReadContext *)context
+{
+	for (NSString *unsupported in @[ @"expression" ]) {
+		if ([self attr:unsupported namespace:WFCamundaNamespace of:element] != nil
+		    || [self attr:unsupported of:element] != nil) {
+			[self fail:context error:WFBpmnError(
+				@"%@: camunda:expression calls a method, which the engine cannot; use camunda:delegateExpression",
+				elementId)];
+			return nil;
+		}
+	}
+	for (NSXMLElement *child in [self children:element of:WFCamundaNamespace]) {
+		if ([[child localName] isEqualToString:@"script"]) {
+			[self fail:context error:WFBpmnError(@"%@: script listeners are not supported", elementId)];
+			return nil;
+		}
+	}
+	NSString *className = [self attr:@"class" namespace:WFCamundaNamespace of:element]
+		?: [self attr:@"class" of:element];
+	NSString *expression = [self attr:@"delegateExpression" namespace:WFCamundaNamespace of:element]
+		?: [self attr:@"delegateExpression" of:element];
+	if (className == nil && expression == nil) {
+		return nil;
+	}
+	NSString *delegateName = nil;
+	if (expression != nil) {
+		NSString *text = [self trimmed:expression];
+		if (([text hasPrefix:@"${"] || [text hasPrefix:@"#{"]) && [text hasSuffix:@"}"]) {
+			text = [self trimmed:[text substringWithRange:NSMakeRange(2, [text length] - 3)]];
+		}
+		NSCharacterSet *name = [NSCharacterSet characterSetWithCharactersInString:
+			@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_."];
+		if ([text length] == 0 || [[text stringByTrimmingCharactersInSet:name] length] > 0) {
+			[self fail:context error:WFBpmnError(
+				@"%@: camunda:delegateExpression \"%@\" is not a name; register the delegate under a name",
+				elementId, expression)];
+			return nil;
+		}
+		delegateName = text;
+	}
+	NSMutableArray *fields = [NSMutableArray array];
+	for (NSXMLElement *field in [self children:container of:WFCamundaNamespace]) {
+		if (![[field localName] isEqualToString:@"field"]) {
+			continue;
+		}
+		NSString *fieldName = [self attr:@"name" of:field];
+		NSString *literal = [self attr:@"stringValue" of:field];
+		NSString *source = [self attr:@"expression" of:field];
+		for (NSXMLElement *child in [self children:field of:WFCamundaNamespace]) {
+			if ([[child localName] isEqualToString:@"string"]) {
+				literal = [child stringValue];
+			} else if ([[child localName] isEqualToString:@"expression"]) {
+				source = [child stringValue];
+			}
+		}
+		WFFeelExpression *value = nil;
+		if (source != nil) {
+			value = [self expressionFrom:source language:nil
+			                        what:[NSString stringWithFormat:@"%@: field %@", elementId, fieldName]
+			                     context:context];
+		} else {
+			value = [WFFeelExpression expressionWithString:WFFeelLiteralText(literal ?: @"") error:NULL];
+		}
+		if (fieldName == nil || value == nil) {
+			if (context.error == nil) {
+				[self fail:context error:WFBpmnError(@"%@: a camunda:field needs a name and a value", elementId)];
+			}
+			return nil;
+		}
+		[fields addObject:[WFParameter parameter:fieldName expression:value]];
+	}
+	return className != nil ? [WFDelegateReference referenceToClass:className fields:fields]
+		: [WFDelegateReference referenceToDelegate:delegateName fields:fields];
 }
 
 /* A parameter's value as FEEL text: a camunda:list or camunda:map, or the
@@ -1594,12 +1783,34 @@ WFIgnoredElements(void)
 		if ([assignment count] > 0) {
 			[builder setAssignment:assignment forElement:elementId];
 		}
+	} else if (([name isEqualToString:@"serviceTask"] || [name isEqualToString:@"sendTask"]
+	            || [name isEqualToString:@"businessRuleTask"])
+	           && ([self attr:@"class" namespace:WFCamundaNamespace of:element] != nil
+	               || [self attr:@"delegateExpression" namespace:WFCamundaNamespace of:element] != nil
+	               || [self attr:@"expression" namespace:WFCamundaNamespace of:element] != nil)) {
+		WFDelegateReference *delegate = [self delegateOf:element
+		                                        fieldsIn:[self child:element named:@"extensionElements"]
+		                                              id:elementId
+		                                         context:context];
+		if (delegate == nil) {
+			return NO;
+		}
+		WFTaskKind kind = [name isEqualToString:@"serviceTask"] ? WFTaskKindService
+			: [name isEqualToString:@"sendTask"] ? WFTaskKindSend : WFTaskKindBusinessRule;
+		if (kind == WFTaskKindSend) {
+			[builder addSendTask:elementId action:nil];
+		} else if (kind == WFTaskKindBusinessRule) {
+			[builder addBusinessRuleTask:elementId action:nil];
+		} else {
+			[builder addServiceTask:elementId action:nil];
+		}
+		[builder setDelegate:delegate forElement:elementId];
 	} else if ([name isEqualToString:@"serviceTask"]) {
 		NSString *type = [self attr:@"type" namespace:WFCamundaNamespace of:element];
 		NSString *topic = [self attr:@"topic" namespace:WFCamundaNamespace of:element];
 		if (![type isEqualToString:@"external"] || topic == nil) {
 			[self fail:context error:WFBpmnError(
-				@"%@: service tasks must be external tasks (camunda:type=\"external\" with a camunda:topic)",
+				@"%@: service tasks are external tasks (camunda:type=\"external\" with a camunda:topic) or run a delegate (camunda:class, camunda:delegateExpression)",
 				elementId)];
 			return NO;
 		}
@@ -1817,6 +2028,7 @@ WFIgnoredElements(void)
 		}
 	}
 	[builder connect:source to:target flowId:flowId condition:condition];
+	[self readListenersOf:element id:flowId into:builder context:context];
 	NSString *label = [self attr:@"name" of:element];
 	if (label != nil) {
 		[builder setName:label forElement:flowId];

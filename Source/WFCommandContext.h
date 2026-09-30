@@ -18,6 +18,7 @@
  * after commit happens.
  */
 @class WFDecisionDefinition;
+@class WFTaskEntity;
 @class WFDecisionResult;
 
 @interface WFCommandContext : NSObject
@@ -118,6 +119,11 @@
 - (WFDecisionResult *)evaluateDecision:(WFDecisionDefinition *)decision
                              variables:(NSDictionary *)variables
                              execution:(WFExecutionEntity *)execution;
+/* A user task's assignment and completion listeners; NO, with the
+ * command failed, when one fails. */
+- (BOOL)taskAssigned:(WFTaskEntity *)row;
+- (BOOL)taskCompleting:(WFTaskEntity *)row;
+- (BOOL)setLocal:(NSString *)name value:(id)value on:(WFExecutionEntity *)execution;
 - (NSDictionary *)visibleVariables:(WFExecutionEntity *)execution;
 /* Each one where it exists in the scope chain, else on the process
  * instance. NO, with the command failed, for a value that cannot be

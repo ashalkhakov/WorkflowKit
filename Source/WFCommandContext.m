@@ -77,6 +77,138 @@ WFCommandError(WFErrorCode code, NSString *message)
 	                       userInfo:@{ NSLocalizedDescriptionKey: message }];
 }
 
+@interface WFDelegateExecution ()
+@property (nonatomic, weak) WFCommandContext *command;
+@property (nonatomic, strong) WFExecutionEntity *execution;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSString *businessKey;
+@property (nonatomic, readwrite, copy) NSString *processDefinitionId;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *activityInstanceId;
+@property (nonatomic, readwrite, copy) NSString *eventName;
+@property (nonatomic, readwrite, getter=isCanceled) BOOL canceled;
+@property (nonatomic, readwrite, copy) NSDictionary *fields;
+- (instancetype)initWithCommand:(WFCommandContext *)command execution:(WFExecutionEntity *)execution;
+@end
+
+@interface WFDelegateTask ()
+@property (nonatomic, strong) WFTaskEntity *row;
+@end
+
+@implementation WFDelegateExecution
+
+- (instancetype)initWithCommand:(WFCommandContext *)command execution:(WFExecutionEntity *)execution
+{
+	self = [super init];
+	if (self) {
+		_command = command;
+		_execution = execution;
+		_processInstanceId = [execution.processInstanceId copy];
+		_businessKey = [[execution processInstance].businessKey copy];
+		_processDefinitionId = [execution.definitionId copy];
+		_activityInstanceId = [execution.activityInstanceId copy];
+		_fields = @{};
+	}
+	return self;
+}
+
+- (NSDictionary *)variables
+{
+	return [self.command visibleVariables:self.execution];
+}
+
+- (id)variableNamed:(NSString *)name
+{
+	return [[self variables] objectForKey:name];
+}
+
+- (NSDictionary *)localVariables
+{
+	NSMutableDictionary *variables = [NSMutableDictionary dictionary];
+	for (WFVariableEntity *variable in self.execution.variables) {
+		if (![variable isDeleted]) {
+			[variables setObject:[variable wf_value] ?: [NSNull null] forKey:variable.name];
+		}
+	}
+	return variables;
+}
+
+- (BOOL)storable:(id)value named:(NSString *)name error:(NSError **)error
+{
+	if (name != nil && [WFCommandContext isStorableValue:value ?: [NSNull null]]) {
+		return YES;
+	}
+	if (error != NULL) {
+		*error = WFCommandError(WFErrorInvalidState,
+			[NSString stringWithFormat:@"variable %@ is not a value the engine stores", name]);
+	}
+	return NO;
+}
+
+- (BOOL)setVariable:(NSString *)name value:(id)value error:(NSError **)error
+{
+	return [self storable:value named:name error:error]
+		&& [self.command setVariables:@{ name: value ?: [NSNull null] } from:self.execution];
+}
+
+- (BOOL)setLocalVariable:(NSString *)name value:(id)value error:(NSError **)error
+{
+	return [self storable:value named:name error:error]
+		&& [self.command setLocal:name value:value ?: [NSNull null] on:self.execution];
+}
+
+@end
+
+@implementation WFDelegateTask
+
+- (NSString *)taskId
+{
+	return self.row.taskId;
+}
+
+- (NSString *)name
+{
+	return self.row.name;
+}
+
+- (NSString *)taskDefinitionKey
+{
+	return self.row.taskDefinitionKey;
+}
+
+- (NSString *)assignee
+{
+	return self.row.assignee;
+}
+
+- (void)setAssignee:(NSString *)assignee
+{
+	self.row.assignee = assignee;
+	[self.command historyTask:self.row.taskId assignee:assignee];
+}
+
+- (NSInteger)priority
+{
+	return self.row.priority;
+}
+
+- (void)setPriority:(NSInteger)priority
+{
+	self.row.priority = (int32_t)priority;
+}
+
+- (NSDate *)dueDate
+{
+	return self.row.dueDate;
+}
+
+- (void)setDueDate:(NSDate *)dueDate
+{
+	self.row.dueDate = dueDate;
+}
+
+@end
+
 @implementation WFCommandContext
 {
 	NSMutableArray *_agenda;
@@ -373,7 +505,8 @@ WFGone(NSManagedObject *object)
 	history.state = WFHistoricStateActive;
 	history.superProcessInstanceId = root.superProcessInstanceId;
 
-	if (![self setVariables:variables from:root]) {
+	if (![self setVariables:variables from:root]
+	    || ![self fire:definition.executionListeners event:WFListenerEventStart on:root activity:nil canceled:NO]) {
 		return nil;
 	}
 	[self armEventSubProcessesOf:definition on:root];
@@ -446,7 +579,10 @@ WFGone(NSManagedObject *object)
 	execution.isActive = YES;
 	[self activityStarted:node execution:execution];
 	if (![self isScopeActivity:node scope:scope]) {
-		[self execute:node scope:scope execution:execution];
+		if ([self fire:node.executionListeners event:WFListenerEventStart on:execution activity:node.elementId
+		      canceled:NO]) {
+			[self execute:node scope:scope execution:execution];
+		}
 		return;
 	}
 	/* A scope activity runs in a child scope execution: its boundary
@@ -458,6 +594,9 @@ WFGone(NSManagedObject *object)
 		return;
 	}
 	[self armBoundaryEventsOf:node scope:scope on:inner];
+	if (![self fire:node.executionListeners event:WFListenerEventStart on:inner activity:node.elementId canceled:NO]) {
+		return;
+	}
 	if ([node isKindOfClass:[WFSubProcess class]]) {
 		WFProcessDefinition *innerDefinition = [(WFSubProcess *)node innerDefinition];
 		[self armEventSubProcessesOf:innerDefinition on:inner];
@@ -542,6 +681,10 @@ WFGone(NSManagedObject *object)
 		[self leave:event execution:execution];
 		return;
 	case WFEventKindEnd:
+		if (![self fire:event.executionListeners event:WFListenerEventEnd on:execution activity:event.elementId
+		      canceled:NO]) {
+			return;
+		}
 		if (event.trigger == WFEventTriggerTerminate) {
 			[self terminate:execution];
 			return;
@@ -623,12 +766,189 @@ WFGone(NSManagedObject *object)
 			target = node;
 		}
 	}
+	if (![self fire:event.executionListeners event:WFListenerEventEnd on:execution activity:event.elementId
+	      canceled:NO]) {
+		return;
+	}
 	[self activityEnded:execution.activityInstanceId canceled:NO];
 	[self schedule:^{
 		if (!WFGone(execution)) {
 			[self enter:target execution:execution];
 		}
 	}];
+}
+
+#pragma mark - Delegates and listeners
+
+/* The reference's fields, evaluated over the variables on the path. */
+- (NSDictionary *)fieldsOf:(WFDelegateReference *)reference execution:(WFExecutionEntity *)execution
+{
+	if ([reference.fields count] == 0) {
+		return @{};
+	}
+	NSDictionary *variables = [self visibleVariables:execution];
+	NSMutableDictionary *fields = [NSMutableDictionary dictionary];
+	for (WFParameter *field in reference.fields) {
+		[fields setObject:[field.expression valueWithVariables:variables] forKey:field.name];
+	}
+	return fields;
+}
+
+/* Finds what the reference names and calls it; NO, with an error, when it
+ * cannot be found, fails, or raises. */
+- (BOOL)call:(WFDelegateReference *)reference
+    protocol:(Protocol *)protocol
+      fields:(NSDictionary *)fields
+       error:(NSError **)error
+      invoke:(BOOL (^)(id delegate, NSError **error))invoke
+{
+	NSError *problem = nil;
+	id delegate = [self.engine wf_delegateFor:reference protocol:protocol error:&problem];
+	BOOL ok = NO;
+	if (delegate != nil) {
+		@try {
+			/* A fresh instance of a class is given its fields as well. */
+			if (reference.className != nil) {
+				for (NSString *name in fields) {
+					NSString *setter = [NSString stringWithFormat:@"set%@%@:",
+						[[name substringToIndex:1] uppercaseString], [name substringFromIndex:1]];
+					if ([delegate respondsToSelector:NSSelectorFromString(setter)]) {
+						id value = [fields objectForKey:name];
+						[delegate setValue:value == [NSNull null] ? nil : value forKey:name];
+					}
+				}
+			}
+			ok = invoke(delegate, &problem);
+		} @catch (NSException *exception) {
+			problem = WFCommandError(WFErrorHandler, [NSString stringWithFormat:@"%@ raised %@: %@",
+				reference, [exception name], [exception reason]]);
+			ok = NO;
+		}
+		if (!ok && problem == nil) {
+			problem = WFCommandError(WFErrorHandler, [NSString stringWithFormat:@"%@ failed without saying why", reference]);
+		}
+	}
+	if (!ok && error != NULL) {
+		*error = problem;
+	}
+	return ok;
+}
+
+/* The listeners for the event, in order, on the path. NO, with the
+ * command failed, when one fails. */
+- (BOOL)fire:(NSArray<WFListener *> *)listeners
+       event:(WFListenerEvent)event
+          on:(WFExecutionEntity *)execution
+    activity:(NSString *)activityId
+    canceled:(BOOL)canceled
+{
+	for (WFListener *listener in listeners) {
+		if (listener.event != event || _failure != nil) {
+			continue;
+		}
+		WFDelegateExecution *context = [[WFDelegateExecution alloc] initWithCommand:self execution:execution];
+		context.activityId = activityId;
+		context.eventName = [WFListener nameOfEvent:event];
+		context.canceled = canceled;
+		context.fields = [self fieldsOf:listener.delegate execution:execution];
+		NSError *error = nil;
+		if (![self call:listener.delegate protocol:@protocol(WFExecutionListener) fields:context.fields error:&error
+		         invoke:^BOOL(id delegate, NSError **callError) {
+			return [delegate notifyWithExecution:context error:callError];
+		}]) {
+			[self fail:WFCommandError(WFErrorHandler, [NSString stringWithFormat:@"the %@ listener on %@: %@",
+				context.eventName, activityId ?: [[self definitionForExecution:execution] processId],
+				[error localizedDescription]])];
+			return NO;
+		}
+	}
+	return _failure == nil;
+}
+
+/* A user task's listeners for the event. */
+- (BOOL)fireTaskListeners:(WFListenerEvent)event task:(WFTaskEntity *)row
+{
+	WFExecutionEntity *execution = row.execution;
+	WFFlowNode *node = [self node:row.taskDefinitionKey of:execution];
+	if (![node isKindOfClass:[WFTask class]]) {
+		return YES;
+	}
+	for (WFListener *listener in [(WFTask *)node taskListeners]) {
+		if (listener.event != event || _failure != nil) {
+			continue;
+		}
+		WFDelegateTask *context = [[WFDelegateTask alloc] initWithCommand:self execution:execution];
+		context.row = row;
+		context.activityId = row.taskDefinitionKey;
+		context.eventName = [WFListener nameOfEvent:event];
+		context.fields = [self fieldsOf:listener.delegate execution:execution];
+		NSError *error = nil;
+		if (![self call:listener.delegate protocol:@protocol(WFTaskListener) fields:context.fields error:&error
+		         invoke:^BOOL(id delegate, NSError **callError) {
+			return [delegate notifyWithTask:context error:callError];
+		}]) {
+			[self fail:WFCommandError(WFErrorHandler, [NSString stringWithFormat:@"the %@ task listener on %@: %@",
+				context.eventName, row.taskDefinitionKey, [error localizedDescription]])];
+			return NO;
+		}
+	}
+	return _failure == nil;
+}
+
+- (BOOL)taskAssigned:(WFTaskEntity *)row
+{
+	return [self fireTaskListeners:WFListenerEventAssignment task:row];
+}
+
+- (BOOL)taskCompleting:(WFTaskEntity *)row
+{
+	return [self fireTaskListeners:WFListenerEventComplete task:row];
+}
+
+/* A service, send or business rule task's delegate: done, the task is
+ * left; a BPMN error is thrown from it; any other failure fails the
+ * command. */
+- (void)runDelegateOf:(WFTask *)task execution:(WFExecutionEntity *)execution
+{
+	WFDelegateExecution *context = [[WFDelegateExecution alloc] initWithCommand:self execution:execution];
+	context.activityId = task.elementId;
+	context.fields = [self fieldsOf:task.delegate execution:execution];
+	NSError *error = nil;
+	BOOL ok = [self call:task.delegate protocol:@protocol(WFActivityDelegate) fields:context.fields error:&error
+	              invoke:^BOOL(id delegate, NSError **callError) {
+		return [delegate executeWithExecution:context error:callError];
+	}];
+	if (_failure != nil) {
+		return;
+	}
+	if (ok) {
+		[self completeActivity:execution];
+		return;
+	}
+	NSString *code = [[error userInfo] objectForKey:WFErrorRefKey];
+	if (code != nil) {
+		[self throwBpmnError:code fromExecution:execution];
+		return;
+	}
+	[self fail:WFCommandError(WFErrorHandler, [NSString stringWithFormat:@"%@: %@", task.elementId,
+		[error localizedDescription]])];
+}
+
+/* An activity's end listeners as it is canceled: once per activity
+ * instance, on the execution that holds it, and per instance of a
+ * multi-instance activity rather than for its body. */
+- (void)fireCanceledEndOf:(WFExecutionEntity *)execution
+{
+	NSString *activityInstanceId = execution.activityInstanceId;
+	if (execution.activityId == nil || activityInstanceId == nil
+	    || [execution.parent.activityInstanceId isEqualToString:activityInstanceId]) {
+		return;
+	}
+	WFFlowNode *node = [self node:execution.activityId of:execution];
+	if (node == nil || (node.multiInstance != nil && ![self isInstance:execution of:node])) {
+		return;
+	}
+	[self fire:node.executionListeners event:WFListenerEventEnd on:execution activity:node.elementId canceled:YES];
 }
 
 #pragma mark - Conditional events
@@ -1035,6 +1355,10 @@ WFHasConditionalEvents(WFProcessDefinition *definition)
 				[self remove:other];
 			}
 		}
+		if (![self fire:at.executionListeners event:WFListenerEventEnd on:execution activity:at.elementId
+		      canceled:NO]) {
+			return;
+		}
 		[self activityEnded:execution.activityInstanceId canceled:NO];
 		execution.activityId = node.elementId;
 		execution.activityInstanceId = [WFCommandContext newId];
@@ -1060,6 +1384,7 @@ WFHasConditionalEvents(WFProcessDefinition *definition)
 	WFExecutionEntity *host = inner.parent;
 	if (boundary.isInterrupting) {
 		[self cancelSubtree:inner];
+		[self fireCanceledEndOf:host];
 		/* The interrupted activity's own instance: the host's, which for a
 		 * subprocess is not the scope's. */
 		[self activityEnded:host.activityInstanceId canceled:YES];
@@ -1629,7 +1954,9 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	instance.activityInstanceId = [WFCommandContext newId];
 	instance.isActive = YES;
 	[self activityStarted:node execution:instance];
-	if (![self mapInputsOf:node from:instance into:instance]) {
+	if (![self mapInputsOf:node from:instance into:instance]
+	    || ![self fire:node.executionListeners event:WFListenerEventStart on:instance activity:node.elementId
+	           canceled:NO]) {
 		return;
 	}
 	if ([node isKindOfClass:[WFSubProcess class]]) {
@@ -1994,6 +2321,8 @@ static NSString * const WFLoopCounter = @"loopCounter";
 - (void)deleteProcessInstance:(WFExecutionEntity *)root reason:(NSString *)reason
 {
 	[self cancelSubtree:root];
+	[self fire:[[self definitionForExecution:root] executionListeners] event:WFListenerEventEnd on:root
+	  activity:nil canceled:YES];
 	WFHistoricProcessInstanceEntity *history = [[self fetch:WFHistoricInstanceName
 	                                              predicate:[NSPredicate predicateWithFormat:
 	                                                  @"processInstanceId == %@", root.processInstanceId]
@@ -2191,6 +2520,10 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	}
 	[self armBoundaryEventsOf:container scope:scope on:inner];
 	[self armEventSubProcessesOf:container.innerDefinition on:inner];
+	if (![self fire:container.executionListeners event:WFListenerEventStart on:inner activity:container.elementId
+	      canceled:NO]) {
+		return nil;
+	}
 	return inner;
 }
 
@@ -2907,6 +3240,10 @@ WFSameKind(WFFlowNode *a, WFFlowNode *b)
 		[self evaluateDecisionOf:task execution:execution];
 		return;
 	}
+	if (task.delegate != nil) {
+		[self runDelegateOf:task execution:execution];
+		return;
+	}
 	if (task.kind == WFTaskKindUser) {
 		WFTaskEntity *row = [self insert:WFTaskName];
 		row.taskId = [WFCommandContext newId];
@@ -2923,6 +3260,10 @@ WFSameKind(WFFlowNode *a, WFFlowNode *b)
 			return;
 		}
 		[self taskStarted:row];
+		if (![self fireTaskListeners:WFListenerEventCreate task:row]
+		    || (row.assignee != nil && ![self fireTaskListeners:WFListenerEventAssignment task:row])) {
+			return;
+		}
 		WFWorkItem *value = [WFWorkItem wf_workItemWithEntity:row];
 		WFProcessEngine *engine = self.engine;
 		[self afterCommit:^{
@@ -3131,6 +3472,10 @@ WFJSONValue(id value)
  * holds; several flows are an implicit parallel split. */
 - (void)leave:(WFFlowNode *)node execution:(WFExecutionEntity *)execution
 {
+	if (![self fire:node.executionListeners event:WFListenerEventEnd on:execution activity:node.elementId
+	      canceled:NO]) {
+		return;
+	}
 	[self recordCompensationFor:node execution:execution];
 	/* The activity is done, even when an async continuation holds back
 	 * the flows out of it. */
@@ -3195,8 +3540,12 @@ WFJSONValue(id value)
 		}
 	}
 	for (NSUInteger i = 0; i < [flows count]; i++) {
-		WFFlowNode *target = [scope nodeWithId:[[flows objectAtIndex:i] targetId]];
+		WFSequenceFlow *flow = [flows objectAtIndex:i];
+		WFFlowNode *target = [scope nodeWithId:flow.targetId];
 		WFExecutionEntity *path = [paths objectAtIndex:i];
+		if (![self fire:flow.listeners event:WFListenerEventTake on:path activity:flow.elementId canceled:NO]) {
+			return;
+		}
 		[self schedule:^{
 			if (!WFGone(path)) {
 				[self enter:target execution:path];
@@ -3298,6 +3647,10 @@ WFJSONValue(id value)
 
 - (void)processInstanceEnded:(WFExecutionEntity *)root
 {
+	if (![self fire:[[self definitionForExecution:root] executionListeners] event:WFListenerEventEnd on:root
+	      activity:nil canceled:NO]) {
+		return;
+	}
 	WFHistoricProcessInstanceEntity *history = [[self fetch:WFHistoricInstanceName
 	                                              predicate:[NSPredicate predicateWithFormat:
 	                                                  @"processInstanceId == %@",
@@ -3468,6 +3821,10 @@ WFJSONValue(id value)
          scope:(WFProcessDefinition *)scope
      execution:(WFExecutionEntity *)execution
 {
+	if (![self fire:gateway.executionListeners event:WFListenerEventEnd on:execution activity:gateway.elementId
+	      canceled:NO]) {
+		return;
+	}
 	if (gateway.isAsyncAfter) {
 		[self activityEnded:execution.activityInstanceId canceled:NO];
 		[self job:WFJobTypeAsyncAfter execution:execution node:gateway due:[NSDate date]];
@@ -3782,18 +4139,22 @@ WFJSONValue(id value)
 	 * started. The caller removes only the subtree; these go explicitly, so
 	 * that nothing still scheduled for them runs. */
 	NSMutableSet *called = [NSMutableSet set];
+	/* Canceled activities end innermost first, once what they held is. */
+	NSMutableArray *ending = [NSMutableArray array];
 	while ([pending count] > 0) {
 		WFExecutionEntity *execution = [pending lastObject];
 		[pending removeLastObject];
-		[self activityEnded:execution.activityInstanceId canceled:YES];
 		/* What this command already removed (a timer that just fired, a
 		 * task just completed) stays in the sets until pending changes are
 		 * processed. */
 		for (WFTaskEntity *task in execution.tasks) {
 			if (![task isDeleted]) {
+				[self fireTaskListeners:WFListenerEventDelete task:task];
 				[self task:task.taskId endedBecause:WFTaskDeleteReasonDeleted];
 			}
 		}
+		[ending addObject:execution];
+		[self activityEnded:execution.activityInstanceId canceled:YES];
 		for (WFIncidentEntity *incident in execution.incidents) {
 			if (![incident isDeleted]) {
 				[self incident:incident.incidentId endedAs:WFIncidentStateDeleted];
@@ -3820,6 +4181,9 @@ WFJSONValue(id value)
 			[called addObject:calledInstance];
 		}
 	}
+	for (WFExecutionEntity *execution in [ending reverseObjectEnumerator]) {
+		[self fireCanceledEndOf:execution];
+	}
 	for (WFExecutionEntity *execution in called) {
 		[self remove:execution];
 	}
@@ -3828,6 +4192,8 @@ WFJSONValue(id value)
 /* A called instance canceled with its call activity. */
 - (void)processInstanceTerminated:(WFExecutionEntity *)instance
 {
+	[self fire:[[self definitionForExecution:instance] executionListeners] event:WFListenerEventEnd on:instance
+	  activity:nil canceled:YES];
 	if (![self records:WFHistoryLevelActivity]) {
 		return;
 	}

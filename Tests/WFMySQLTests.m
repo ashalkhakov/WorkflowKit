@@ -184,3 +184,10 @@
 @implementation WFMigrationMySQLTests
 #include "WFMigrationTests.inc"
 @end
+
+@interface WFDelegationMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFDelegationMySQLTests
+#include "WFDelegationTests.inc"
+@end

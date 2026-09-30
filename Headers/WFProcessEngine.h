@@ -7,6 +7,7 @@
 #import "WFManagementService.h"
 #import "WFExternalTaskService.h"
 #import "WFDecisionService.h"
+#import "WFDelegation.h"
 #import <dispatch/dispatch.h>
 
 @class WFProcessEngine;
@@ -84,6 +85,22 @@ processInstanceEnded:(WFProcessInstance *)instance;
 /* Starts the job executor and the in-process worker, taking back the
  * locks this engine held before a restart. Call once, after setting the
  * handler and the delegate. */
+/*
+ * Delegates and listeners (see WFDelegation.h). An object registered under
+ * a name answers camunda:delegateExpression="${name}"; a class registered
+ * under a name answers camunda:class="name" -- a Camunda file's Java class
+ * name, say -- as any class linked into the host or loaded from a plugin
+ * does under its own. Registration is for the engine's life, and may
+ * happen before or after it opens.
+ */
+- (void)registerDelegate:(id)delegate forName:(NSString *)name;
+- (void)registerDelegateClass:(Class)delegateClass forName:(NSString *)name;
+- (void)addPlugin:(id<WFEnginePlugin>)plugin;
+/* Loads every bundle in the directory (.plugin or .bundle) and adds its
+ * principal class, which conforms to WFEnginePlugin, as a plugin. NO, with
+ * an error, at the first bundle that does not load or is not a plugin. */
+- (BOOL)loadPluginsInDirectory:(NSURL *)directory error:(NSError **)error;
+
 - (BOOL)openWithError:(NSError **)error;
 - (void)close;
 

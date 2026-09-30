@@ -1,6 +1,7 @@
 #import "WFTypes.h"
 #import "WFCondition.h"
 #import "WFFeel.h"
+#import "WFDelegation.h"
 #import "WFFlowElements.h"
 #import "WFProcessDefinition.h"
 #import "WFDecision.h"

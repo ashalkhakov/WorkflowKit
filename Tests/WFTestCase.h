@@ -22,6 +22,35 @@
 @property (nonatomic, strong) NSMutableArray *ended;
 @end
 
+/* What the delegates and listeners below were called for, in order:
+ * "event@activity", with " canceled" when so. */
+@interface WFTestRecorder : NSObject
++ (void)reset;
++ (void)record:(NSString *)entry;
++ (NSArray<NSString *> *)entries;
+@end
+
+/* Sets "approved" to whether "amount" is below its field "limit" (given
+ * by key-value coding), and records "approve". */
+@interface WFApproveDelegate : NSObject <WFActivityDelegate>
+@property (nonatomic, strong) NSNumber *limit;
+@end
+
+/* Fails as its field "mode" says: "bpmn" with a BPMN error REJECTED,
+ * anything else with a plain error. */
+@interface WFFailingDelegate : NSObject <WFActivityDelegate>
+@end
+
+/* Records each call; a task listener with a field "assignee" assigns the
+ * task to it. */
+@interface WFRecordingListener : NSObject <WFExecutionListener, WFTaskListener>
+@end
+
+/* Registers a WFApproveDelegate as "approver" and a WFRecordingListener
+ * as "recorder". */
+@interface WFTestPlugin : NSObject <WFEnginePlugin>
+@end
+
 /* The engine fixtures and helpers every test case shares.
  *
  * The store the engines run on is a backend's choice. Each backend's file

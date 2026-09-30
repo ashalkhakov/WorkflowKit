@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		023798B39F8F5E26E29B7ED1 /* WFDmnTests.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = 870953E3EF7EFEA7B4D9036A /* WFDmnTests.m */; };
+		04A0CD2A82A4364D947BDF12 /* WFDelegation.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = C95B021C2403400659F662B3 /* WFDelegation.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		0862F251875882E6A92E34BF /* WFExternalTaskService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 7A577AA1A65296CA1B70B333 /* WFExternalTaskService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		0C5E0A4FDDFDBF2AE434F855 /* WFCondition.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = FC5C70D77DBA9E9AEAB0900D /* WFCondition.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		0C70A1AA60C2FBDC3622853E /* WFManagementService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 23908830DA51E97C102E5DAB /* WFManagementService.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -125,6 +126,7 @@
 		7C3EC9C107708A14F7077196 /* WFFeel.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFeel.m; sourceTree = "<group>"; };
 		7FA7333994D222D02A271C2E /* WFHandlers.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFHandlers.h; sourceTree = "<group>"; };
 		80A294B025F21A6158F234AD /* WFFeelParser.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFeelParser.m; sourceTree = "<group>"; };
+		825D48990A3A486FE7FE5C59 /* WFDelegationTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDelegationTests.inc; sourceTree = "<group>"; };
 		82A4864EAEF5AEB472FAF8F3 /* WFSQLiteTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFSQLiteTests.m; sourceTree = "<group>"; };
 		82A9264CEF1DD63DE1DC4914 /* WFTypes.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFTypes.h; sourceTree = "<group>"; };
 		82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */ = { isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -142,6 +144,7 @@
 		B866FAA5349791DCA0D5B61E /* WFEventSubProcessTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFEventSubProcessTests.inc; sourceTree = "<group>"; };
 		B889BD1773784D5B911A2332 /* WFTestCase.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTestCase.m; sourceTree = "<group>"; };
 		C27CAE65E61048A81C943A74 /* WFHandlers.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFHandlers.m; sourceTree = "<group>"; };
+		C95B021C2403400659F662B3 /* WFDelegation.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFDelegation.h; sourceTree = "<group>"; };
 		D07C8B4779BECC110E3278A7 /* WFOperationsTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFOperationsTests.inc; sourceTree = "<group>"; };
 		D34352CAE1E7EC33A35BE4FC /* WFDurabilityTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDurabilityTests.inc; sourceTree = "<group>"; };
 		D441166BB58C0AB901D87AC8 /* WFProcessEngine.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFProcessEngine.h; sourceTree = "<group>"; };
@@ -203,6 +206,7 @@
 				82A9264CEF1DD63DE1DC4914 /* WFTypes.h */,
 				FC5C70D77DBA9E9AEAB0900D /* WFCondition.h */,
 				1CE9A943735E790C82F63B66 /* WFFeel.h */,
+				C95B021C2403400659F662B3 /* WFDelegation.h */,
 				8ABB311403612F5B9975C702 /* WFFlowElements.h */,
 				A06E910058F56C5670511532 /* WFProcessDefinition.h */,
 				62E9BD3A40B19AF6026DCB71 /* WFDecision.h */,
@@ -245,6 +249,7 @@
 				0FBE0B36CE777D3717DE2714 /* WFCompensationTests.inc */,
 				8934E1B4B99F564C935EC08A /* WFConditionalEventTests.inc */,
 				037E8E57EFFCC24A85AE2990 /* WFDecisionTests.inc */,
+				825D48990A3A486FE7FE5C59 /* WFDelegationTests.inc */,
 				B43FEF13E290AC18B2A04146 /* WFDeploymentTests.inc */,
 				D34352CAE1E7EC33A35BE4FC /* WFDurabilityTests.inc */,
 				E81A3EB28D88B3BBE1E1A474 /* WFEscalationTests.inc */,
@@ -347,6 +352,7 @@
 				1744EBA86112B79AE386ED38 /* WFTypes.h in WorkflowKit */,
 				0C5E0A4FDDFDBF2AE434F855 /* WFCondition.h in WorkflowKit */,
 				0F5785C0BF50773570531EE1 /* WFFeel.h in WorkflowKit */,
+				04A0CD2A82A4364D947BDF12 /* WFDelegation.h in WorkflowKit */,
 				DE433E80B1DC33C55777A174 /* WFFlowElements.h in WorkflowKit */,
 				738E0A833B52B15316C602AD /* WFProcessDefinition.h in WorkflowKit */,
 				32FDEB3222502F2647D73777 /* WFDecision.h in WorkflowKit */,

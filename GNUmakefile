@@ -42,6 +42,7 @@ WorkflowKit_HEADER_FILES = \
 	WFTypes.h \
 	WFCondition.h \
 	WFFeel.h \
+	WFDelegation.h \
 	WFFlowElements.h \
 	WFProcessDefinition.h \
 	WFDecision.h \

@@ -18,6 +18,8 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @property (nonatomic, readwrite, getter=isForCompensation) BOOL forCompensation;
 @property (nonatomic, strong) NSMutableArray<WFParameter *> *mutableInputParameters;
 @property (nonatomic, strong) NSMutableArray<WFParameter *> *mutableOutputParameters;
+@property (nonatomic, strong) NSMutableArray<WFListener *> *mutableExecutionListeners;
+- (void)addExecutionListener:(WFListener *)listener;
 - (void)addInputParameter:(WFParameter *)parameter;
 - (void)addOutputParameter:(WFParameter *)parameter;
 @property (nonatomic, strong) NSMutableArray<NSString *> *mutableIncoming;
@@ -39,10 +41,21 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 		_exclusive = YES;
 		_mutableInputParameters = [NSMutableArray array];
 		_mutableOutputParameters = [NSMutableArray array];
+		_mutableExecutionListeners = [NSMutableArray array];
 		_mutableIncoming = [NSMutableArray array];
 		_mutableOutgoing = [NSMutableArray array];
 	}
 	return self;
+}
+
+- (NSArray<WFListener *> *)executionListeners
+{
+	return [_mutableExecutionListeners copy];
+}
+
+- (void)addExecutionListener:(WFListener *)listener
+{
+	[_mutableExecutionListeners addObject:listener];
 }
 
 - (NSArray<NSString *> *)incomingFlowIds
@@ -281,6 +294,8 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @end
 
 @interface WFTask ()
+@property (nonatomic, readwrite, strong) WFDelegateReference *delegate;
+@property (nonatomic, strong) NSMutableArray<WFListener *> *mutableTaskListeners;
 @property (nonatomic, readwrite, copy) NSString *decisionRef;
 @property (nonatomic, readwrite) WFCalledElementBinding decisionBinding;
 @property (nonatomic, readwrite) NSInteger decisionVersion;
@@ -297,6 +312,19 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @implementation WFTask
 
 @synthesize actionKey = _actionKey;
+
+- (NSArray<WFListener *> *)taskListeners
+{
+	return [_mutableTaskListeners copy] ?: @[];
+}
+
+- (void)addTaskListener:(WFListener *)listener
+{
+	if (_mutableTaskListeners == nil) {
+		_mutableTaskListeners = [NSMutableArray array];
+	}
+	[_mutableTaskListeners addObject:listener];
+}
 
 /* A receive task keeps its message where the others keep their topic. */
 - (NSString *)messageName
@@ -450,7 +478,24 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 
 @end
 
+@interface WFSequenceFlow ()
+@property (nonatomic, strong) NSMutableArray<WFListener *> *mutableListeners;
+@end
+
 @implementation WFSequenceFlow
+
+- (NSArray<WFListener *> *)listeners
+{
+	return [_mutableListeners copy] ?: @[];
+}
+
+- (void)addListener:(WFListener *)listener
+{
+	if (_mutableListeners == nil) {
+		_mutableListeners = [NSMutableArray array];
+	}
+	[_mutableListeners addObject:listener];
+}
 
 - (instancetype)initWithElementId:(NSString *)elementId
                              name:(NSString *)name
@@ -475,6 +520,70 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 {
 	return [NSString stringWithFormat:@"<WFSequenceFlow %@ %@ -> %@>",
 		self.elementId, self.sourceId, self.targetId];
+}
+
+@end
+
+@implementation WFDelegateReference
+
+- (instancetype)initWithClass:(NSString *)className name:(NSString *)delegateName fields:(NSArray *)fields
+{
+	self = [super init];
+	if (self) {
+		_className = [className copy];
+		_delegateName = [delegateName copy];
+		_fields = [fields copy] ?: @[];
+	}
+	return self;
+}
+
++ (instancetype)referenceToClass:(NSString *)className fields:(NSArray<WFParameter *> *)fields
+{
+	return [[self alloc] initWithClass:className name:nil fields:fields];
+}
+
++ (instancetype)referenceToDelegate:(NSString *)delegateName fields:(NSArray<WFParameter *> *)fields
+{
+	return [[self alloc] initWithClass:nil name:delegateName fields:fields];
+}
+
+- (NSString *)description
+{
+	return self.className != nil ? [NSString stringWithFormat:@"class %@", self.className]
+		: [NSString stringWithFormat:@"delegate %@", self.delegateName];
+}
+
+@end
+
+@implementation WFListener
+
+- (instancetype)initWithEvent:(WFListenerEvent)event delegate:(WFDelegateReference *)delegate
+{
+	self = [super init];
+	if (self) {
+		_event = event;
+		_delegate = delegate;
+	}
+	return self;
+}
+
++ (instancetype)listenerOn:(WFListenerEvent)event delegate:(WFDelegateReference *)delegate
+{
+	return [[self alloc] initWithEvent:event delegate:delegate];
+}
+
++ (NSString *)nameOfEvent:(WFListenerEvent)event
+{
+	switch (event) {
+	case WFListenerEventStart: return @"start";
+	case WFListenerEventEnd: return @"end";
+	case WFListenerEventTake: return @"take";
+	case WFListenerEventCreate: return @"create";
+	case WFListenerEventAssignment: return @"assignment";
+	case WFListenerEventComplete: return @"complete";
+	case WFListenerEventDelete: return @"delete";
+	}
+	return @"";
 }
 
 @end

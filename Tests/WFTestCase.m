@@ -74,6 +74,98 @@
 }
 @end
 
+static NSMutableArray *WFTestEntries;
+
+@implementation WFTestRecorder
+
++ (void)reset
+{
+	@synchronized (self) {
+		WFTestEntries = [NSMutableArray array];
+	}
+}
+
++ (void)record:(NSString *)entry
+{
+	@synchronized (self) {
+		if (WFTestEntries == nil) {
+			WFTestEntries = [NSMutableArray array];
+		}
+		[WFTestEntries addObject:entry];
+	}
+}
+
++ (NSArray<NSString *> *)entries
+{
+	@synchronized (self) {
+		return [WFTestEntries copy] ?: @[];
+	}
+}
+
+@end
+
+@implementation WFApproveDelegate
+
+- (BOOL)executeWithExecution:(WFDelegateExecution *)execution error:(NSError **)error
+{
+	[WFTestRecorder record:@"approve"];
+	NSNumber *amount = [execution variableNamed:@"amount"];
+	NSNumber *limit = self.limit ?: [execution.fields objectForKey:@"limit"] ?: @100;
+	return [execution setVariable:@"approved"
+	                        value:[NSNumber numberWithBool:[amount doubleValue] < [limit doubleValue]]
+	                        error:error];
+}
+
+@end
+
+@implementation WFFailingDelegate
+
+- (BOOL)executeWithExecution:(WFDelegateExecution *)execution error:(NSError **)error
+{
+	BOOL bpmn = [[execution.fields objectForKey:@"mode"] isEqual:@"bpmn"];
+	if (error != NULL) {
+		*error = [NSError errorWithDomain:@"test" code:1 userInfo:bpmn
+			? @{ WFErrorRefKey: @"REJECTED", NSLocalizedDescriptionKey: @"rejected" }
+			: @{ NSLocalizedDescriptionKey: @"the service is down" }];
+	}
+	return NO;
+}
+
+@end
+
+@implementation WFRecordingListener
+
+- (BOOL)notifyWithExecution:(WFDelegateExecution *)execution error:(NSError **)error
+{
+	(void)error;
+	[WFTestRecorder record:[NSString stringWithFormat:@"%@@%@%@", execution.eventName,
+		execution.activityId ?: @"process", execution.isCanceled ? @" canceled" : @""]];
+	return YES;
+}
+
+- (BOOL)notifyWithTask:(WFDelegateTask *)task error:(NSError **)error
+{
+	(void)error;
+	[WFTestRecorder record:[NSString stringWithFormat:@"%@@%@", task.eventName, task.taskDefinitionKey]];
+	NSString *assignee = [task.fields objectForKey:@"assignee"];
+	if (assignee != nil && [task.eventName isEqualToString:@"create"]) {
+		task.assignee = assignee;
+	}
+	return YES;
+}
+
+@end
+
+@implementation WFTestPlugin
+
+- (void)registerWithEngine:(WFProcessEngine *)engine
+{
+	[engine registerDelegate:[[WFApproveDelegate alloc] init] forName:@"approver"];
+	[engine registerDelegate:[[WFRecordingListener alloc] init] forName:@"recorder"];
+}
+
+@end
+
 @implementation WFTestCase {
 	NSHashTable *_engines;
 }
