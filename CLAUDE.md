@@ -77,14 +77,17 @@ ODataKit: `ODATAKIT` names a built checkout (`/w/odatakit-*` in
 ```
 
 CI builds ODataKit at the commit pinned by `ODATAKIT_REF` in
-`.github/workflows/ci.yml`, and the OData API with it. It is not built on
-macOS yet.
+`.github/workflows/ci.yml`, and the OData API with it.
 
 ## macOS
 
 `WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`
-framework, the `WorkflowKitTests` bundle and the `PurchaseRequestDemo` tool,
-with shared settings in `Xcode/Configs` (the same as ODataKit's). The project
+framework, the `WorkflowKitOData` framework, the `WorkflowKitTests` bundle
+(the OData API's tests included) and the `PurchaseRequestDemo` tool, with
+shared settings in `Xcode/Configs` (the same as ODataKit's). It also holds
+`../ODataKit/ODataKit.xcodeproj`, the ODataKit checkout beside this one,
+whose `ODataKit` and `ODataService` frameworks the OData API links and Xcode
+builds first. The project
 is generated from the GNUmakefiles' source lists, so after adding a file run
 `python3 .tools/genxcodeproj.py` rather than editing `project.pbxproj`.
 

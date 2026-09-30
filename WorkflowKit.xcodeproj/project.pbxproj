@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		023798B39F8F5E26E29B7ED1 /* WFDmnTests.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = 870953E3EF7EFEA7B4D9036A /* WFDmnTests.m */; };
+		028EC5F0279B261AC1E2B202 /* WorkflowKitOData.framework in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = 86F8E04EBD4FEC74BBFE051A /* WorkflowKitOData.framework */; };
 		04A0CD2A82A4364D947BDF12 /* WFDelegation.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = C95B021C2403400659F662B3 /* WFDelegation.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		0862F251875882E6A92E34BF /* WFExternalTaskService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 7A577AA1A65296CA1B70B333 /* WFExternalTaskService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		0C5E0A4FDDFDBF2AE434F855 /* WFCondition.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = FC5C70D77DBA9E9AEAB0900D /* WFCondition.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -16,11 +17,14 @@
 		0E99176FAB9BD6525214494A /* WFFeel.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 7C3EC9C107708A14F7077196 /* WFFeel.m */; };
 		0F5785C0BF50773570531EE1 /* WFFeel.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 1CE9A943735E790C82F63B66 /* WFFeel.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		127C54266D2B6DB4F658162E /* PurchaseRequestDemo.m in PurchaseRequestDemo */ = { isa = PBXBuildFile; fileRef = A01477C08490EA0A3284E3ED /* PurchaseRequestDemo.m */; };
+		149196DF967DFBE4F669757B /* WFODataOperations.m in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = FDA011FEE52BF4576D081B10 /* WFODataOperations.m */; };
 		1744EBA86112B79AE386ED38 /* WFTypes.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 82A9264CEF1DD63DE1DC4914 /* WFTypes.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		19D0DC221431404CE4BCA2DA /* WFStore.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 2092E6C210C24A4CEEBB280A /* WFStore.m */; };
 		1AA46029452D46D7C9069E3B /* WFRepositoryService.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = E395F9BB0612F9119F6D7D37 /* WFRepositoryService.m */; };
 		1B5255276409615011BDB720 /* WFStore.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 09C94C2B2CF68470F191FFF5 /* WFStore.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		21F5B87B093D5CFD8479B114 /* ODataService.framework in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = B484CF9AEF94633881A4517A /* ODataService.framework */; };
 		23EC5DB65F46CE005D62EFD4 /* WFRuntimeService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 61105A30BA3840DBFB00DA37 /* WFRuntimeService.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		2AFD5798D2B30AD44AB6E3BB /* CoreData.framework in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = 2AB66C65BE330D1517DF768E /* CoreData.framework */; };
 		32FDEB3222502F2647D73777 /* WFDecision.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 62E9BD3A40B19AF6026DCB71 /* WFDecision.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		418BB094E2E727EB182378A9 /* WFBpmn.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 14C3A8952B45C2F1F18C2F0A /* WFBpmn.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		4C7C746DF0BE717FB6E843BE /* Foundation.framework in WorkflowKit */ = { isa = PBXBuildFile; fileRef = B29454D488C4F49E273C15A0 /* Foundation.framework */; };
@@ -29,14 +33,17 @@
 		61210CDE7320ABDB34638C84 /* WFTestCase.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = B889BD1773784D5B911A2332 /* WFTestCase.m */; };
 		62A943CF6721845AA320BE32 /* WFFlowElements.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = E019399656F10AACD6743EB4 /* WFFlowElements.m */; };
 		6A2760F2E8D606776C34B716 /* WFHandlers.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = C27CAE65E61048A81C943A74 /* WFHandlers.m */; };
+		6B9BDCD6AB3AEE5EC3C52745 /* WFODataService.m in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = 04F28149E5688FABDAA97A13 /* WFODataService.m */; };
 		6E1AA21AE7EA28F91B1ECDD1 /* WFCommandContext.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 73088BE5CB96B1B9B60C9199 /* WFCommandContext.m */; };
 		6E96E2FF000FC70BE28FB51F /* WFServices.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = A99FA1FDB589AA19D5B73BB8 /* WFServices.m */; };
+		70BF6596E7F1E47F16ACFA1E /* WFODataService.h in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = CFB33F7F65B6BE11E4984035 /* WFODataService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		738E0A833B52B15316C602AD /* WFProcessDefinition.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = A06E910058F56C5670511532 /* WFProcessDefinition.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		74153B5566E751CBF5BB8387 /* WFFeelLexer.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 350118AD585544C074216A6D /* WFFeelLexer.m */; };
 		74276469454D123DCB7F2EA0 /* WFFormService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 693B6C5E6C9A4660D1ED1172 /* WFFormService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		7E1890E7CA8ED649C3760ED6 /* WFExternalTaskService.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 3262393709D3B8619F13D3D3 /* WFExternalTaskService.m */; };
 		8E0B88B8C0EB745A09586093 /* WFTaskQuery.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = B3B0F8D62D83EA1F357CC5B5 /* WFTaskQuery.m */; };
 		92065565EA540A595FCA5AFF /* WFForm.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = FD4EF373BB0A220F9EF44E92 /* WFForm.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		923B95D33E85BDA15C873C41 /* ODataService.framework in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = B484CF9AEF94633881A4517A /* ODataService.framework */; };
 		934C02E7F8DD42E16C49585C /* WFFeelTests.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = E2B4B237BDA002E05DD8C104 /* WFFeelTests.m */; };
 		967C321CBF0CB818D7006865 /* WFTaskQuery.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 1289DE37EC202E36DE9793B1 /* WFTaskQuery.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		9680E7E0B664F918E2163DB9 /* WFSQLiteTests.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = 82A4864EAEF5AEB472FAF8F3 /* WFSQLiteTests.m */; };
@@ -44,10 +51,13 @@
 		9EFC88AC8AC6805FB078B889 /* WorkflowKit.framework in PurchaseRequestDemo */ = { isa = PBXBuildFile; fileRef = 26EF78F0632519432985E683 /* WorkflowKit.framework */; };
 		9F14DCC70F30705D16E94002 /* WFProcessEngine.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = D441166BB58C0AB901D87AC8 /* WFProcessEngine.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		A870A865F8D824DCFD20DEFF /* WFTimers.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 549A090589F57133B293D64F /* WFTimers.m */; };
+		AF54B0CA1ECFDB553F64DE0A /* ODataKit.framework in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = F308B2510F1C0D890B6F2016 /* ODataKit.framework */; };
 		B01C61BC17C96B65B865C136 /* WorkflowKit.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 6A854FC09A6643484EE20420 /* WorkflowKit.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		B043262804BC43D85FC6B689 /* ODataKit.framework in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = F308B2510F1C0D890B6F2016 /* ODataKit.framework */; };
 		B50DB206BE50D8BF4BE9675A /* WFRepositoryService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 59630E0E416E1E31E471B6E2 /* WFRepositoryService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		B63535753EEDA939D9CAD6CE /* WFFeelFunctions.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 26B1006EFEF0AE79870F09B5 /* WFFeelFunctions.m */; };
 		B7C5264B6F986A9581E4989B /* WorkflowKit.framework in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = 26EF78F0632519432985E683 /* WorkflowKit.framework */; };
+		C1DD3095FDE319C7CE88752B /* WorkflowKit.framework in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = 26EF78F0632519432985E683 /* WorkflowKit.framework */; };
 		C5A73C8F288F127A73DEACDA /* WFInMemoryTests.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = ECCB17D2C3CAB41308A3DB4D /* WFInMemoryTests.m */; };
 		C5CF92DA711BF3776846E64D /* WFDuration.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 1839CCE8DFE9B54C3D14DFAA /* WFDuration.m */; };
 		CBC9C00AF7F3D2CE553F89EC /* WFHandlers.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 7FA7333994D222D02A271C2E /* WFHandlers.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -63,15 +73,30 @@
 		F4B0AE133EB556BC2E6E86BF /* WFForm.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 73C42D2DF4205F85785644E7 /* WFForm.m */; };
 		F561F9B5B6C1B00BED4CA7F5 /* WFHistoryService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 396282C4A5E97D9C66F1AA38 /* WFHistoryService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		FB47DD84902C98DE6B40B8ED /* WFProcessEngine.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 7B77D7E5D0BDF933CF77FF96 /* WFProcessEngine.m */; };
+		FDE7A4789C96B1E063B15D44 /* Foundation.framework in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = B29454D488C4F49E273C15A0 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		23A693B5D54935529379FB0E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C85F249A009E6B852FD0AE48;
+			remoteInfo = WorkflowKit;
+		};
 		24B78FA7BCCBC2C1BA21BBB9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = C85F249A009E6B852FD0AE48;
 			remoteInfo = WorkflowKit;
+		};
+		7F4B7199BA19C031FDD3A984 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 27FF5E22392971B8D21B493B;
+			remoteInfo = WorkflowKitOData;
 		};
 		FB49D431693FCB52214C7581 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -85,6 +110,7 @@
 /* Begin PBXFileReference section */
 		005AA8ED835C0C66AD59D791 /* WFFeelTemporal.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFeelTemporal.m; sourceTree = "<group>"; };
 		037E8E57EFFCC24A85AE2990 /* WFDecisionTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDecisionTests.inc; sourceTree = "<group>"; };
+		04F28149E5688FABDAA97A13 /* WFODataService.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFODataService.m; sourceTree = "<group>"; };
 		0746C845740A71BBC9C7CF8D /* WorkflowKit.xcdatamodel */ = { isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = WorkflowKit.xcdatamodel; sourceTree = "<group>"; };
 		07FA1FC571B99B65CA32CD45 /* WFExternalTaskTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFExternalTaskTests.inc; sourceTree = "<group>"; };
 		09C94C2B2CF68470F191FFF5 /* WFStore.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFStore.h; sourceTree = "<group>"; };
@@ -140,10 +166,12 @@
 		82A4864EAEF5AEB472FAF8F3 /* WFSQLiteTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFSQLiteTests.m; sourceTree = "<group>"; };
 		82A9264CEF1DD63DE1DC4914 /* WFTypes.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFTypes.h; sourceTree = "<group>"; };
 		82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */ = { isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		86F8E04EBD4FEC74BBFE051A /* WorkflowKitOData.framework */ = { isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = WorkflowKitOData.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		870953E3EF7EFEA7B4D9036A /* WFDmnTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDmnTests.m; sourceTree = "<group>"; };
 		8934E1B4B99F564C935EC08A /* WFConditionalEventTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFConditionalEventTests.inc; sourceTree = "<group>"; };
 		8ABB311403612F5B9975C702 /* WFFlowElements.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFFlowElements.h; sourceTree = "<group>"; };
 		97C333D838694B18AE80ED1F /* WFODataTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFODataTests.inc; sourceTree = "<group>"; };
+		9D321F26127B6D2DDE1E97EC /* WFODataInternal.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFODataInternal.h; sourceTree = "<group>"; };
 		A01477C08490EA0A3284E3ED /* PurchaseRequestDemo.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PurchaseRequestDemo.m; sourceTree = "<group>"; };
 		A06E910058F56C5670511532 /* WFProcessDefinition.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFProcessDefinition.h; sourceTree = "<group>"; };
 		A89B0E83D105E87C5D232DBA /* WFDecisionService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFDecisionService.h; sourceTree = "<group>"; };
@@ -153,10 +181,12 @@
 		B29454D488C4F49E273C15A0 /* Foundation.framework */ = { isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		B3B0F8D62D83EA1F357CC5B5 /* WFTaskQuery.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTaskQuery.m; sourceTree = "<group>"; };
 		B43FEF13E290AC18B2A04146 /* WFDeploymentTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDeploymentTests.inc; sourceTree = "<group>"; };
+		B484CF9AEF94633881A4517A /* ODataService.framework */ = { isa = PBXFileReference; explicitFileType = wrapper.framework; path = ODataService.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B866FAA5349791DCA0D5B61E /* WFEventSubProcessTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFEventSubProcessTests.inc; sourceTree = "<group>"; };
 		B889BD1773784D5B911A2332 /* WFTestCase.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTestCase.m; sourceTree = "<group>"; };
 		C27CAE65E61048A81C943A74 /* WFHandlers.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFHandlers.m; sourceTree = "<group>"; };
 		C95B021C2403400659F662B3 /* WFDelegation.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFDelegation.h; sourceTree = "<group>"; };
+		CFB33F7F65B6BE11E4984035 /* WFODataService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFODataService.h; sourceTree = "<group>"; };
 		D07C8B4779BECC110E3278A7 /* WFOperationsTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFOperationsTests.inc; sourceTree = "<group>"; };
 		D34352CAE1E7EC33A35BE4FC /* WFDurabilityTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDurabilityTests.inc; sourceTree = "<group>"; };
 		D441166BB58C0AB901D87AC8 /* WFProcessEngine.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFProcessEngine.h; sourceTree = "<group>"; };
@@ -171,9 +201,11 @@
 		E81A3EB28D88B3BBE1E1A474 /* WFEscalationTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFEscalationTests.inc; sourceTree = "<group>"; };
 		ECCB17D2C3CAB41308A3DB4D /* WFInMemoryTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFInMemoryTests.m; sourceTree = "<group>"; };
 		EDD63D31A43371902BBDA6BB /* WFFormTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFormTests.inc; sourceTree = "<group>"; };
+		F308B2510F1C0D890B6F2016 /* ODataKit.framework */ = { isa = PBXFileReference; explicitFileType = wrapper.framework; path = ODataKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		FC55D89F93E38F3A7F31DB33 /* WFInputOutputTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFInputOutputTests.inc; sourceTree = "<group>"; };
 		FC5C70D77DBA9E9AEAB0900D /* WFCondition.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFCondition.h; sourceTree = "<group>"; };
 		FD4EF373BB0A220F9EF44E92 /* WFForm.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFForm.h; sourceTree = "<group>"; };
+		FDA011FEE52BF4576D081B10 /* WFODataOperations.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFODataOperations.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -191,6 +223,21 @@
 			buildActionMask = 2147483647;
 			files = (
 				B7C5264B6F986A9581E4989B /* WorkflowKit.framework in WorkflowKitTests */,
+				028EC5F0279B261AC1E2B202 /* WorkflowKitOData.framework in WorkflowKitTests */,
+				AF54B0CA1ECFDB553F64DE0A /* ODataKit.framework in WorkflowKitTests */,
+				923B95D33E85BDA15C873C41 /* ODataService.framework in WorkflowKitTests */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BFA769A921F61DBDD0E1A6B6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1DD3095FDE319C7CE88752B /* WorkflowKit.framework in WorkflowKitOData */,
+				B043262804BC43D85FC6B689 /* ODataKit.framework in WorkflowKitOData */,
+				21F5B87B093D5CFD8479B114 /* ODataService.framework in WorkflowKitOData */,
+				FDE7A4789C96B1E063B15D44 /* Foundation.framework in WorkflowKitOData */,
+				2AFD5798D2B30AD44AB6E3BB /* CoreData.framework in WorkflowKitOData */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -248,6 +295,7 @@
 			isa = PBXGroup;
 			children = (
 				26EF78F0632519432985E683 /* WorkflowKit.framework */,
+				86F8E04EBD4FEC74BBFE051A /* WorkflowKitOData.framework */,
 				DFC8CC2FFB1029A61E406DE9 /* WorkflowKitTests.xctest */,
 				D7418BD4F00F1BFEFE9885B7 /* PurchaseRequestDemo */,
 			);
@@ -302,6 +350,7 @@
 				0D9E881A6CBBB60E5366EA0B /* GNUmakefile */,
 				29692863EA74318B24FE874F /* Headers */,
 				9649415A5B3ED43E6A75AE6D /* Source */,
+				B57C6CAC4EC048BE92D56FE5 /* OData */,
 				940241422371F7CD1058375F /* Model */,
 				3184AC997C8F88876EF76A8C /* Tests */,
 				75D77A859758E852276D7801 /* Examples */,
@@ -316,6 +365,8 @@
 			children = (
 				B29454D488C4F49E273C15A0 /* Foundation.framework */,
 				2AB66C65BE330D1517DF768E /* CoreData.framework */,
+				F308B2510F1C0D890B6F2016 /* ODataKit.framework */,
+				B484CF9AEF94633881A4517A /* ODataService.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -366,9 +417,28 @@
 			path = Source;
 			sourceTree = "<group>";
 		};
+		B57C6CAC4EC048BE92D56FE5 /* OData */ = {
+			isa = PBXGroup;
+			children = (
+				CFB33F7F65B6BE11E4984035 /* WFODataService.h */,
+				9D321F26127B6D2DDE1E97EC /* WFODataInternal.h */,
+				04F28149E5688FABDAA97A13 /* WFODataService.m */,
+				FDA011FEE52BF4576D081B10 /* WFODataOperations.m */,
+			);
+			path = OData;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
+		6DBB4D1DD9423DA3C2E19DB1 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				70BF6596E7F1E47F16ACFA1E /* WFODataService.h in WorkflowKitOData */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B55B7D5EF8E3C3304D4AE62A /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
@@ -401,6 +471,24 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
+		27FF5E22392971B8D21B493B /* WorkflowKitOData */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D91A4AD0FDD60B5B9C849187 /* Build configuration list for PBXNativeTarget "WorkflowKitOData" */;
+			buildPhases = (
+				6DBB4D1DD9423DA3C2E19DB1 /* Headers */,
+				61E09342E69336DA91461426 /* Sources */,
+				BFA769A921F61DBDD0E1A6B6 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				35F0584F77E7349C31A2B5B5 /* PBXTargetDependency */,
+			);
+			name = WorkflowKitOData;
+			productName = WorkflowKitOData;
+			productReference = 86F8E04EBD4FEC74BBFE051A /* WorkflowKitOData.framework */;
+			productType = "com.apple.product-type.framework";
+		};
 		782374E825FAB6D56317B24C /* WorkflowKitTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8D5B2E5A09077848EBA285A0 /* Build configuration list for PBXNativeTarget "WorkflowKitTests" */;
@@ -412,6 +500,7 @@
 			);
 			dependencies = (
 				A8288D09D2BACB7067D5456A /* PBXTargetDependency */,
+				E27352CBCEFD5AF9E8AE6265 /* PBXTargetDependency */,
 			);
 			name = WorkflowKitTests;
 			productName = WorkflowKitTests;
@@ -475,6 +564,7 @@
 			projectRoot = "";
 			targets = (
 				C85F249A009E6B852FD0AE48 /* WorkflowKit */,
+				27FF5E22392971B8D21B493B /* WorkflowKitOData */,
 				782374E825FAB6D56317B24C /* WorkflowKitTests */,
 				F7FC19492C97835418C0B101 /* PurchaseRequestDemo */,
 			);
@@ -525,6 +615,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		61E09342E69336DA91461426 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B9BDCD6AB3AEE5EC3C52745 /* WFODataService.m in WorkflowKitOData */,
+				149196DF967DFBE4F669757B /* WFODataOperations.m in WorkflowKitOData */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B7164F268F478618E48B0407 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -536,6 +635,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		35F0584F77E7349C31A2B5B5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C85F249A009E6B852FD0AE48 /* WorkflowKit */;
+			targetProxy = 23A693B5D54935529379FB0E /* PBXContainerItemProxy */;
+		};
 		A8288D09D2BACB7067D5456A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = C85F249A009E6B852FD0AE48 /* WorkflowKit */;
@@ -545,6 +649,11 @@
 			isa = PBXTargetDependency;
 			target = C85F249A009E6B852FD0AE48 /* WorkflowKit */;
 			targetProxy = FB49D431693FCB52214C7581 /* PBXContainerItemProxy */;
+		};
+		E27352CBCEFD5AF9E8AE6265 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 27FF5E22392971B8D21B493B /* WorkflowKitOData */;
+			targetProxy = 7F4B7199BA19C031FDD3A984 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -556,11 +665,28 @@
 			};
 			name = Release;
 		};
+		253DFBACECAAE4CE2A8B55FE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6A39BD6A1A322B814E9ED908 /* Debug.xcconfig */;
+			buildSettings = {
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData");
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks");
+				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKitOData;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
 		5389C2CB6712CF5F8A432667 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 6A39BD6A1A322B814E9ED908 /* Debug.xcconfig */;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "WORKFLOWKIT_ODATA=1");
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/OData");
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKitTests;
 			};
@@ -602,7 +728,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "WORKFLOWKIT_ODATA=1");
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/OData");
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKitTests;
 			};
@@ -616,6 +743,22 @@
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path", "@loader_path");
 			};
 			name = Debug;
+		};
+		C92F93DB553D5362C5F0860C /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */;
+			buildSettings = {
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData");
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks");
+				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKitOData;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
 		};
 		EEB8E9ABBAC46CDB3DBC98FF /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -668,6 +811,15 @@
 			buildConfigurations = (
 				80DB6ACE13380ADC3D86D6C5 /* Debug */,
 				08723DE70035A45CE7E33CC1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D91A4AD0FDD60B5B9C849187 /* Build configuration list for WorkflowKitOData */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				253DFBACECAAE4CE2A8B55FE /* Debug */,
+				C92F93DB553D5362C5F0860C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

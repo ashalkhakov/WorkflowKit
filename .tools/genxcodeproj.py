@@ -32,6 +32,12 @@ TESTS = make_list("Tests/GNUmakefile", "WorkflowKitTests_OBJC_FILES")   # X.m
 TEST_BODIES = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "Tests", "*.inc")))
 DEMO = make_list("Examples/GNUmakefile", "PurchaseRequestDemo_OBJC_FILES")
 MODELS = make_list("GNUmakefile", "WorkflowKit_XCDATAMODELD_FILES")     # Model/X.xcdatamodeld
+# The OData API, over ODataKit's frameworks, which the workspace builds from
+# ../ODataKit/ODataKit.xcodeproj.
+ODATA_SOURCES = make_list("GNUmakefile", "WorkflowKitOData_OBJC_FILES")  # OData/X.m
+ODATA_HEADERS = make_list("GNUmakefile", "WorkflowKitOData_HEADER_FILES")  # X.h
+ODATA_OTHERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "OData", "*.h"))
+                      if os.path.basename(p) not in ODATA_HEADERS)
 DOCS = ["CLAUDE.md", "WorkflowKit-BPMN-Subset.md", "GNUmakefile"]
 CONFIGS = ["Common.xcconfig", "Debug.xcconfig", "Release.xcconfig"]
 
@@ -72,6 +78,8 @@ test_refs = {t: fileref("Tests/" + t, t, ftype(t)) for t in TESTS + TEST_BODIES}
 demo_refs = {d: fileref("Examples/" + d, d, ftype(d)) for d in DEMO}
 doc_refs = {d: fileref(d, d, ftype(d)) for d in DOCS}
 cfg_refs = {c: fileref("Xcode/Configs/" + c, c, "text.xcconfig") for c in CONFIGS}
+odata_refs = {o: fileref(o, os.path.basename(o), ftype(o)) for o in ODATA_SOURCES}
+odata_hdr_refs = {h: fileref("OData/" + h, h, ftype(h)) for h in ODATA_HEADERS + ODATA_OTHERS}
 
 
 
@@ -87,6 +95,21 @@ def sdk_framework(name):
 
 foundation = sdk_framework("Foundation")
 coredata = sdk_framework("CoreData")
+
+
+# A framework another project in the workspace builds: found by name in the
+# build directory, which is what makes Xcode build it first.
+def built_framework(name):
+    return add(oid("built", name), name + ".framework", [
+        ("isa", "PBXFileReference"),
+        ("explicitFileType", "wrapper.framework"),
+        ("path", name + ".framework"),
+        ("sourceTree", "BUILT_PRODUCTS_DIR"),
+    ])
+
+
+odatakit = built_framework("ODataKit")
+odataservice = built_framework("ODataService")
 
 
 # A data model is a version group holding one .xcdatamodel per version; the
@@ -120,6 +143,7 @@ def product(name, ext, ftype_):
 
 
 p_fw = product("WorkflowKit", ".framework", "wrapper.framework")
+p_odata = product("WorkflowKitOData", ".framework", "wrapper.framework")
 p_tests = product("WorkflowKitTests", ".xctest", "wrapper.cfbundle")
 p_demo = product("PurchaseRequestDemo", "", '"compiled.mach-o.executable"')
 
@@ -157,10 +181,24 @@ fw_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKit", "Frameworks", na
     [buildfile("WorkflowKit", foundation, "Foundation.framework"),
      buildfile("WorkflowKit", coredata, "CoreData.framework")]))
 
+o_sources = phase("PBXSourcesBuildPhase", "WorkflowKitOData", "Sources", names(
+    [buildfile("WorkflowKitOData", odata_refs[s], os.path.basename(s)) for s in ODATA_SOURCES]))
+o_headers = phase("PBXHeadersBuildPhase", "WorkflowKitOData", "Headers", names(
+    [buildfile("WorkflowKitOData", odata_hdr_refs[h], h, "{ATTRIBUTES = (Public, ); }") for h in ODATA_HEADERS]))
+o_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKitOData", "Frameworks", names(
+    [buildfile("WorkflowKitOData", p_fw, "WorkflowKit.framework"),
+     buildfile("WorkflowKitOData", odatakit, "ODataKit.framework"),
+     buildfile("WorkflowKitOData", odataservice, "ODataService.framework"),
+     buildfile("WorkflowKitOData", foundation, "Foundation.framework"),
+     buildfile("WorkflowKitOData", coredata, "CoreData.framework")]))
+
 t_sources = phase("PBXSourcesBuildPhase", "WorkflowKitTests", "Sources", names(
     [buildfile("WorkflowKitTests", test_refs[t], t) for t in TESTS]))
 t_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKitTests", "Frameworks", names(
-    [buildfile("WorkflowKitTests", p_fw, "WorkflowKit.framework")]))
+    [buildfile("WorkflowKitTests", p_fw, "WorkflowKit.framework"),
+     buildfile("WorkflowKitTests", p_odata, "WorkflowKitOData.framework"),
+     buildfile("WorkflowKitTests", odatakit, "ODataKit.framework"),
+     buildfile("WorkflowKitTests", odataservice, "ODataService.framework")]))
 
 d_sources = phase("PBXSourcesBuildPhase", "PurchaseRequestDemo", "Sources", names(
     [buildfile("PurchaseRequestDemo", demo_refs[d], d) for d in DEMO]))
@@ -181,14 +219,16 @@ def group(key, name, children, path=None):
 
 g_headers = group("Headers", "Headers", [hdr_refs[h] for h in HEADERS], "Headers")
 g_source = group("Source", "Source", [src_refs[s] for s in SOURCES], "Source")
+g_odata = group("OData", "OData", [odata_hdr_refs[h] for h in ODATA_HEADERS + ODATA_OTHERS] +
+                [odata_refs[s] for s in ODATA_SOURCES], "OData")
 g_tests = group("Tests", "Tests", [test_refs[t] for t in TESTS + TEST_BODIES], "Tests")
 g_examples = group("Examples", "Examples", [demo_refs[d] for d in DEMO], "Examples")
 g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
-g_products = group("Products", "Products", [p_fw, p_tests, p_demo])
-g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata])
+g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo])
+g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, odatakit, odataservice])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
-               [g_headers, g_source, g_model, g_tests, g_examples, g_configs, g_frameworks, g_products])
+               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_configs, g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
 
@@ -223,9 +263,15 @@ FW = {
     "SKIP_INSTALL": "YES",
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
 }
+ODATA_FW = dict(FW, **{
+    "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKitOData",
+    # The engine's own headers too: the API reads its rows.
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData")',
+})
 TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKitTests",
-    "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
+    "GCC_PREPROCESSOR_DEFINITIONS": '("$(inherited)", "WORKFLOWKIT_ODATA=1")',
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
 DEMO_S = {
@@ -240,6 +286,7 @@ def settings(d):
 
 cl_project = configs("project", "{\n\t\t\t}", "{\n\t\t\t}")
 cl_fw = configs("WorkflowKit", settings(FW), settings(FW))
+cl_odata = configs("WorkflowKitOData", settings(ODATA_FW), settings(ODATA_FW))
 cl_tests = configs("WorkflowKitTests", settings(TESTS_S), settings(TESTS_S))
 cl_demo = configs("PurchaseRequestDemo", settings(DEMO_S), settings(DEMO_S))
 
@@ -279,8 +326,12 @@ def target(name, cfglist, phases, deps, prod, ptype):
 t_fw = oid("target", "WorkflowKit")
 t_fw = target("WorkflowKit", cl_fw, [fw_headers, fw_sources, fw_frameworks], [],
               p_fw, "com.apple.product-type.framework")
+t_odata = target("WorkflowKitOData", cl_odata, [o_headers, o_sources, o_frameworks],
+                 [dependency("WorkflowKitOData", t_fw, "WorkflowKit")],
+                 p_odata, "com.apple.product-type.framework")
 t_tests = target("WorkflowKitTests", cl_tests, [t_sources, t_frameworks],
-                 [dependency("WorkflowKitTests", t_fw, "WorkflowKit")],
+                 [dependency("WorkflowKitTests", t_fw, "WorkflowKit"),
+                  dependency("WorkflowKitTests", t_odata, "WorkflowKitOData")],
                  p_tests, "com.apple.product-type.bundle.unit-test")
 t_demo = target("PurchaseRequestDemo", cl_demo, [d_sources, d_frameworks],
                 [dependency("PurchaseRequestDemo", t_fw, "WorkflowKit")],
@@ -298,7 +349,7 @@ add(project_id, "Project object", [
     ("productRefGroup", "%s /* Products */" % g_products),
     ("projectDirPath", '""'),
     ("projectRoot", '""'),
-    ("targets", names([t_fw, t_tests, t_demo])),
+    ("targets", names([t_fw, t_odata, t_tests, t_demo])),
 ])
 
 
@@ -376,8 +427,9 @@ def scheme(name, build, test=None, run=None):
 
 
 fw_ref = ref(t_fw, "WorkflowKit", "WorkflowKit.framework")
+odata_ref = ref(t_odata, "WorkflowKitOData", "WorkflowKitOData.framework")
 tests_ref = ref(t_tests, "WorkflowKitTests", "WorkflowKitTests.xctest")
 demo_ref = ref(t_demo, "PurchaseRequestDemo", "PurchaseRequestDemo")
-scheme("WorkflowKit", [fw_ref], test=tests_ref)
+scheme("WorkflowKit", [fw_ref, odata_ref], test=tests_ref)
 scheme("PurchaseRequestDemo", [demo_ref], run=demo_ref)
 print("wrote", proj)
