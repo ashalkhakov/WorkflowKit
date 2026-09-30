@@ -136,6 +136,7 @@
 		870953E3EF7EFEA7B4D9036A /* WFDmnTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDmnTests.m; sourceTree = "<group>"; };
 		8934E1B4B99F564C935EC08A /* WFConditionalEventTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFConditionalEventTests.inc; sourceTree = "<group>"; };
 		8ABB311403612F5B9975C702 /* WFFlowElements.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFFlowElements.h; sourceTree = "<group>"; };
+		97C333D838694B18AE80ED1F /* WFODataTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFODataTests.inc; sourceTree = "<group>"; };
 		A01477C08490EA0A3284E3ED /* PurchaseRequestDemo.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PurchaseRequestDemo.m; sourceTree = "<group>"; };
 		A06E910058F56C5670511532 /* WFProcessDefinition.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFProcessDefinition.h; sourceTree = "<group>"; };
 		A89B0E83D105E87C5D232DBA /* WFDecisionService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFDecisionService.h; sourceTree = "<group>"; };
@@ -270,6 +271,7 @@
 				48A161F49A9C3B5D5CDC550F /* WFMigrationTests.inc */,
 				4B2F821E275C5D147FEA73CF /* WFModificationTests.inc */,
 				0DE2A8B934CE80EDBCE4F927 /* WFMultiInstanceTests.inc */,
+				97C333D838694B18AE80ED1F /* WFODataTests.inc */,
 				D07C8B4779BECC110E3278A7 /* WFOperationsTests.inc */,
 				6BEC7F52D7040725EEB5536E /* WFSubprocessTests.inc */,
 				44A3FD1AC6AC91A463437904 /* WFTaskAssignmentTests.inc */,

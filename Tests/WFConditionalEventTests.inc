@@ -64,6 +64,28 @@
 	XCTAssertTrue([self ended:created engine:engine]);
 }
 
+/* A variable removed is gone, and its removal is a "delete" change. */
+- (void)testRemovingVariables
+{
+	NSError *error = nil;
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self waitFor:[self condition:@"hold = null" variable:@"hold" events:@[ @"delete" ]]]
+	                   engine:engine variables:@{ @"hold": @YES, @"kept": @1 }];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"ready" ]);
+	XCTAssertTrue([engine.runtimeService setVariables:@{ @"hold": [NSNull null] } processInstanceId:pid error:&error]);
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"ready" ], @"an update is not a removal");
+	XCTAssertTrue([engine.runtimeService removeVariables:(@[ @"hold", @"never" ]) processInstanceId:pid error:&error],
+		@"%@", error);
+	XCTAssertTrue([self ended:pid engine:engine]);
+
+	NSString *other = [self run:[self waitFor:[self condition:@"false" variable:nil events:nil]] engine:engine
+	                  variables:@{ @"a": @1, @"b": @2 }];
+	XCTAssertTrue([engine.runtimeService removeVariables:@[ @"a" ] processInstanceId:other error:&error], @"%@", error);
+	XCTAssertEqualObjects([engine.runtimeService variablesForProcessInstance:other error:NULL], @{ @"b": @2 });
+	XCTAssertEqualObjects([[self variables:other engine:engine] objectForKey:@"a"], @1, @"history keeps it");
+	XCTAssertFalse([engine.runtimeService removeVariables:@[ @"b" ] processInstanceId:@"nothing" error:&error]);
+}
+
 /* start -> work (a user task with a conditional boundary event) -> end;
  * the boundary -> escalated */
 - (WFProcessDefinition *)watched:(BOOL)interrupting

@@ -614,6 +614,23 @@ WFServiceError(WFErrorCode code, NSString *message)
 	} error:error];
 }
 
+- (BOOL)removeVariables:(NSArray<NSString *> *)names
+      processInstanceId:(NSString *)processInstanceId
+                  error:(NSError **)error
+{
+	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		WFExecutionEntity *root = [self root:processInstanceId in:command];
+		if (root == nil) {
+			if (commandError != NULL) {
+				*commandError = [self notRunning:processInstanceId];
+			}
+			return NO;
+		}
+		[command removeVariables:names from:root];
+		return YES;
+	} error:error];
+}
+
 /* Recipients of a message: waiting subscriptions, and start subscriptions
  * unless the caller named a running instance by id or variables. */
 - (NSArray *)recipientsOf:(NSString *)messageName

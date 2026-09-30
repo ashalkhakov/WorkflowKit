@@ -198,3 +198,12 @@
 @implementation WFTaskQueryPostgreSQLTests
 #include "WFTaskQueryTests.inc"
 @end
+
+#ifdef WORKFLOWKIT_ODATA
+@interface WFODataPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFODataPostgreSQLTests
+#include "WFODataTests.inc"
+@end
+#endif

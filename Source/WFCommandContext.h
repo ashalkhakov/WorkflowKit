@@ -129,5 +129,7 @@
  * instance. NO, with the command failed, for a value that cannot be
  * stored. */
 - (BOOL)setVariables:(NSDictionary *)variables from:(WFExecutionEntity *)execution;
+/* Removes the execution's own variables of those names; others are left. */
+- (void)removeVariables:(NSArray<NSString *> *)names from:(WFExecutionEntity *)execution;
 
 @end

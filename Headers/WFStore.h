@@ -2,6 +2,7 @@
 
 @class NSManagedObjectModel;
 @class NSManagedObjectContext;
+@class NSPersistentStoreCoordinator;
 
 /* A deployment: a named set of BPMN and DMN resources. */
 @interface WFDeploymentRecord : NSObject
@@ -71,6 +72,10 @@
                           options:(NSDictionary *)options
                             error:(NSError **)error;
 - (instancetype)init NS_UNAVAILABLE;
+
+/* The coordinator of the store, for what reads it beside the engine --
+ * an API serving its rows -- and never writes them itself. */
+@property (nonatomic, readonly, strong) NSPersistentStoreCoordinator *coordinator;
 
 /* A new private-queue context on the store, for one command. */
 - (NSManagedObjectContext *)newCommandContext;

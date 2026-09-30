@@ -1,6 +1,9 @@
 #import <XCTest/XCTest.h>
 #import <CoreData/CoreData.h>
 #import "WorkflowKit.h"
+#ifdef WORKFLOWKIT_ODATA
+#import "WFODataService.h"
+#endif
 
 /* A service handler that answers each topic as the test tells it to. */
 @interface WFMapHandler : NSObject <WFServiceTaskHandler>

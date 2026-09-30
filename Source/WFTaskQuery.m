@@ -80,6 +80,15 @@ WFLikePattern(NSString *pattern)
 	return like;
 }
 
+/* A value in its column: one that holds it, so that NOT of it holds for
+ * a row whose value is of another type, in SQL's logic as in memory's. */
+static NSPredicate *
+WFColumn(NSString *key, NSPredicateOperatorType type, id value)
+{
+	return WFAnd(@[ WFCompare(WFVariableKey(key), NSNotEqualToPredicateOperatorType, nil),
+	                WFCompare(WFVariableKey(key), type, value) ]);
+}
+
 /* What a variable row holding the value, by the operator, is; ne aside. */
 static NSPredicate *
 WFTypedCondition(NSString *name, WFQueryOperator op, id value, NSError **error)
@@ -101,10 +110,10 @@ WFTypedCondition(NSString *name, WFQueryOperator op, id value, NSError **error)
 		}
 		return nil;
 	}
+	/* Each type in a column of its own: a value is compared in its type's. */
 	if ([value isKindOfClass:[NSString class]]) {
 		id operand = op == WFQueryLike ? WFLikePattern(value) : value;
-		return WFAnd(@[ WFCompare(type, NSEqualToPredicateOperatorType, @(WFVariableTypeString)),
-		                WFCompare(WFVariableKey(@"textValue"), WFOperatorType(op), operand) ]);
+		return WFColumn(@"textValue", WFOperatorType(op), operand);
 	}
 	if ([value isKindOfClass:[NSNumber class]] && WFIsBooleanNumber(value)) {
 		if (ordered) {
@@ -113,23 +122,13 @@ WFTypedCondition(NSString *name, WFQueryOperator op, id value, NSError **error)
 			}
 			return nil;
 		}
-		return WFAnd(@[ WFCompare(type, NSEqualToPredicateOperatorType, @(WFVariableTypeBoolean)),
-		                WFCompare(WFVariableKey(@"wholeNumber"), NSEqualToPredicateOperatorType,
-		                          @([value boolValue] ? 1LL : 0LL)) ]);
+		return WFColumn(@"truthValue", NSEqualToPredicateOperatorType, [NSNumber numberWithBool:[value boolValue]]);
 	}
 	if ([value isKindOfClass:[NSNumber class]]) {
-		NSPredicateOperatorType compare = WFOperatorType(op);
-		NSPredicate *whole = WFAnd(@[ WFCompare(type, NSEqualToPredicateOperatorType, @(WFVariableTypeInteger)),
-		                              WFCompare(WFVariableKey(@"wholeNumber"), compare, value) ]);
-		NSPredicate *real = WFAnd(@[ WFCompare(type, NSEqualToPredicateOperatorType, @(WFVariableTypeDouble)),
-		                             WFCompare(WFVariableKey(@"realNumber"), compare,
-		                                       [NSNumber numberWithDouble:[value doubleValue]]) ]);
-		return [NSCompoundPredicate orPredicateWithSubpredicates:@[ whole, real ]];
+		return WFColumn(@"realNumber", WFOperatorType(op), [NSNumber numberWithDouble:[value doubleValue]]);
 	}
 	if ([value isKindOfClass:[NSDate class]]) {
-		return WFAnd(@[ WFCompare(type, NSEqualToPredicateOperatorType, @(WFVariableTypeDate)),
-		                WFCompare(WFVariableKey(@"realNumber"), WFOperatorType(op),
-		                          [NSNumber numberWithDouble:[value timeIntervalSince1970]]) ]);
+		return WFColumn(@"dateTime", WFOperatorType(op), value);
 	}
 	if (error != NULL) {
 		*error = WFQueryError([NSString stringWithFormat:@"%@: a %@ is not a value a query compares",

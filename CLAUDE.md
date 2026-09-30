@@ -63,8 +63,20 @@ its own:
     WORKFLOWKIT_TEST_MYSQL_URL=mysql://root:test@172.17.0.3/coredata_test
 ```
 
-In `ois-dev` those are the `cdpgtest` and `cdmytest` containers; CI starts
+In `ois-dev` those are the `cdpgtest` and `cdmytest` containers (their
+addresses change when docker restarts: `docker inspect` them); CI starts
 its own.
+
+The OData API (`OData/`, `WorkflowKitOData`) is built only against
+ODataKit: `ODATAKIT` names a built checkout (`/w/odatakit-*` in
+`ois-dev`), or `odata=yes` finds an installed one. Its tests are the
+`WFOData*Tests` classes, compiled in with it:
+
+```sh
+.tools/gnustep.sh make test ODATAKIT=/w/odatakit-served
+```
+
+It is not built on macOS nor in CI yet.
 
 ## macOS
 

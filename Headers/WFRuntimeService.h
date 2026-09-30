@@ -164,6 +164,12 @@
 - (BOOL)setVariables:(NSDictionary *)variables
    processInstanceId:(NSString *)processInstanceId
                error:(NSError **)error;
+/* Removes the process instance's own variables of those names, as a
+ * "delete" change a conditional event can wait for; a name it has none of
+ * is passed by. Their history keeps the last value they had. */
+- (BOOL)removeVariables:(NSArray<NSString *> *)names
+      processInstanceId:(NSString *)processInstanceId
+                  error:(NSError **)error;
 
 /* Starts each process whose conditional start event's condition holds
  * over the variables -- the latest version of each, unless it is

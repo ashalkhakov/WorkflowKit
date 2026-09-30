@@ -80,9 +80,15 @@ BOOL WFIsIntegerNumber(NSNumber *number);
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *processInstanceId;
 @property (nonatomic) int16_t type;
+/* The value, in the column of its type: a string's text, JSON's text,
+ * every number as a real number (and a whole number exactly as well), a
+ * boolean, a date, data. */
 @property (nonatomic, copy) NSString *textValue;
+@property (nonatomic, copy) NSString *jsonText;
 @property (nonatomic, strong) NSNumber *wholeNumber;
 @property (nonatomic, strong) NSNumber *realNumber;
+@property (nonatomic, strong) NSNumber *truthValue;
+@property (nonatomic, copy) NSDate *dateTime;
 @property (nonatomic, copy) NSData *bytesValue;
 @property (nonatomic, strong) WFExecutionEntity *execution;
 @end
@@ -225,9 +231,15 @@ extern NSString * const WFHistoricStateExternallyTerminated;
 @property (nonatomic, copy) NSString *processInstanceId;
 @property (nonatomic) BOOL scopeIsProcessInstance;
 @property (nonatomic) int16_t type;
+/* The value, in the column of its type: a string's text, JSON's text,
+ * every number as a real number (and a whole number exactly as well), a
+ * boolean, a date, data. */
 @property (nonatomic, copy) NSString *textValue;
+@property (nonatomic, copy) NSString *jsonText;
 @property (nonatomic, strong) NSNumber *wholeNumber;
 @property (nonatomic, strong) NSNumber *realNumber;
+@property (nonatomic, strong) NSNumber *truthValue;
+@property (nonatomic, copy) NSDate *dateTime;
 @property (nonatomic, copy) NSData *bytesValue;
 @property (nonatomic, copy) NSDate *updatedAt;
 @end

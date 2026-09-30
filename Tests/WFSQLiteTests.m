@@ -198,3 +198,12 @@
 @implementation WFTaskQuerySQLiteTests
 #include "WFTaskQueryTests.inc"
 @end
+
+#ifdef WORKFLOWKIT_ODATA
+@interface WFODataSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFODataSQLiteTests
+#include "WFODataTests.inc"
+@end
+#endif

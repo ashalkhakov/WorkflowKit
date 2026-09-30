@@ -4310,4 +4310,16 @@ WFJSONValue(id value)
 	return YES;
 }
 
+- (void)removeVariables:(NSArray<NSString *> *)names from:(WFExecutionEntity *)execution
+{
+	for (NSString *name in names) {
+		WFVariableEntity *variable = [execution localVariableNamed:name];
+		if (variable != nil) {
+			/* History keeps the last value it had. */
+			[self variable:variable changedBy:@"delete"];
+			[self remove:variable];
+		}
+	}
+}
+
 @end

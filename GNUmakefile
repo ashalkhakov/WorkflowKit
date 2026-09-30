@@ -72,6 +72,36 @@ WorkflowKit_LIBRARIES_DEPEND_UPON += -lCoreData -ldispatch $(FND_LIBS) $(OBJC_LI
 WorkflowKit_XCDATAMODELD_FILES = Model/WorkflowKit.xcdatamodeld
 WorkflowKit_HAS_RESOURCE_BUNDLE = yes
 
+# The OData API (OData/, WorkflowKitOData) over ODataKit's server, built
+# when ODATAKIT names a built ODataKit checkout, or with odata=yes against
+# an installed ODataKit:
+#
+#   make ODATAKIT=../ODataStore      (after make in ../ODataStore)
+#   make test ODATAKIT=../ODataStore
+ifneq ($(ODATAKIT),)
+override ODATAKIT := $(abspath $(ODATAKIT))
+odata = yes
+endif
+export ODATAKIT odata
+ifeq ($(odata),yes)
+LIBRARY_NAME += WorkflowKitOData
+WorkflowKitOData_OBJC_FILES = \
+	OData/WFODataService.m \
+	OData/WFODataOperations.m
+WorkflowKitOData_HEADER_FILES_DIR = OData
+WorkflowKitOData_HEADER_FILES_INSTALL_DIR = WorkflowKitOData
+WorkflowKitOData_HEADER_FILES = WFODataService.h
+ifneq ($(ODATAKIT),)
+WorkflowKitOData_INCLUDE_DIRS = -I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataService/include
+WorkflowKitOData_LIB_DIRS = -L$(ODATAKIT)/obj
+endif
+WorkflowKitOData_INCLUDE_DIRS += -IHeaders -ISource -IOData
+WorkflowKitOData_LIB_DIRS += -L./$(GNUSTEP_OBJ_DIR)
+WorkflowKitOData_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
+WorkflowKitOData_LIBRARIES_DEPEND_UPON += -lWorkflowKit -lODataService -lODataKit -lCoreData -ldispatch \
+	$(FND_LIBS) $(OBJC_LIBS)
+endif
+
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 
 include $(GNUSTEP_MAKEFILES)/library.make

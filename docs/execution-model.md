@@ -38,6 +38,21 @@ reference splits them:
 `WFProcessEngine` is built with a Core Data store description and owns the
 job executor.
 
+**Over HTTP**, `WorkflowKitOData` (in `OData/`) serves the same state as an
+OData service, through ODataKit's `ODataService` over the engine's store.
+What it serves is the model's `API` configuration -- tasks, process
+instances, definitions, and their history -- with what the engine keeps
+for itself left out of each (`OData.served` `NO`): the execution tree
+below a process instance, locks, flags. It reads the store and never
+writes it: every change is an action that calls a service -- start an
+instance, correlate a message, claim, assign or complete a task, suspend,
+activate or cancel an instance, set or remove its variables. Its types
+are static: a variable is an entity of its own, an instance's
+(`ProcessInstances(id)/Variables`), with its value in the property of its
+type, so tasks are filtered by variables as by any navigation
+(`ProcessInstance/Variables/any(v: ...)`). Data typed per task, as a
+form declares it, is for later.
+
 ## Repository
 
 A **deployment** is a named set of resources: the BPMN XML files. Deploying
@@ -287,9 +302,9 @@ over task rows, so the store evaluates it, and a variable condition is a
 subquery over the variables of the task's process instance, reached by a
 relationship from the task to the instance's root execution. It asks the
 instance's own variables, not a scope's inside it. A variable row keeps
-its value in a column by type (text, whole or real number), so a
-condition is typed by its value: a number matches a whole or a real
-number, a date the real number it is kept as. The same predicate serves
+its value in the column of its type -- text, JSON, a number (every number
+as a real, a whole one exactly as well), a boolean, a date, data -- so a
+condition is typed by its value and compared in that column. The same predicate serves
 whatever else filters tasks by variables, such as an API.
 
 **Input/output mappings** make an activity a scope: its inputs are its

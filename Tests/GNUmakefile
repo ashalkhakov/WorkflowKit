@@ -35,8 +35,19 @@ endif
 ifneq ($(WORKFLOWKIT_TEST_POSTGRES_URL)$(WORKFLOWKIT_TEST_MYSQL_URL),)
 WorkflowKitTests_BUNDLE_LIBS += -lCDSQLStore
 endif
+# The OData API's tests, where it is built (make test ODATAKIT=...).
+ifeq ($(odata),yes)
+WorkflowKitTests_OBJCFLAGS += -DWORKFLOWKIT_ODATA=1
+WorkflowKitTests_BUNDLE_LIBS += -lWorkflowKitOData -lODataService -lODataKit
+ifneq ($(ODATAKIT),)
+WorkflowKitTests_INCLUDE_DIRS += -I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataService/include
+ADDITIONAL_LIB_DIRS += -L$(ODATAKIT)/obj
+ODATAKIT_LIBRARY_PATH = $(ODATAKIT)/obj:
+endif
+WorkflowKitTests_INCLUDE_DIRS += -I../OData
+endif
 WorkflowKitTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
-WorkflowKitTests_INCLUDE_DIRS = -I../Headers
+WorkflowKitTests_INCLUDE_DIRS += -I../Headers
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)
 WorkflowKitTests_BUNDLE_LIBS += -lWorkflowKit -lCoreData -lXCTest -ldispatch
 WorkflowKitTests_XCDATAMODELD_FILES = ../Model/WorkflowKit.xcdatamodeld
@@ -54,5 +65,5 @@ TEST_TIMEOUT ?= 300
 
 .PHONY: run-tests
 run-tests: all
-	LD_LIBRARY_PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$$LD_LIBRARY_PATH" \
+	LD_LIBRARY_PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$$LD_LIBRARY_PATH" \
 	  timeout -s ABRT $(TEST_TIMEOUT) $(XCTEST) $(BUNDLE_NAME).bundle

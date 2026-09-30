@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="1">
     <entity name="WFDefinitionRecord" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+                <entry key="OData.property" value="ProcessDefinitionId"/>
+            </userInfo>
+        </attribute>
         <attribute name="historyTimeToLive" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
         <attribute name="key" attributeType="String"/>
         <attribute name="name" optional="YES" attributeType="String"/>
@@ -22,6 +27,10 @@
             <fetchIndexElement property="key" type="Binary" order="ascending"/>
             <fetchIndexElement property="version" type="Binary" order="descending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.ProcessDefinition"/>
+            <entry key="OData.entitySet" value="ProcessDefinitions"/>
+        </userInfo>
     </entity>
     <entity name="WFDeployment" representedClassName="NSManagedObject" syncable="YES">
         <attribute name="deployedAt" attributeType="Date" usesScalarValueType="NO"/>
@@ -46,30 +55,99 @@
         <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFDeployment" inverseName="resources" inverseEntity="WFDeployment"/>
     </entity>
     <entity name="WFExecution" representedClassName="WFExecutionEntity" syncable="YES">
-        <attribute name="activityId" optional="YES" attributeType="String"/>
-        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="activityId" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="businessKey" optional="YES" attributeType="String"/>
-        <attribute name="definitionId" attributeType="String"/>
-        <attribute name="executionId" attributeType="String"/>
-        <attribute name="isActive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
-        <attribute name="isCompensation" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="isConcurrent" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="isMultiInstanceBody" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="isScope" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="lockRevision" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="ProcessDefinitionId"/>
+            </userInfo>
+        </attribute>
+        <attribute name="executionId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+                <entry key="OData.property" value="ProcessInstanceId"/>
+            </userInfo>
+        </attribute>
+        <attribute name="isActive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="isCompensation" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="isConcurrent" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="isMultiInstanceBody" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="isScope" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="lockRevision" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="processInstanceId" attributeType="String">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="superProcessInstanceId" optional="YES" attributeType="String"/>
         <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFExecution" inverseName="parent" inverseEntity="WFExecution"/>
+        <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFExecution" inverseName="parent" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
         <relationship name="eventSubscriptions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFEventSubscription" inverseName="execution" inverseEntity="WFEventSubscription"/>
         <relationship name="externalTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFExternalTask" inverseName="execution" inverseEntity="WFExternalTask"/>
         <relationship name="incidents" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFIncident" inverseName="execution" inverseEntity="WFIncident"/>
-        <relationship name="instanceTasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="WFTask" inverseName="processInstance" inverseEntity="WFTask"/>
+        <relationship name="instanceTasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="WFTask" inverseName="processInstance" inverseEntity="WFTask">
+            <userInfo>
+                <entry key="OData.property" value="Tasks"/>
+            </userInfo>
+        </relationship>
         <relationship name="jobs" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFJob" inverseName="execution" inverseEntity="WFJob"/>
-        <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="children" inverseEntity="WFExecution"/>
-        <relationship name="subProcessInstance" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="WFExecution" inverseName="superExecution" inverseEntity="WFExecution"/>
-        <relationship name="superExecution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="subProcessInstance" inverseEntity="WFExecution"/>
-        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFTask" inverseName="execution" inverseEntity="WFTask"/>
+        <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="children" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
+        <relationship name="subProcessInstance" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="WFExecution" inverseName="superExecution" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
+        <relationship name="superExecution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="subProcessInstance" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFTask" inverseName="execution" inverseEntity="WFTask">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
         <relationship name="variables" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFVariable" inverseName="execution" inverseEntity="WFVariable"/>
         <fetchIndex name="byExecutionId">
             <fetchIndexElement property="executionId" type="Binary" order="ascending"/>
@@ -83,21 +161,73 @@
         <fetchIndex name="bySuperProcessInstance">
             <fetchIndexElement property="superProcessInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.ProcessInstance"/>
+            <entry key="OData.entitySet" value="ProcessInstances"/>
+        </userInfo>
     </entity>
     <entity name="WFVariable" representedClassName="WFVariableEntity" syncable="YES">
-        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
-        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
-        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <attribute name="dateTime" optional="YES" attributeType="Date" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.property" value="Date"/>
+            </userInfo>
+        </attribute>
+        <attribute name="jsonText" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="Json"/>
+                <entry key="OData.type" value="Org.OData.JSON.V1.JSON"/>
+            </userInfo>
+        </attribute>
+        <attribute name="truthValue" optional="YES" attributeType="Boolean" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.property" value="Boolean"/>
+            </userInfo>
+        </attribute>
+        <attribute name="bytesValue" optional="YES" attributeType="Binary">
+            <userInfo>
+                <entry key="OData.property" value="Bytes"/>
+            </userInfo>
+        </attribute>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.property" value="Number"/>
+            </userInfo>
+        </attribute>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="name" attributeType="String"/>
         <attribute name="processInstanceId" attributeType="String"/>
-        <attribute name="textValue" optional="YES" attributeType="String"/>
-        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="variableId" attributeType="String"/>
-        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="variables" inverseEntity="WFExecution"/>
+        <attribute name="textValue" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="Text"/>
+            </userInfo>
+        </attribute>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="variableId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="variables" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.property" value="ProcessInstance"/>
+            </userInfo>
+        </relationship>
         <fetchIndex name="byNameText">
             <fetchIndexElement property="name" type="Binary" order="ascending"/>
             <fetchIndexElement property="textValue" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.Variable"/>
+            <entry key="OData.entitySet" value="Variables"/>
+        </userInfo>
     </entity>
     <entity name="WFIdentityLink" representedClassName="WFIdentityLinkEntity" syncable="YES">
         <attribute name="groupId" optional="YES" attributeType="String"/>
@@ -113,19 +243,35 @@
         </fetchIndex>
     </entity>
     <entity name="WFTask" representedClassName="WFTaskEntity" syncable="YES">
-        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="assignee" optional="YES" attributeType="String"/>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="ProcessDefinitionId"/>
+            </userInfo>
+        </attribute>
         <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="followUpDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="name" optional="YES" attributeType="String"/>
         <attribute name="priority" attributeType="Integer 32" defaultValueString="50" usesScalarValueType="YES"/>
         <attribute name="processInstanceId" attributeType="String"/>
         <attribute name="taskDefinitionKey" attributeType="String"/>
-        <attribute name="taskId" attributeType="String"/>
+        <attribute name="taskId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="tasks" inverseEntity="WFExecution"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="tasks" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
         <relationship name="identityLinks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFIdentityLink" inverseName="task" inverseEntity="WFIdentityLink"/>
         <relationship name="processInstance" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="instanceTasks" inverseEntity="WFExecution"/>
         <fetchIndex name="byTaskId">
@@ -137,6 +283,10 @@
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.Task"/>
+            <entry key="OData.entitySet" value="Tasks"/>
+        </userInfo>
     </entity>
     <entity name="WFEventSubscription" representedClassName="WFEventSubscriptionEntity" syncable="YES">
         <attribute name="activityId" attributeType="String"/>
@@ -194,10 +344,22 @@
     </entity>
     <entity name="WFHistoricProcessInstance" representedClassName="WFHistoricProcessInstanceEntity" syncable="YES">
         <attribute name="businessKey" optional="YES" attributeType="String"/>
-        <attribute name="definitionId" attributeType="String"/>
-        <attribute name="definitionKey" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="ProcessDefinitionId"/>
+            </userInfo>
+        </attribute>
+        <attribute name="definitionKey" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="ProcessDefinitionKey"/>
+            </userInfo>
+        </attribute>
         <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="processInstanceId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="state" attributeType="String"/>
         <attribute name="superProcessInstanceId" optional="YES" attributeType="String"/>
@@ -205,8 +367,15 @@
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.HistoricProcessInstance"/>
+            <entry key="OData.entitySet" value="HistoricProcessInstances"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricVariable" representedClassName="WFHistoricVariableEntity" syncable="YES">
+        <attribute name="dateTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="jsonText" optional="YES" attributeType="String"/>
+        <attribute name="truthValue" optional="YES" attributeType="Boolean" usesScalarValueType="NO"/>
         <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
         <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
         <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
@@ -263,15 +432,26 @@
         <attribute name="processInstanceId" attributeType="String"/>
         <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="taskDefinitionKey" attributeType="String"/>
-        <attribute name="taskId" attributeType="String"/>
+        <attribute name="taskId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
         <fetchIndex name="byTaskId">
             <fetchIndexElement property="taskId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.HistoricTaskInstance"/>
+            <entry key="OData.entitySet" value="HistoricTaskInstances"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricVariableUpdate" representedClassName="WFHistoricVariableUpdateEntity" syncable="YES">
+        <attribute name="dateTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="jsonText" optional="YES" attributeType="String"/>
+        <attribute name="truthValue" optional="YES" attributeType="Boolean" usesScalarValueType="NO"/>
         <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
         <attribute name="name" attributeType="String"/>
         <attribute name="processInstanceId" attributeType="String"/>
@@ -366,4 +546,12 @@
             </uniquenessConstraint>
         </uniquenessConstraints>
     </entity>
+    <configuration name="API">
+        <memberEntity name="WFDefinitionRecord"/>
+        <memberEntity name="WFExecution"/>
+        <memberEntity name="WFHistoricProcessInstance"/>
+        <memberEntity name="WFHistoricTaskInstance"/>
+        <memberEntity name="WFTask"/>
+        <memberEntity name="WFVariable"/>
+    </configuration>
 </model>

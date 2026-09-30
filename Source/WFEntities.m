@@ -99,18 +99,17 @@ WFIsIntegerNumber(NSNumber *number)
 	case WFVariableTypeString:
 		return [self valueForKey:@"textValue"];
 	case WFVariableTypeBoolean:
-		return [NSNumber numberWithBool:[[self valueForKey:@"wholeNumber"] boolValue]];
+		return [NSNumber numberWithBool:[[self valueForKey:@"truthValue"] boolValue]];
 	case WFVariableTypeInteger:
 		return [NSNumber numberWithLongLong:[[self valueForKey:@"wholeNumber"] longLongValue]];
 	case WFVariableTypeDouble:
 		return [NSNumber numberWithDouble:[[self valueForKey:@"realNumber"] doubleValue]];
 	case WFVariableTypeDate:
-		return [NSDate dateWithTimeIntervalSince1970:
-			[[self valueForKey:@"realNumber"] doubleValue]];
+		return [self valueForKey:@"dateTime"];
 	case WFVariableTypeBytes:
 		return [self valueForKey:@"bytesValue"];
 	case WFVariableTypeJSON: {
-		NSData *data = [[self valueForKey:@"textValue"] dataUsingEncoding:NSUTF8StringEncoding];
+		NSData *data = [[self valueForKey:@"jsonText"] dataUsingEncoding:NSUTF8StringEncoding];
 		return data == nil ? nil
 			: [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
 	}
@@ -123,8 +122,11 @@ WFIsIntegerNumber(NSNumber *number)
 {
 	WFVariableType type = WFVariableTypeNull;
 	NSString *text = nil;
+	NSString *json = nil;
 	NSNumber *wholeNumber = nil;
 	NSNumber *realNumber = nil;
+	NSNumber *truth = nil;
+	NSDate *date = nil;
 	NSData *bytes = nil;
 	if (value == nil || value == [NSNull null]) {
 		type = WFVariableTypeNull;
@@ -134,17 +136,20 @@ WFIsIntegerNumber(NSNumber *number)
 	} else if ([value isKindOfClass:[NSNumber class]]) {
 		if (WFIsBooleanNumber(value)) {
 			type = WFVariableTypeBoolean;
-			wholeNumber = [NSNumber numberWithLongLong:[value boolValue] ? 1 : 0];
+			truth = [NSNumber numberWithBool:[value boolValue]];
 		} else if (WFIsIntegerNumber(value)) {
+			/* Exact in one column, and a number like any other in the one
+			 * every number is compared in. */
 			type = WFVariableTypeInteger;
 			wholeNumber = [NSNumber numberWithLongLong:[value longLongValue]];
+			realNumber = [NSNumber numberWithDouble:[value doubleValue]];
 		} else {
 			type = WFVariableTypeDouble;
 			realNumber = [NSNumber numberWithDouble:[value doubleValue]];
 		}
 	} else if ([value isKindOfClass:[NSDate class]]) {
 		type = WFVariableTypeDate;
-		realNumber = [NSNumber numberWithDouble:[value timeIntervalSince1970]];
+		date = value;
 	} else if ([value isKindOfClass:[NSData class]]) {
 		type = WFVariableTypeBytes;
 		bytes = value;
@@ -156,14 +161,17 @@ WFIsIntegerNumber(NSNumber *number)
 		if (data == nil) {
 			return NO;
 		}
-		text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+		json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 	} else {
 		return NO;
 	}
 	[self setValue:[NSNumber numberWithShort:type] forKey:@"type"];
 	[self setValue:text forKey:@"textValue"];
+	[self setValue:json forKey:@"jsonText"];
 	[self setValue:wholeNumber forKey:@"wholeNumber"];
 	[self setValue:realNumber forKey:@"realNumber"];
+	[self setValue:truth forKey:@"truthValue"];
+	[self setValue:date forKey:@"dateTime"];
 	[self setValue:bytes forKey:@"bytesValue"];
 	return YES;
 }
@@ -171,8 +179,8 @@ WFIsIntegerNumber(NSNumber *number)
 @end
 
 @implementation WFVariableEntity
-@dynamic variableId, name, processInstanceId, type, textValue, wholeNumber;
-@dynamic realNumber, bytesValue, execution;
+@dynamic variableId, name, processInstanceId, type, textValue, jsonText, wholeNumber;
+@dynamic realNumber, truthValue, dateTime, bytesValue, execution;
 @end
 
 @implementation WFTaskEntity
@@ -215,7 +223,7 @@ NSString * const WFIdentityLinkCandidate = @"candidate";
 
 @implementation WFHistoricVariableEntity
 @dynamic variableId, name, processInstanceId, scopeIsProcessInstance, type;
-@dynamic textValue, wholeNumber, realNumber, bytesValue, updatedAt;
+@dynamic textValue, jsonText, wholeNumber, realNumber, truthValue, dateTime, bytesValue, updatedAt;
 @end
 
 @implementation WFHistoricActivityInstanceEntity
