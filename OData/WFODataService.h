@@ -10,7 +10,7 @@
  *   ProcessInstances          running process instances
  *   Variables                 their variables
  *   ProcessDefinitions        deployed definitions, every version
- *   Forms, FormFields         their user tasks' and start events' forms
+ *   Forms                     their user tasks' and start events' forms
  *   HistoricProcessInstances  and HistoricTaskInstances, as history keeps them
  *
  * What the engine keeps for itself -- the execution tree, locks, jobs,
@@ -23,12 +23,13 @@
  *
  *   Tasks?$filter=ProcessInstance/Variables/any(v: v/Name eq 'amount' and v/Number gt 1000)
  *
- * A task's form is Tasks(id)/Form, its fields in order
- * (Form?$expand=Fields($orderby=Position)); a definition's are
- * ProcessDefinitions(id)/Forms, the start event's IsStartForm. The values
- * a form shows -- each field's variable, else its default -- come from
- * Tasks(id)/WorkflowKit.FormValues() and StartFormValues(Key), a JSON
- * object by field (dates as ISO-8601 text).
+ * A form is an XForms document: a task's is Tasks(id)/Form, its Document
+ * the XHTML+XForms text (none for a form key the application resolves);
+ * a definition's are ProcessDefinitions(id)/Forms, the start event's
+ * IsStartForm. The instance a form opens with, as its handler gives it,
+ * is Tasks(id)/WorkflowKit.FormInstance() or StartFormInstance(Key), XML
+ * text; submitting one hands it to the handler (WFFormHandler), whose
+ * variables complete the task or start the process.
  *
  * The service reads the store and never writes it: every change is an
  * action that calls the engine.
@@ -39,11 +40,11 @@
  *       .Unclaim, .Assign(UserId)
  *   ProcessInstances(id)/WorkflowKit.Suspend, .Activate, .Cancel(Reason),
  *       .SetVariables(Variables), .RemoveVariables(Names)
- *   Tasks(id)/WorkflowKit.SubmitForm(Values)
- *   SubmitStartForm(Key, BusinessKey, Values)
+ *   Tasks(id)/WorkflowKit.SubmitForm(Instance)
+ *   SubmitStartForm(Key, BusinessKey, Instance)
  *
- * A form's submission is checked against its fields before it completes
- * the task or starts the process; values it does not take answer 400.
+ * An instance that is not XML, or that the handler refuses, answers 400;
+ * a form without a handler, 500.
  *
  * Variables given are a JSON object (Edm.Untyped). An engine error answers
  * with its status: 404 for what is not there, 409 for what its state does

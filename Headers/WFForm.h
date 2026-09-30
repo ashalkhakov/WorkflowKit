@@ -69,19 +69,27 @@ typedef NS_ENUM(NSInteger, WFFormFieldType) {
 
 /*
  * The form of a user task or a start event: what a person sees and fills
- * in. The engine renders nothing; it keeps what the form is, gives its
- * values, and checks what comes back.
+ * in. Forms are XForms documents: the engine renders nothing, and keeps
+ * the document a form is, and the handler (WFFormHandler, in
+ * WFFormService.h) that gives its instance and takes it back.
  *
- * Two kinds, alone or together, as Camunda 7 has them:
+ * As Camunda 7 has them, alone or together:
  *
- *  - fields (camunda:formData): the variables the form shows and takes,
- *    each typed and constrained. From them an application generates a
- *    form, or checks one of its own.
- *  - a form key (camunda:formKey): the name of a form the application
- *    has -- a native view, an XForms document -- which it resolves itself.
+ *  - a form key (camunda:formKey): embedded:deployment:<resource> names an
+ *    XForms document deployed with the process; any other key is the
+ *    application's to resolve.
+ *  - fields (camunda:formData): variables, each typed and constrained,
+ *    from which the engine generates the XForms document, and which the
+ *    engine's own handler fills and checks.
+ *  - a handler (camunda:formHandlerClass): the name a form handler is
+ *    registered or linked under.
  */
 @interface WFFormDefinition : NSObject
 @property (nonatomic, readonly, copy) NSString *formKey;
+/* camunda:formHandlerClass: nil for the engine's choice. */
+@property (nonatomic, readonly, copy) NSString *formHandlerName;
+/* The resource embedded:deployment:<resource> names; nil for another key. */
+@property (nonatomic, readonly, copy) NSString *deploymentResourceName;
 @property (nonatomic, readonly, copy) NSArray<WFFormField *> *fields;
 /* A start form's field whose value becomes the instance's business key
  * (camunda:formData businessKey); nil for none. */
@@ -89,6 +97,10 @@ typedef NS_ENUM(NSInteger, WFFormFieldType) {
 + (instancetype)formWithKey:(NSString *)formKey
                      fields:(NSArray<WFFormField *> *)fields
          businessKeyFieldId:(NSString *)businessKeyFieldId;
++ (instancetype)formWithKey:(NSString *)formKey
+                     fields:(NSArray<WFFormField *> *)fields
+         businessKeyFieldId:(NSString *)businessKeyFieldId
+                    handler:(NSString *)formHandlerName;
 - (instancetype)init NS_UNAVAILABLE;
 - (WFFormField *)fieldWithId:(NSString *)fieldId;
 /* What is wrong with the definition -- two fields of one id, an enum
@@ -108,4 +120,20 @@ typedef NS_ENUM(NSInteger, WFFormFieldType) {
 /* A value shown in a field, as its type has it; NSNull when it has none
  * or is not of the type. */
 - (id)displayValue:(id)value ofField:(WFFormField *)field;
+
+/*
+ * The XForms document of the fields: a model with an instance, <data>
+ * with an element per field, and a bind per field -- its type
+ * (xsd:string, xsd:long, xsd:boolean, xsd:dateTime), required, readonly,
+ * and its constraints as an XPath constraint -- and a control per field,
+ * an enum a select1 of its values. The application adds how it submits.
+ */
+- (NSXMLDocument *)XFormsDocument;
+/* The instance with the values, by field, each as XML Schema writes its
+ * type: true, 42, 2030-01-02T00:00:00Z. */
+- (NSXMLDocument *)instanceWithValues:(NSDictionary *)values;
+/* A submitted instance's values, by field, as text: those of its root's
+ * children that are fields, read-only ones left out; an empty element of
+ * a field that is not text is null. */
+- (NSDictionary *)valuesFromInstance:(NSXMLDocument *)instance;
 @end

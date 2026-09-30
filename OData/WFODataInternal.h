@@ -15,13 +15,17 @@
                            reply:(ODataReply *)reply;
 - (WFExecutionEntity *)submitStartFormWithKey:(NSString *)key
                                   businessKey:(NSString *)businessKey
-                                       values:(NSDictionary *)values
+                                     instance:(NSString *)instance
                                         reply:(ODataReply *)reply;
 @end
 
 @protocol WFODataServiceFunctions <ODataFunctions>
-- (NSDictionary *)startFormValuesWithKey:(NSString *)key reply:(ODataReply *)reply;
+- (NSString *)startFormInstanceWithKey:(NSString *)key reply:(ODataReply *)reply;
 @end
+
+/* XML text a request carries, as a document; nil, answered 400, when it is
+ * not one. */
+NSXMLDocument *WFODataInstance(NSString *text, ODataReply *reply);
 
 /* The service's unbound operations, and the engine every operation and
  * handler of the service works through. */

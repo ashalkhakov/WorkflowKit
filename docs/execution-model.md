@@ -50,11 +50,10 @@ activate or cancel an instance, set or remove its variables. Its types
 are static: a variable is an entity of its own, an instance's
 (`ProcessInstances(id)/Variables`), with its value in the property of its
 type, so tasks are filtered by variables as by any navigation
-(`ProcessInstance/Variables/any(v: ...)`). A task's form is served as
-typed rows too: each deployed form, and its fields in order, are stored
-beside its definition at deployment (`Forms`, `FormFields`), a task
-links to its own, and the values it shows and takes come and go through
-the form service (`FormValues()`, `SubmitForm`, `SubmitStartForm`).
+(`ProcessInstance/Variables/any(v: ...)`). A task's form is
+served as a row with its XForms document (`Forms`), a task linking to its
+own, and its instance comes and goes as XML through the form's handler
+(`FormInstance()`, `SubmitForm`, `SubmitStartForm`).
 
 ## Repository
 
@@ -310,14 +309,19 @@ as a real, a whole one exactly as well), a boolean, a date, data -- so a
 condition is typed by its value and compared in that column. The same predicate serves
 whatever else filters tasks by variables, such as an API.
 
-**Forms** are Camunda 7's: a user task or a start event has a form key,
-fields (`camunda:formData`), or both. The engine renders nothing. It
-keeps the form's definition, gives it with each field's value (the
-variable the task sees, else the field's default), and checks what is
-submitted -- converted to each field's type, held to its constraints --
-before completing the task or starting the process. An application
-resolves a form key to a form of its own, native or XForms, or generates
-one from the fields; either way the fields are the contract.
+**Forms** are XForms documents, reached as Camunda 7 reaches its forms: a
+user task or a start event has a form key, fields (`camunda:formData`), a
+handler (`camunda:formHandlerClass`), or several. A key
+`embedded:deployment:<resource>` names a document deployed with the
+process; fields generate one; any other key the application resolves.
+Documents are stored beside their definition at deployment. The engine
+renders nothing and runs no XForms: a form's *handler* gives the instance
+it opens with and decides what a submitted instance does -- which of the
+few variables the process runs on it sets -- or refuses it, and the
+engine sets those variables as it completes the task or starts the
+process. Fields have the engine's own handler, which fills and checks
+their flat instance; any richer form has one of the application's, which
+keeps the rest of what is submitted where it belongs.
 
 **Input/output mappings** make an activity a scope: its inputs are its
 own variables, set as it is entered, and its outputs are evaluated in

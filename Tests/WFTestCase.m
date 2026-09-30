@@ -156,6 +156,44 @@ static NSMutableArray *WFTestEntries;
 
 @end
 
+@implementation WFOrderFormHandler
+
+- (NSXMLDocument *)instanceForForm:(WFFormContext *)context error:(NSError **)error
+{
+	NSXMLElement *order = [[NSXMLElement alloc] initWithName:@"order"];
+	NSXMLElement *lines = [[NSXMLElement alloc] initWithName:@"lines"];
+	for (NSString *item in [context.variables objectForKey:@"lines"] ?: @[]) {
+		NSXMLElement *line = [[NSXMLElement alloc] initWithName:@"line"];
+		[line addAttribute:[NSXMLNode attributeWithName:@"item" stringValue:item]];
+		[lines addChild:line];
+	}
+	[order addChild:lines];
+	NSXMLElement *total = [[NSXMLElement alloc] initWithName:@"total"];
+	[total setStringValue:[[context.variables objectForKey:@"total"] description] ?: @""];
+	[order addChild:total];
+	return [[NSXMLDocument alloc] initWithRootElement:order];
+}
+
+- (NSDictionary *)variablesFromInstance:(NSXMLDocument *)instance
+                                   form:(WFFormContext *)context
+                                  error:(NSError **)error
+{
+	NSString *total = [[[instance rootElement] elementsForName:@"total"].firstObject stringValue];
+	if ([total length] == 0) {
+		if (error != NULL) {
+			*error = [NSError errorWithDomain:WFErrorDomain code:WFErrorInvalidFormData
+				userInfo:@{ NSLocalizedDescriptionKey: @"an order needs its total" }];
+		}
+		return nil;
+	}
+	NSUInteger lines = [[[[instance rootElement] elementsForName:@"lines"].firstObject elementsForName:@"line"] count];
+	context.businessKey = context.businessKey ?: [NSString stringWithFormat:@"order-%@", total];
+	return @{ @"total": [NSNumber numberWithLongLong:[total longLongValue]],
+	          @"lineCount": [NSNumber numberWithUnsignedInteger:lines] };
+}
+
+@end
+
 @implementation WFTestPlugin
 
 - (void)registerWithEngine:(WFProcessEngine *)engine

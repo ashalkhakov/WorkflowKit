@@ -49,6 +49,12 @@
 @interface WFRecordingListener : NSObject <WFExecutionListener, WFTaskListener>
 @end
 
+/* An order form's handler: it opens <order> with the lines variable's
+ * lines and its total, and takes back only the total, as a variable, and
+ * the number of lines; an order without a total is refused. */
+@interface WFOrderFormHandler : NSObject <WFFormHandler>
+@end
+
 /* Registers a WFApproveDelegate as "approver" and a WFRecordingListener
  * as "recorder". */
 @interface WFTestPlugin : NSObject <WFEnginePlugin>

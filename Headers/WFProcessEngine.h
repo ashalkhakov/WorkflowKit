@@ -43,6 +43,10 @@ processInstanceEnded:(WFProcessInstance *)instance;
 @property (nonatomic, readonly, strong) WFRuntimeService *runtimeService;
 @property (nonatomic, readonly, strong) WFTaskService *taskService;
 @property (nonatomic, readonly, strong) WFFormService *formService;
+/* The handler of a form that names none and has no fields: one the
+ * application resolves by its key. nil for none: such a form's
+ * submissions are refused. */
+@property (nonatomic, strong) id<WFFormHandler> defaultFormHandler;
 @property (nonatomic, readonly, strong) WFHistoryService *historyService;
 @property (nonatomic, readonly, strong) WFManagementService *managementService;
 @property (nonatomic, readonly, strong) WFExternalTaskService *externalTaskService;

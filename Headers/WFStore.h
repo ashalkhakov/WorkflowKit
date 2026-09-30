@@ -36,6 +36,8 @@
  * beside it for what serves them; the start event's id. */
 @property (nonatomic, copy) NSDictionary<NSString *, WFFormDefinition *> *forms;
 @property (nonatomic, copy) NSString *startEventId;
+/* Their XForms documents, by activity id, where the engine has one. */
+@property (nonatomic, copy) NSDictionary<NSString *, NSString *> *formDocuments;
 @property (nonatomic, copy) NSString *timerStartActivityId;
 @property (nonatomic, copy) NSDate *timerStartDue;
 @property (nonatomic, copy) NSString *timerStartRepeat;

@@ -1,7 +1,6 @@
 #import "WFStore.h"
 #import "WFEntities.h"
 #import "WFForm.h"
-#import "WFFeelInternal.h"
 #import <CoreData/CoreData.h>
 
 static NSString * const WFDeploymentEntity = @"WFDeployment";
@@ -13,13 +12,6 @@ static NSString * const WFJobEntityName = @"WFJob";
 
 @implementation WFDeploymentRecord
 @end
-
-static NSString *
-WFJSONText(id object)
-{
-	NSData *data = [NSJSONSerialization dataWithJSONObject:object options:0 error:NULL];
-	return data != nil ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
-}
 
 @implementation WFDefinitionRecord
 @end
@@ -208,64 +200,23 @@ WFJSONText(id object)
 	return record;
 }
 
-/* A form, and its fields in order, as rows beside its definition's. */
+/* A form as a row beside its definition's, with its XForms document. */
 - (void)insertForm:(WFFormDefinition *)form
                 of:(NSString *)activityId
+          document:(NSString *)document
         definition:(NSManagedObject *)definitionRow
              start:(BOOL)start
 {
 	NSString *definitionId = [definitionRow valueForKey:@"definitionId"];
-	NSString *formId = [NSString stringWithFormat:@"%@:%@", definitionId, activityId];
 	NSManagedObject *formRow = [NSEntityDescription insertNewObjectForEntityForName:@"WFFormRecord"
 	                                                         inManagedObjectContext:_context];
-	[formRow setValue:formId forKey:@"formId"];
+	[formRow setValue:[NSString stringWithFormat:@"%@:%@", definitionId, activityId] forKey:@"formId"];
 	[formRow setValue:definitionId forKey:@"definitionId"];
 	[formRow setValue:activityId forKey:@"activityId"];
 	[formRow setValue:form.formKey forKey:@"formKey"];
-	[formRow setValue:form.businessKeyFieldId forKey:@"businessKeyFieldId"];
+	[formRow setValue:document forKey:@"document"];
 	[formRow setValue:[NSNumber numberWithBool:start] forKey:@"startForm"];
 	[formRow setValue:definitionRow forKey:@"definition"];
-	NSInteger position = 0;
-	for (WFFormField *field in form.fields) {
-		NSManagedObject *fieldRow = [NSEntityDescription insertNewObjectForEntityForName:@"WFFormFieldRecord"
-		                                                          inManagedObjectContext:_context];
-		[fieldRow setValue:[NSString stringWithFormat:@"%@:%@", formId, field.fieldId] forKey:@"fieldRecordId"];
-		[fieldRow setValue:field.fieldId forKey:@"fieldId"];
-		[fieldRow setValue:field.label forKey:@"label"];
-		[fieldRow setValue:[WFFormField nameOfType:field.type] forKey:@"type"];
-		[fieldRow setValue:[NSNumber numberWithInteger:position++] forKey:@"position"];
-		if (field.defaultValue != nil) {
-			[fieldRow setValue:WFAttributeText(field.defaultValue, field.type == WFFormFieldTypeLong ? WFAttributeKindNumber
-				: field.type == WFFormFieldTypeDate ? WFAttributeKindDate : WFAttributeKindString)
-			            forKey:@"defaultValue"];
-		}
-		[fieldRow setValue:[NSNumber numberWithBool:field.required] forKey:@"required"];
-		[fieldRow setValue:[NSNumber numberWithBool:field.readOnly] forKey:@"readOnly"];
-		for (WFFormConstraint *constraint in field.constraints) {
-			NSDictionary *keys = @{ @"minlength": @"minLength", @"maxlength": @"maxLength",
-			                        @"min": @"minimum", @"max": @"maximum" };
-			NSString *key = [keys objectForKey:constraint.name];
-			if (key == nil) {
-				continue;
-			}
-			id value = constraint.configuration;
-			if ([key hasSuffix:@"Length"]) {
-				value = [NSNumber numberWithLongLong:[constraint.configuration longLongValue]];
-			}
-			[fieldRow setValue:value forKey:key];
-		}
-		if ([field.values count] > 0) {
-			NSMutableArray *values = [NSMutableArray array];
-			for (WFFormFieldValue *value in field.values) {
-				[values addObject:@{ @"Id": value.valueId ?: @"", @"Name": value.name ?: [NSNull null] }];
-			}
-			[fieldRow setValue:WFJSONText(values) forKey:@"valuesJson"];
-		}
-		if ([field.properties count] > 0) {
-			[fieldRow setValue:WFJSONText(field.properties) forKey:@"propertiesJson"];
-		}
-		[fieldRow setValue:formRow forKey:@"form"];
-	}
 }
 
 - (NSArray<WFDefinitionRecord *> *)insertDeployment:(WFDeploymentRecord *)deployment
@@ -346,6 +297,7 @@ WFJSONText(id object)
 			[definitionRow setValue:row forKey:@"deployment"];
 			for (NSString *activityId in definition.forms) {
 				[self insertForm:[definition.forms objectForKey:activityId] of:activityId
+				        document:[definition.formDocuments objectForKey:activityId]
 				      definition:definitionRow start:[activityId isEqualToString:definition.startEventId]];
 			}
 			[stored addObject:record];

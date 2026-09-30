@@ -35,6 +35,57 @@ WFFormParseWhole(NSString *text)
 	return [NSNumber numberWithLongLong:value];
 }
 
+/* Text an XML element may be named: a letter or _, then letters, digits,
+ * _, - and . -- no colon, so no namespace prefix. */
+static BOOL
+WFIsXMLName(NSString *name)
+{
+	if ([name length] == 0) {
+		return NO;
+	}
+	NSMutableCharacterSet *rest = [NSMutableCharacterSet alphanumericCharacterSet];
+	[rest addCharactersInString:@"_-."];
+	unichar first = [name characterAtIndex:0];
+	if (first != '_' && ![[NSCharacterSet letterCharacterSet] characterIsMember:first]) {
+		return NO;
+	}
+	return [name rangeOfCharacterFromSet:[rest invertedSet]].location == NSNotFound;
+}
+
+/* A date as XML Schema's dateTime writes it, in UTC. */
+static NSString *
+WFFormDateText(NSDate *date)
+{
+	NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+	[formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
+	[formatter setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+	[formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss'Z'"];
+	return [formatter stringFromDate:date];
+}
+
+static NSString * const WFXHTMLNamespace = @"http://www.w3.org/1999/xhtml";
+static NSString * const WFXFormsNamespace = @"http://www.w3.org/2002/xforms";
+static NSString * const WFXSDNamespace = @"http://www.w3.org/2001/XMLSchema";
+
+static NSXMLElement *
+WFXFormsElement(NSString *name, NSArray *attributes)
+{
+	NSXMLElement *element = [[NSXMLElement alloc] initWithName:name];
+	for (NSUInteger i = 0; i + 1 < [attributes count]; i += 2) {
+		[element addAttribute:[NSXMLNode attributeWithName:[attributes objectAtIndex:i]
+		                                       stringValue:[attributes objectAtIndex:i + 1]]];
+	}
+	return element;
+}
+
+static NSXMLElement *
+WFXFormsLabel(NSString *text)
+{
+	NSXMLElement *label = WFXFormsElement(@"xf:label", nil);
+	[label setStringValue:text ?: @""];
+	return label;
+}
+
 @implementation WFFormFieldValue
 
 + (instancetype)valueWithId:(NSString *)valueId name:(NSString *)name
@@ -237,7 +288,16 @@ WFFormParseWhole(NSString *text)
                      fields:(NSArray<WFFormField *> *)fields
          businessKeyFieldId:(NSString *)businessKeyFieldId
 {
+	return [self formWithKey:formKey fields:fields businessKeyFieldId:businessKeyFieldId handler:nil];
+}
+
++ (instancetype)formWithKey:(NSString *)formKey
+                     fields:(NSArray<WFFormField *> *)fields
+         businessKeyFieldId:(NSString *)businessKeyFieldId
+                    handler:(NSString *)formHandlerName
+{
 	WFFormDefinition *form = [[self alloc] wf_init];
+	form->_formHandlerName = [formHandlerName copy];
 	form->_formKey = [formKey copy];
 	form->_fields = [fields copy] ?: @[];
 	form->_businessKeyFieldId = [businessKeyFieldId copy];
@@ -247,6 +307,12 @@ WFFormParseWhole(NSString *text)
 - (instancetype)wf_init
 {
 	return [super init];
+}
+
+- (NSString *)deploymentResourceName
+{
+	NSString *prefix = @"embedded:deployment:";
+	return [_formKey hasPrefix:prefix] ? [_formKey substringFromIndex:[prefix length]] : nil;
 }
 
 - (WFFormField *)fieldWithId:(NSString *)fieldId
@@ -266,6 +332,9 @@ WFFormParseWhole(NSString *text)
 	for (WFFormField *field in _fields) {
 		if ([field.fieldId length] == 0) {
 			return @"a form field needs an id";
+		}
+		if (!WFIsXMLName(field.fieldId)) {
+			return [NSString stringWithFormat:@"form field %@: its id is not an XML name", field.fieldId];
 		}
 		if ([ids containsObject:field.fieldId]) {
 			return [NSString stringWithFormat:@"form field %@ is there twice", field.fieldId];
@@ -325,6 +394,137 @@ WFFormParseWhole(NSString *text)
 		}
 	}
 	return variables;
+}
+
+- (NSString *)typeNameOfField:(WFFormField *)field
+{
+	switch (field.type) {
+	case WFFormFieldTypeLong:
+		return @"xsd:long";
+	case WFFormFieldTypeBoolean:
+		return @"xsd:boolean";
+	case WFFormFieldTypeDate:
+		return @"xsd:dateTime";
+	default:
+		return @"xsd:string";
+	}
+}
+
+/* The field's constraints, but for required and readonly, as one XPath
+ * condition over its node; nil for none. An empty value keeps them. */
+- (NSString *)constraintOfField:(WFFormField *)field
+{
+	NSMutableArray *conditions = [NSMutableArray array];
+	for (WFFormConstraint *constraint in field.constraints) {
+		NSString *name = constraint.name;
+		NSString *op = [name hasPrefix:@"min"] ? @">=" : @"<=";
+		if ([name hasSuffix:@"length"]) {
+			[conditions addObject:[NSString stringWithFormat:@"string-length(.) %@ %lld", op,
+				[constraint.configuration longLongValue]]];
+		} else if ([name isEqualToString:@"min"] || [name isEqualToString:@"max"]) {
+			if (field.type == WFFormFieldTypeDate) {
+				[conditions addObject:[NSString stringWithFormat:
+					@"seconds-from-dateTime(.) %@ seconds-from-dateTime('%@')", op,
+					WFFormDateText(WFFormParseDate(constraint.configuration))]];
+			} else {
+				[conditions addObject:[NSString stringWithFormat:@"number(.) %@ %lld", op,
+					[constraint.configuration longLongValue]]];
+			}
+		}
+	}
+	if ([conditions count] == 0) {
+		return nil;
+	}
+	return [NSString stringWithFormat:@". = '' or (%@)", [conditions componentsJoinedByString:@" and "]];
+}
+
+- (NSXMLDocument *)XFormsDocument
+{
+	NSXMLElement *html = [[NSXMLElement alloc] initWithName:@"html" URI:WFXHTMLNamespace];
+	[html addNamespace:[NSXMLNode namespaceWithName:@"" stringValue:WFXHTMLNamespace]];
+	[html addNamespace:[NSXMLNode namespaceWithName:@"xf" stringValue:WFXFormsNamespace]];
+	[html addNamespace:[NSXMLNode namespaceWithName:@"xsd" stringValue:WFXSDNamespace]];
+	NSXMLElement *head = WFXFormsElement(@"head", nil);
+	NSXMLElement *title = WFXFormsElement(@"title", nil);
+	[title setStringValue:_formKey ?: @"Form"];
+	[head addChild:title];
+	NSXMLElement *model = WFXFormsElement(@"xf:model", nil);
+	NSXMLElement *instance = WFXFormsElement(@"xf:instance", nil);
+	NSXMLElement *data = [[self instanceWithValues:@{}] rootElement];
+	[data detach];
+	/* Instance data is in no namespace, not XHTML's. */
+	[data addNamespace:[NSXMLNode namespaceWithName:@"" stringValue:@""]];
+	[instance addChild:data];
+	[model addChild:instance];
+	for (WFFormField *field in _fields) {
+		NSMutableArray *attributes = [NSMutableArray arrayWithObjects:@"ref", field.fieldId,
+			@"type", [self typeNameOfField:field], nil];
+		if (field.required) {
+			[attributes addObjectsFromArray:@[ @"required", @"true()" ]];
+		}
+		if (field.readOnly) {
+			[attributes addObjectsFromArray:@[ @"readonly", @"true()" ]];
+		}
+		NSString *constraint = [self constraintOfField:field];
+		if (constraint != nil) {
+			[attributes addObjectsFromArray:@[ @"constraint", constraint ]];
+		}
+		[model addChild:WFXFormsElement(@"xf:bind", attributes)];
+	}
+	[head addChild:model];
+	[html addChild:head];
+	NSXMLElement *body = WFXFormsElement(@"body", nil);
+	for (WFFormField *field in _fields) {
+		NSXMLElement *control = WFXFormsElement(field.type == WFFormFieldTypeEnum ? @"xf:select1" : @"xf:input",
+		                                        @[ @"ref", field.fieldId ]);
+		[control addChild:WFXFormsLabel(field.label ?: field.fieldId)];
+		for (WFFormFieldValue *option in field.values) {
+			NSXMLElement *item = WFXFormsElement(@"xf:item", nil);
+			[item addChild:WFXFormsLabel(option.name ?: option.valueId)];
+			NSXMLElement *value = WFXFormsElement(@"xf:value", nil);
+			[value setStringValue:option.valueId];
+			[item addChild:value];
+			[control addChild:item];
+		}
+		[body addChild:control];
+	}
+	[html addChild:body];
+	NSXMLDocument *document = [[NSXMLDocument alloc] initWithRootElement:html];
+	[document setCharacterEncoding:@"UTF-8"];
+	return document;
+}
+
+- (NSXMLDocument *)instanceWithValues:(NSDictionary *)values
+{
+	NSXMLElement *data = [[NSXMLElement alloc] initWithName:@"data"];
+	for (WFFormField *field in _fields) {
+		NSXMLElement *element = [[NSXMLElement alloc] initWithName:field.fieldId];
+		id value = [self displayValue:[values objectForKey:field.fieldId] ofField:field];
+		if ([value isKindOfClass:[NSDate class]]) {
+			[element setStringValue:WFFormDateText(value)];
+		} else if ([value isKindOfClass:[NSNumber class]] && field.type == WFFormFieldTypeBoolean) {
+			[element setStringValue:[value boolValue] ? @"true" : @"false"];
+		} else if (value != [NSNull null]) {
+			[element setStringValue:[value description]];
+		}
+		[data addChild:element];
+	}
+	return [[NSXMLDocument alloc] initWithRootElement:data];
+}
+
+- (NSDictionary *)valuesFromInstance:(NSXMLDocument *)instance
+{
+	NSMutableDictionary *values = [NSMutableDictionary dictionary];
+	for (NSXMLNode *node in [[instance rootElement] children]) {
+		WFFormField *field = [node kind] == NSXMLElementKind ? [self fieldWithId:[node localName]] : nil;
+		if (field == nil || field.readOnly || [values objectForKey:field.fieldId] != nil) {
+			continue;
+		}
+		NSString *text = [node stringValue] ?: @"";
+		[values setObject:[text length] == 0 && field.type != WFFormFieldTypeString ? (id)[NSNull null] : text
+		           forKey:field.fieldId];
+	}
+	return values;
 }
 
 - (id)displayValue:(id)value ofField:(WFFormField *)field

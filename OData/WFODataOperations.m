@@ -5,12 +5,12 @@
 #import <ODataKit/ODataError.h>
 
 @protocol WFODataTaskFunctions <ODataFunctions>
-/* The form's values: each field's, as the task sees it. */
-- (NSDictionary *)formValues:(ODataReply *)reply;
+/* The XForms instance the task's form opens with, as XML. */
+- (NSString *)formInstance:(ODataReply *)reply;
 @end
 
 @protocol WFODataTaskActions <ODataActions>
-- (void)submitFormWithValues:(NSDictionary *)values reply:(ODataReply *)reply;
+- (void)submitFormWithInstance:(NSString *)instance reply:(ODataReply *)reply;
 - (void)completeWithVariables:(NSDictionary *)variables reply:(ODataReply *)reply;
 - (void)claimWithUserId:(NSString *)userId reply:(ODataReply *)reply;
 - (void)unclaim:(ODataReply *)reply;
@@ -37,25 +37,17 @@ WFODataFinish(ODataReply *reply, BOOL done, NSError *error)
 	}
 }
 
-/* A form's values as JSON: a date as its ISO-8601 text, data as base64. */
-static NSDictionary *
-WFODataJSONValues(NSDictionary *values)
+NSXMLDocument *
+WFODataInstance(NSString *text, ODataReply *reply)
 {
-	NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-	[formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
-	[formatter setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
-	[formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss'Z'"];
-	NSMutableDictionary *json = [NSMutableDictionary dictionary];
-	for (NSString *name in values) {
-		id value = [values objectForKey:name];
-		if ([value isKindOfClass:[NSDate class]]) {
-			value = [formatter stringFromDate:value];
-		} else if ([value isKindOfClass:[NSData class]]) {
-			value = [value base64EncodedStringWithOptions:0];
-		}
-		[json setObject:value forKey:name];
+	NSError *error = nil;
+	NSXMLDocument *instance = [text isKindOfClass:[NSString class]]
+		? [[NSXMLDocument alloc] initWithXMLString:text options:0 error:&error] : nil;
+	if (instance == nil) {
+		[reply failWithError:ODataServiceError(400, [NSString stringWithFormat:@"the instance is not XML: %@",
+			[error localizedDescription] ?: @"none given"])];
 	}
-	return json;
+	return instance;
 }
 
 /* NSNull, which a JSON null is, as no value. */
@@ -117,12 +109,16 @@ WFODataValue(id value)
 
 - (WFExecutionEntity *)submitStartFormWithKey:(NSString *)key
                                   businessKey:(NSString *)businessKey
-                                       values:(NSDictionary *)values
+                                     instance:(NSString *)text
                                         reply:(ODataReply *)reply
 {
+	NSXMLDocument *document = WFODataInstance(text, reply);
+	if (document == nil) {
+		return nil;
+	}
 	NSError *error = nil;
 	WFProcessInstance *instance = [_engine.formService submitStartFormForKey:key businessKey:WFODataValue(businessKey)
-	                                                                   values:WFODataValue(values) ?: @{}
+	                                                                 instance:document
 	                                                                    error:&error];
 	if (instance == nil) {
 		[reply failWithError:WFODataError(error)];
@@ -133,7 +129,7 @@ WFODataValue(id value)
 	return [[reply.request.context executeFetchRequest:fetch error:NULL] firstObject];
 }
 
-- (NSDictionary *)startFormValuesWithKey:(NSString *)key reply:(ODataReply *)reply
+- (NSString *)startFormInstanceWithKey:(NSString *)key reply:(ODataReply *)reply
 {
 	NSError *error = nil;
 	WFFormData *data = [_engine.formService startFormDataForKey:key error:&error];
@@ -141,7 +137,7 @@ WFODataValue(id value)
 		[reply failWithError:WFODataError(error)];
 		return nil;
 	}
-	return WFODataJSONValues(data.values);
+	return [data.instance XMLString];
 }
 
 @end
@@ -156,7 +152,7 @@ WFODataValue(id value)
 	return [WFODataOperations operationsOf:reply.request].engine.taskService;
 }
 
-- (NSDictionary *)formValues:(ODataReply *)reply
+- (NSString *)formInstance:(ODataReply *)reply
 {
 	NSError *error = nil;
 	WFFormData *data = [[WFODataOperations operationsOf:reply.request].engine.formService formDataForTask:self.taskId
@@ -165,14 +161,18 @@ WFODataValue(id value)
 		[reply failWithError:WFODataError(error)];
 		return nil;
 	}
-	return WFODataJSONValues(data.values);
+	return [data.instance XMLString];
 }
 
-- (void)submitFormWithValues:(NSDictionary *)values reply:(ODataReply *)reply
+- (void)submitFormWithInstance:(NSString *)text reply:(ODataReply *)reply
 {
+	NSXMLDocument *instance = WFODataInstance(text, reply);
+	if (instance == nil) {
+		return;
+	}
 	NSError *error = nil;
 	BOOL done = [[WFODataOperations operationsOf:reply.request].engine.formService submitTaskForm:self.taskId
-	                                                                                        values:WFODataValue(values) ?: @{}
+	                                                                                      instance:instance
 	                                                                                         error:&error];
 	WFODataFinish(reply, done, error);
 }

@@ -12,6 +12,9 @@ WFODataError(NSError *error)
 	switch ((WFErrorCode)[error code]) {
 	case WFErrorUnknownElement:
 		return ODataServiceError(404, message);
+	case WFErrorHandler:
+		/* Host code that is not there: the server's to fix. */
+		return ODataServiceError(500, message);
 	case WFErrorInvalidState:
 	case WFErrorSuspended:
 	case WFErrorConflict:
@@ -78,7 +81,6 @@ WFODataIsNil(NSString *key, BOOL isNil)
 	NSDictionary *sets = @{ @"Tasks": @"WFTask",
 	                        @"ProcessDefinitions": @"WFDefinitionRecord",
 	                        @"Forms": @"WFFormRecord",
-	                        @"FormFields": @"WFFormFieldRecord",
 	                        @"HistoricProcessInstances": @"WFHistoricProcessInstance",
 	                        @"HistoricTaskInstances": @"WFHistoricTaskInstance" };
 	for (NSString *set in sets) {

@@ -656,6 +656,7 @@ WFCaughtCode(NSString *code)
 	}
 	WFSet(element, @"camunda:taskPriority", [node.taskPriority stringValue]);
 	WFSet(element, @"camunda:formKey", node.form.formKey);
+	WFSet(element, @"camunda:formHandlerClass", node.form.formHandlerName);
 
 	/* BPMN puts extension elements, then incoming and outgoing, then an
 	 * activity's loop characteristics or an event's definition, before
@@ -1159,13 +1160,12 @@ WFIgnoredElements(void)
               into:(WFDefinitionBuilder *)builder
            context:(WFBpmnReadContext *)context
 {
-	for (NSString *refused in @[ @"formRef", @"formHandlerClass" ]) {
-		if ([self attr:refused namespace:WFCamundaNamespace of:element] != nil) {
-			[self fail:context error:WFBpmnError(@"%@: camunda:%@ is not supported", elementId, refused)];
-			return;
-		}
+	if ([self attr:@"formRef" namespace:WFCamundaNamespace of:element] != nil) {
+		[self fail:context error:WFBpmnError(@"%@: camunda:formRef is not supported; forms are XForms", elementId)];
+		return;
 	}
 	NSString *formKey = [self attr:@"formKey" namespace:WFCamundaNamespace of:element];
+	NSString *handler = [self attr:@"formHandlerClass" namespace:WFCamundaNamespace of:element];
 	NSXMLElement *data = nil;
 	NSXMLElement *extensions = [self child:element named:@"extensionElements"];
 	for (NSXMLElement *extension in [self children:extensions of:WFCamundaNamespace]) {
@@ -1173,7 +1173,7 @@ WFIgnoredElements(void)
 			data = extension;
 		}
 	}
-	if (formKey == nil && data == nil) {
+	if (formKey == nil && data == nil && handler == nil) {
 		return;
 	}
 	NSMutableArray *fields = [NSMutableArray array];
@@ -1237,7 +1237,8 @@ WFIgnoredElements(void)
 		                               properties:properties]];
 	}
 	[builder setForm:[WFFormDefinition formWithKey:formKey fields:fields
-	                            businessKeyFieldId:[self attr:@"businessKey" of:data]]
+	                            businessKeyFieldId:[self attr:@"businessKey" of:data]
+	                                       handler:handler]
 	      forElement:elementId];
 }
 

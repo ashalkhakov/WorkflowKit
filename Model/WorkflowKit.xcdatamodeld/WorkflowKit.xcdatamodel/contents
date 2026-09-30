@@ -554,14 +554,14 @@
                 <entry key="OData.property" value="ActivityId"/>
             </userInfo>
         </attribute>
-        <attribute name="businessKeyFieldId" optional="YES" attributeType="String">
-            <userInfo>
-                <entry key="OData.property" value="BusinessKeyField"/>
-            </userInfo>
-        </attribute>
         <attribute name="definitionId" attributeType="String">
             <userInfo>
                 <entry key="OData.property" value="ProcessDefinitionId"/>
+            </userInfo>
+        </attribute>
+        <attribute name="document" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="Document"/>
             </userInfo>
         </attribute>
         <attribute name="formId" attributeType="String">
@@ -580,7 +580,6 @@
                 <entry key="OData.property" value="ProcessDefinition"/>
             </userInfo>
         </relationship>
-        <relationship name="fields" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFFormFieldRecord" inverseName="form" inverseEntity="WFFormFieldRecord"/>
         <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="WFTask" inverseName="form" inverseEntity="WFTask">
             <userInfo>
                 <entry key="OData.served" value="NO"/>
@@ -594,54 +593,9 @@
             <entry key="OData.entitySet" value="Forms"/>
         </userInfo>
     </entity>
-    <entity name="WFFormFieldRecord" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="defaultValue" optional="YES" attributeType="String"/>
-        <attribute name="fieldId" attributeType="String"/>
-        <attribute name="fieldRecordId" attributeType="String">
-            <userInfo>
-                <entry key="OData.key" value="YES"/>
-                <entry key="OData.property" value="FormFieldId"/>
-            </userInfo>
-        </attribute>
-        <attribute name="label" optional="YES" attributeType="String"/>
-        <attribute name="maxLength" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
-        <attribute name="maximum" optional="YES" attributeType="String">
-            <userInfo>
-                <entry key="OData.property" value="Max"/>
-            </userInfo>
-        </attribute>
-        <attribute name="minLength" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
-        <attribute name="minimum" optional="YES" attributeType="String">
-            <userInfo>
-                <entry key="OData.property" value="Min"/>
-            </userInfo>
-        </attribute>
-        <attribute name="position" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="propertiesJson" optional="YES" attributeType="String">
-            <userInfo>
-                <entry key="OData.property" value="Properties"/>
-                <entry key="OData.type" value="Org.OData.JSON.V1.JSON"/>
-            </userInfo>
-        </attribute>
-        <attribute name="readOnly" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="required" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="type" attributeType="String"/>
-        <attribute name="valuesJson" optional="YES" attributeType="String">
-            <userInfo>
-                <entry key="OData.property" value="Values"/>
-                <entry key="OData.type" value="Org.OData.JSON.V1.JSON"/>
-            </userInfo>
-        </attribute>
-        <relationship name="form" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFFormRecord" inverseName="fields" inverseEntity="WFFormRecord"/>
-        <userInfo>
-            <entry key="OData.type" value="WorkflowKit.FormField"/>
-            <entry key="OData.entitySet" value="FormFields"/>
-        </userInfo>
-    </entity>
     <configuration name="API">
         <memberEntity name="WFDefinitionRecord"/>
         <memberEntity name="WFExecution"/>
-        <memberEntity name="WFFormFieldRecord"/>
         <memberEntity name="WFFormRecord"/>
         <memberEntity name="WFHistoricProcessInstance"/>
         <memberEntity name="WFHistoricTaskInstance"/>

@@ -437,6 +437,30 @@ WFFormsOf(WFProcessDefinition *definition)
 		record.historyTimeToLive = definition.historyTimeToLive;
 		record.forms = WFFormsOf(definition);
 		record.startEventId = [[definition startEvent] elementId];
+		/* Each form's XForms document: deployed with it, else generated
+		 * from its fields. */
+		NSMutableDictionary *documents = [NSMutableDictionary dictionary];
+		for (NSString *activityId in record.forms) {
+			WFFormDefinition *form = [record.forms objectForKey:activityId];
+			NSString *resource = form.deploymentResourceName;
+			if (resource != nil) {
+				NSData *bytes = [resources objectForKey:resource];
+				NSXMLDocument *document = bytes != nil
+					? [[NSXMLDocument alloc] initWithData:bytes options:0 error:NULL] : nil;
+				if (document == nil) {
+					if (error != NULL) {
+						*error = WFRepositoryError(WFErrorInvalidDefinition, [NSString stringWithFormat:
+							@"%@: form %@ is %@ the deployment", activityId, resource,
+							bytes == nil ? @"not in" : @"not an XML document in"]);
+					}
+					return nil;
+				}
+				[documents setObject:[document XMLString] forKey:activityId];
+			} else if ([form.fields count] > 0) {
+				[documents setObject:[[form XFormsDocument] XMLString] forKey:activityId];
+			}
+		}
+		record.formDocuments = documents;
 		WFEvent *start = [definition startEvent];
 		if (start.trigger == WFEventTriggerMessage) {
 			record.messageStartName = start.messageName;
