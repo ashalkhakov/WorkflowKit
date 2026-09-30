@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="1">
-    <entity name="WFDefinitionRecord" representedClassName="NSManagedObject" syncable="YES">
+    <entity name="WFDefinitionRecord" representedClassName="WFDefinitionRecordEntity" syncable="YES">
         <attribute name="definitionId" attributeType="String">
             <userInfo>
                 <entry key="OData.key" value="YES"/>
@@ -35,10 +35,22 @@
     </entity>
     <entity name="WFDeployment" representedClassName="NSManagedObject" syncable="YES">
         <attribute name="deployedAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="deploymentId" attributeType="String"/>
+        <attribute name="deploymentId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="name" attributeType="String"/>
-        <relationship name="definitions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFDefinitionRecord" inverseName="deployment" inverseEntity="WFDefinitionRecord"/>
-        <relationship name="decisions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFDecisionRecord" inverseName="deployment" inverseEntity="WFDecisionRecord"/>
+        <relationship name="definitions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFDefinitionRecord" inverseName="deployment" inverseEntity="WFDefinitionRecord">
+            <userInfo>
+                <entry key="OData.property" value="ProcessDefinitions"/>
+            </userInfo>
+        </relationship>
+        <relationship name="decisions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFDecisionRecord" inverseName="deployment" inverseEntity="WFDecisionRecord">
+            <userInfo>
+                <entry key="OData.property" value="DecisionDefinitions"/>
+            </userInfo>
+        </relationship>
         <relationship name="resources" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFResource" inverseName="deployment" inverseEntity="WFResource"/>
         <uniquenessConstraints>
             <uniquenessConstraint>
@@ -49,11 +61,28 @@
             <fetchIndexElement property="name" type="Binary" order="ascending"/>
             <fetchIndexElement property="deployedAt" type="Binary" order="descending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.Deployment"/>
+            <entry key="OData.entitySet" value="Deployments"/>
+        </userInfo>
     </entity>
     <entity name="WFResource" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="bytes" attributeType="Binary"/>
+        <attribute name="bytes" attributeType="Binary">
+            <userInfo>
+                <entry key="OData.property" value="Content"/>
+            </userInfo>
+        </attribute>
         <attribute name="name" attributeType="String"/>
+        <attribute name="resourceId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFDeployment" inverseName="resources" inverseEntity="WFDeployment"/>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.Resource"/>
+            <entry key="OData.entitySet" value="Resources"/>
+        </userInfo>
     </entity>
     <entity name="WFExecution" representedClassName="WFExecutionEntity" syncable="YES">
         <attribute name="activityId" optional="YES" attributeType="String">
@@ -308,11 +337,19 @@
     <entity name="WFJob" representedClassName="WFJobEntity" syncable="YES">
         <attribute name="activityId" attributeType="String"/>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="definitionId" optional="YES" attributeType="String"/>
+        <attribute name="definitionId" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="ProcessDefinitionId"/>
+            </userInfo>
+        </attribute>
         <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="exceptionMessage" optional="YES" attributeType="String"/>
         <attribute name="exclusive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
-        <attribute name="jobId" attributeType="String"/>
+        <attribute name="jobId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="jobType" attributeType="String"/>
         <attribute name="lockExpiration" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="lockOwner" optional="YES" attributeType="String"/>
@@ -321,17 +358,33 @@
         <attribute name="repeat" optional="YES" attributeType="String"/>
         <attribute name="retries" attributeType="Integer 32" defaultValueString="3" usesScalarValueType="YES"/>
         <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="jobs" inverseEntity="WFExecution"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="jobs" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
         <fetchIndex name="byDue">
             <fetchIndexElement property="dueDate" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.Job"/>
+            <entry key="OData.entitySet" value="Jobs"/>
+        </userInfo>
     </entity>
     <entity name="WFExternalTask" representedClassName="WFExternalTaskEntity" syncable="YES">
         <attribute name="activityId" attributeType="String"/>
-        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="errorMessage" optional="YES" attributeType="String"/>
-        <attribute name="externalTaskId" attributeType="String"/>
+        <attribute name="externalTaskId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="lockExpiration" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="priority" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="processInstanceId" attributeType="String"/>
@@ -339,10 +392,18 @@
         <attribute name="topic" attributeType="String"/>
         <attribute name="workerId" optional="YES" attributeType="String"/>
         <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="externalTasks" inverseEntity="WFExecution"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="externalTasks" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
         <fetchIndex name="byTopic">
             <fetchIndexElement property="topic" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.ExternalTask"/>
+            <entry key="OData.entitySet" value="ExternalTasks"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricProcessInstance" representedClassName="WFHistoricProcessInstanceEntity" syncable="YES">
         <attribute name="businessKey" optional="YES" attributeType="String"/>
@@ -399,25 +460,45 @@
         <attribute name="activityId" optional="YES" attributeType="String"/>
         <attribute name="configuration" attributeType="String"/>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="incidentId" attributeType="String"/>
+        <attribute name="incidentId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="incidentType" attributeType="String"/>
         <attribute name="message" optional="YES" attributeType="String"/>
         <attribute name="processInstanceId" optional="YES" attributeType="String"/>
-        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="incidents" inverseEntity="WFExecution"/>
+        <relationship name="execution" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFExecution" inverseName="incidents" inverseEntity="WFExecution">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </relationship>
         <fetchIndex name="byConfiguration">
             <fetchIndexElement property="configuration" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.Incident"/>
+            <entry key="OData.entitySet" value="Incidents"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricActivityInstance" representedClassName="WFHistoricActivityInstanceEntity" syncable="YES">
         <attribute name="activityId" attributeType="String"/>
-        <attribute name="activityInstanceId" attributeType="String"/>
+        <attribute name="activityInstanceId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="activityName" optional="YES" attributeType="String"/>
         <attribute name="activityType" attributeType="String"/>
         <attribute name="calledProcessInstanceId" optional="YES" attributeType="String"/>
         <attribute name="canceled" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="processInstanceId" attributeType="String"/>
-        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="startTime" attributeType="Date" usesScalarValueType="NO"/>
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
@@ -425,6 +506,10 @@
         <fetchIndex name="byActivityInstance">
             <fetchIndexElement property="activityInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.HistoricActivityInstance"/>
+            <entry key="OData.entitySet" value="HistoricActivityInstances"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricTaskInstance" representedClassName="WFHistoricTaskInstanceEntity" syncable="YES">
         <attribute name="assignee" optional="YES" attributeType="String"/>
@@ -451,29 +536,79 @@
         </userInfo>
     </entity>
     <entity name="WFHistoricVariableUpdate" representedClassName="WFHistoricVariableUpdateEntity" syncable="YES">
-        <attribute name="dateTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="jsonText" optional="YES" attributeType="String"/>
-        <attribute name="truthValue" optional="YES" attributeType="Boolean" usesScalarValueType="NO"/>
-        <attribute name="bytesValue" optional="YES" attributeType="Binary"/>
+        <attribute name="updateId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
+        <attribute name="dateTime" optional="YES" attributeType="Date" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.property" value="Date"/>
+            </userInfo>
+        </attribute>
+        <attribute name="jsonText" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="Json"/>
+                <entry key="OData.type" value="Org.OData.JSON.V1.JSON"/>
+            </userInfo>
+        </attribute>
+        <attribute name="truthValue" optional="YES" attributeType="Boolean" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.property" value="Boolean"/>
+            </userInfo>
+        </attribute>
+        <attribute name="bytesValue" optional="YES" attributeType="Binary">
+            <userInfo>
+                <entry key="OData.property" value="Bytes"/>
+            </userInfo>
+        </attribute>
         <attribute name="name" attributeType="String"/>
         <attribute name="processInstanceId" attributeType="String"/>
-        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
-        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="textValue" optional="YES" attributeType="String"/>
+        <attribute name="realNumber" optional="YES" attributeType="Double" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.property" value="Number"/>
+            </userInfo>
+        </attribute>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="textValue" optional="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.property" value="Text"/>
+            </userInfo>
+        </attribute>
         <attribute name="time" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="type" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="variableId" attributeType="String"/>
-        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO"/>
+        <attribute name="wholeNumber" optional="YES" attributeType="Integer 64" usesScalarValueType="NO">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.HistoricVariableUpdate"/>
+            <entry key="OData.entitySet" value="HistoricVariableUpdates"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricIncident" representedClassName="WFHistoricIncidentEntity" syncable="YES">
         <attribute name="activityId" optional="YES" attributeType="String"/>
         <attribute name="configuration" attributeType="String"/>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="incidentId" attributeType="String"/>
+        <attribute name="incidentId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="incidentType" attributeType="String"/>
         <attribute name="message" optional="YES" attributeType="String"/>
         <attribute name="processInstanceId" optional="YES" attributeType="String"/>
@@ -484,23 +619,45 @@
         <fetchIndex name="byIncidentId">
             <fetchIndexElement property="incidentId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.HistoricIncident"/>
+            <entry key="OData.entitySet" value="HistoricIncidents"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricJobLog" representedClassName="WFHistoricJobLogEntity" syncable="YES">
+        <attribute name="logId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="activityId" optional="YES" attributeType="String"/>
         <attribute name="exceptionMessage" optional="YES" attributeType="String"/>
         <attribute name="jobId" attributeType="String"/>
         <attribute name="jobType" attributeType="String"/>
         <attribute name="processInstanceId" optional="YES" attributeType="String"/>
         <attribute name="retries" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="state" attributeType="String"/>
         <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.HistoricJobLog"/>
+            <entry key="OData.entitySet" value="HistoricJobLogs"/>
+        </userInfo>
     </entity>
     <entity name="WFDecisionRecord" representedClassName="NSManagedObject" syncable="YES">
-        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="definitionId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+                <entry key="OData.property" value="DecisionDefinitionId"/>
+            </userInfo>
+        </attribute>
         <attribute name="key" attributeType="String"/>
         <attribute name="name" optional="YES" attributeType="String"/>
         <attribute name="resourceName" attributeType="String"/>
@@ -520,24 +677,48 @@
             <fetchIndexElement property="key" type="Binary" order="ascending"/>
             <fetchIndexElement property="version" type="Binary" order="descending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.DecisionDefinition"/>
+            <entry key="OData.entitySet" value="DecisionDefinitions"/>
+        </userInfo>
     </entity>
     <entity name="WFHistoricDecisionInstance" representedClassName="NSManagedObject" syncable="YES">
         <attribute name="activityId" optional="YES" attributeType="String"/>
         <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
         <attribute name="decisionDefinitionId" attributeType="String"/>
-        <attribute name="decisionInstanceId" attributeType="String"/>
+        <attribute name="decisionInstanceId" attributeType="String">
+            <userInfo>
+                <entry key="OData.key" value="YES"/>
+            </userInfo>
+        </attribute>
         <attribute name="decisionKey" attributeType="String"/>
         <attribute name="evaluationTime" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="inputs" optional="YES" attributeType="Binary"/>
-        <attribute name="outputs" optional="YES" attributeType="Binary"/>
+        <attribute name="inputs" optional="YES" attributeType="Binary">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
+        <attribute name="outputs" optional="YES" attributeType="Binary">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <attribute name="processInstanceId" optional="YES" attributeType="String"/>
-        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES">
+            <userInfo>
+                <entry key="OData.served" value="NO"/>
+            </userInfo>
+        </attribute>
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
         </fetchIndex>
         <fetchIndex name="byDecisionKey">
             <fetchIndexElement property="decisionKey" type="Binary" order="ascending"/>
         </fetchIndex>
+        <userInfo>
+            <entry key="OData.type" value="WorkflowKit.HistoricDecisionInstance"/>
+            <entry key="OData.entitySet" value="HistoricDecisionInstances"/>
+        </userInfo>
     </entity>
     <entity name="WFProperty" representedClassName="NSManagedObject" syncable="YES">
         <attribute name="name" attributeType="String"/>
@@ -601,5 +782,16 @@
         <memberEntity name="WFHistoricTaskInstance"/>
         <memberEntity name="WFTask"/>
         <memberEntity name="WFVariable"/>
+        <memberEntity name="WFDecisionRecord"/>
+        <memberEntity name="WFDeployment"/>
+        <memberEntity name="WFExternalTask"/>
+        <memberEntity name="WFHistoricActivityInstance"/>
+        <memberEntity name="WFHistoricDecisionInstance"/>
+        <memberEntity name="WFHistoricIncident"/>
+        <memberEntity name="WFHistoricJobLog"/>
+        <memberEntity name="WFHistoricVariableUpdate"/>
+        <memberEntity name="WFIncident"/>
+        <memberEntity name="WFJob"/>
+        <memberEntity name="WFResource"/>
     </configuration>
 </model>

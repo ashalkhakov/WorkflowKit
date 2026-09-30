@@ -4110,6 +4110,7 @@ WFJSONValue(id value)
 		return;
 	}
 	WFHistoricJobLogEntity *row = [self insert:WFHistoricJobLogName];
+	row.logId = [WFCommandContext newId];
 	row.jobId = job.jobId;
 	row.jobType = job.jobType;
 	row.activityId = job.activityId;
@@ -4235,6 +4236,7 @@ WFJSONValue(id value)
 {
 	if ([self records:WFHistoryLevelFull]) {
 		WFHistoricVariableUpdateEntity *update = [self insert:WFHistoricUpdateName];
+		update.updateId = [WFCommandContext newId];
 		update.variableId = variable.variableId;
 		update.name = variable.name;
 		update.processInstanceId = variable.processInstanceId;

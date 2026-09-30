@@ -116,6 +116,13 @@ BOOL WFIsIntegerNumber(NSNumber *number);
 
 extern NSString * const WFIdentityLinkCandidate;
 
+/* A deployed process definition's row, which the store reads by key. */
+@interface WFDefinitionRecordEntity : NSManagedObject
+@property (nonatomic, copy) NSString *definitionId;
+@property (nonatomic, copy) NSString *resourceName;
+@property (nonatomic, strong) NSManagedObject *deployment;
+@end
+
 /* A user or group a task is offered to. */
 @interface WFIdentityLinkEntity : NSManagedObject
 @property (nonatomic, copy) NSString *type;
@@ -272,6 +279,7 @@ extern NSString * const WFHistoricStateExternallyTerminated;
 @end
 
 @interface WFHistoricVariableUpdateEntity : NSManagedObject
+@property (nonatomic, copy) NSString *updateId;
 @property (nonatomic, copy) NSString *variableId;
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *processInstanceId;
@@ -292,6 +300,7 @@ extern NSString * const WFHistoricStateExternallyTerminated;
 @end
 
 @interface WFHistoricJobLogEntity : NSManagedObject
+@property (nonatomic, copy) NSString *logId;
 @property (nonatomic, copy) NSString *jobId;
 @property (nonatomic, copy) NSString *jobType;
 @property (nonatomic, copy) NSString *activityId;

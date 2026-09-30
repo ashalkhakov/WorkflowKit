@@ -191,6 +191,10 @@ WFIsIntegerNumber(NSNumber *number)
 
 NSString * const WFIdentityLinkCandidate = @"candidate";
 
+@implementation WFDefinitionRecordEntity
+@dynamic definitionId, resourceName, deployment;
+@end
+
 @implementation WFIdentityLinkEntity
 @dynamic type, userId, groupId, processInstanceId, task;
 @end
@@ -237,7 +241,7 @@ NSString * const WFIdentityLinkCandidate = @"candidate";
 @end
 
 @implementation WFHistoricVariableUpdateEntity
-@dynamic variableId, name, processInstanceId, time, sequence;
+@dynamic updateId, variableId, name, processInstanceId, time, sequence;
 @end
 
 @implementation WFHistoricIncidentEntity
@@ -246,6 +250,6 @@ NSString * const WFIdentityLinkCandidate = @"candidate";
 @end
 
 @implementation WFHistoricJobLogEntity
-@dynamic jobId, jobType, activityId, processInstanceId, timestamp, state;
+@dynamic logId, jobId, jobType, activityId, processInstanceId, timestamp, state;
 @dynamic exceptionMessage, retries, sequence;
 @end

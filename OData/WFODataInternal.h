@@ -13,6 +13,8 @@
                processInstanceId:(NSString *)processInstanceId
                        variables:(NSDictionary *)variables
                            reply:(ODataReply *)reply;
+/* The deployment's id. */
+- (NSString *)deployWithName:(NSString *)name resources:(NSDictionary *)resources reply:(ODataReply *)reply;
 - (WFExecutionEntity *)submitStartFormWithKey:(NSString *)key
                                   businessKey:(NSString *)businessKey
                                      instance:(NSString *)instance

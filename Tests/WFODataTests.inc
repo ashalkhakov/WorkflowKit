@@ -99,27 +99,32 @@
 	                            @"Name=\"Date\"", @"Name=\"Json\"", @"NavigationProperty Name=\"Variables\"" ]) {
 		XCTAssertTrue([xml rangeOfString:served].location != NSNotFound, @"%@ is not served", served);
 	}
-	for (NSString *internal in @[ @"LockRevision", @"IsScope", @"IsConcurrent", @"ActivityInstanceId", @"Children",
+	for (NSString *internal in @[ @"LockRevision", @"IsScope", @"IsConcurrent", @"Children",
 	                              @"WholeNumber", @"IdentityLinks", @"EventSubscriptions" ]) {
 		XCTAssertTrue([xml rangeOfString:internal].location == NSNotFound, @"%@ is served", internal);
 	}
-	NSRange variable = [xml rangeOfString:@"<EntityType Name=\"Variable\">"];
-	NSString *variableType = [xml substringWithRange:NSMakeRange(variable.location,
-		[xml rangeOfString:@"</EntityType>" options:0
-		             range:NSMakeRange(variable.location, [xml length] - variable.location)].location - variable.location)];
-	XCTAssertTrue([variableType rangeOfString:@"Name=\"Type\""].location == NSNotFound, @"%@", variableType);
+	NSString *(^type)(NSString *) = ^NSString *(NSString *name) {
+		NSRange start = [xml rangeOfString:[NSString stringWithFormat:@"<EntityType Name=\"%@\">", name]];
+		NSRange end = [xml rangeOfString:@"</EntityType>" options:0
+		                           range:NSMakeRange(start.location, [xml length] - start.location)];
+		return [xml substringWithRange:NSMakeRange(start.location, end.location - start.location)];
+	};
+	XCTAssertTrue([type(@"Variable") rangeOfString:@"Name=\"Type\""].location == NSNotFound, @"%@", type(@"Variable"));
+	XCTAssertTrue([type(@"Task") rangeOfString:@"ActivityInstanceId"].location == NSNotFound, @"%@", type(@"Task"));
 	XCTAssertEqualObjects([service.entitySets sortedArrayUsingSelector:@selector(compare:)],
-		(@[ @"Forms", @"HistoricProcessInstances", @"HistoricTaskInstances", @"ProcessDefinitions",
-		    @"ProcessInstances", @"Tasks", @"Variables" ]));
+		(@[ @"DecisionDefinitions", @"Deployments", @"ExternalTasks", @"Forms", @"HistoricActivityInstances",
+		    @"HistoricDecisionInstances", @"HistoricIncidents", @"HistoricJobLogs", @"HistoricProcessInstances",
+		    @"HistoricTaskInstances", @"HistoricVariableUpdates", @"Incidents", @"Jobs", @"ProcessDefinitions",
+		    @"ProcessInstances", @"Resources", @"Tasks", @"Variables" ]));
 	XCTAssertEqualObjects(service.metadataProblems, @[]);
 	XCTAssertEqualObjects(service.operationProblems, @[]);
 	for (NSString *action in @[ @"StartProcessInstance", @"CorrelateMessage", @"Complete", @"Claim", @"Unclaim",
 	                            @"Assign", @"Suspend", @"Activate", @"Cancel", @"SetVariables", @"RemoveVariables",
-	                            @"SubmitForm", @"SubmitStartForm" ]) {
+	                            @"SubmitForm", @"SubmitStartForm", @"Deploy", @"Execute", @"SetRetries" ]) {
 		NSString *declared = [NSString stringWithFormat:@"<Action Name=\"%@\"", action];
 		XCTAssertTrue([xml rangeOfString:declared].location != NSNotFound, @"%@", action);
 	}
-	for (NSString *function in @[ @"FormInstance", @"StartFormInstance" ]) {
+	for (NSString *function in @[ @"FormInstance", @"StartFormInstance", @"ActiveActivities", @"Bpmn" ]) {
 		NSString *declared = [NSString stringWithFormat:@"<Function Name=\"%@\"", function];
 		XCTAssertTrue([xml rangeOfString:declared].location != NSNotFound, @"%@", function);
 	}
@@ -414,4 +419,98 @@
 	XCTAssertEqual([self statusOf:submitted], (NSInteger)204, @"%@", [submitted objectForKey:@"text"]);
 	XCTAssertTrue([self ended:pid engine:engine]);
 	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"amount"], @60);
+}
+
+/* What an operator sees: deployments and what they hold, where instances
+ * wait, failed jobs and their incidents, and the history of it all. */
+- (void)testODataServesTheOperationalState
+{
+	NSError *error = nil;
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	engine.jobExecutorActive = NO;
+	engine.historyLevel = WFHistoryLevelFull;
+	ODataService *service = [self serviceFor:engine];
+
+	/* Deployed through the API, and read back. */
+	NSString *bpmn = [WFBpmnWriter XMLStringFromDefinition:[self fragileDefinition:nil] error:&error];
+	NSDictionary *deployed = [self send:@"POST" path:@"Deploy"
+	                               body:@{ @"Name": @"fragile", @"Resources": @{ @"fragile.bpmn": bpmn } } service:service];
+	XCTAssertEqual([self statusOf:deployed], (NSInteger)200, @"%@", [deployed objectForKey:@"text"]);
+	NSString *deploymentId = [[self jsonOf:deployed] objectForKey:@"value"];
+	NSString *deployment = [NSString stringWithFormat:@"Deployments('%@')", deploymentId];
+	XCTAssertEqualObjects([[self jsonOf:[self get:deployment service:service]] objectForKey:@"Name"], @"fragile");
+	NSArray *resources = [[self jsonOf:[self get:[deployment stringByAppendingString:@"/Resources"] service:service]]
+		objectForKey:@"value"];
+	XCTAssertEqualObjects([resources valueForKey:@"Name"], @[ @"fragile.bpmn" ]);
+	NSArray *definitions = [[self jsonOf:[self get:[deployment stringByAppendingString:@"/ProcessDefinitions"]
+	                                        service:service]] objectForKey:@"value"];
+	XCTAssertEqualObjects([definitions valueForKey:@"Key"], @[ @"fragile" ]);
+	NSString *definition = [NSString stringWithFormat:@"ProcessDefinitions('%@')",
+		[[definitions firstObject] objectForKey:@"ProcessDefinitionId"]];
+	NSString *xml = [[self jsonOf:[self get:[definition stringByAppendingString:@"/WorkflowKit.Bpmn()"]
+	                                 service:service]] objectForKey:@"value"];
+	XCTAssertTrue([xml rangeOfString:@"id=\"fragile\""].location != NSNotFound, @"%@", xml);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:@"Deploy"
+	                                      body:@{ @"Name": @"broken", @"Resources": @{ @"broken.bpmn": @"<nope" } }
+	                                   service:service]]), (NSInteger)400);
+
+	/* Where it waits: the gateway's job. */
+	NSDictionary *started = [self send:@"POST" path:@"StartProcessInstance" body:@{ @"Key": @"fragile" } service:service];
+	NSString *pid = [[self jsonOf:started] objectForKey:@"ProcessInstanceId"];
+	NSString *instance = [NSString stringWithFormat:@"ProcessInstances('%@')", pid];
+	XCTAssertEqualObjects(([[self jsonOf:[self get:[instance stringByAppendingString:@"/WorkflowKit.ActiveActivities()"]
+	                                        service:service]] objectForKey:@"value"]), @[ @"route" ]);
+	NSString *filter = [NSString stringWithFormat:@"Jobs?$filter=ProcessInstanceId eq '%@'", pid];
+	NSArray *jobs = [[self jsonOf:[self get:filter service:service]] objectForKey:@"value"];
+	XCTAssertEqual([jobs count], (NSUInteger)1);
+	XCTAssertEqualObjects([[jobs firstObject] objectForKey:@"Retries"], @3);
+	NSString *job = [NSString stringWithFormat:@"Jobs('%@')", [[jobs firstObject] objectForKey:@"JobId"]];
+
+	/* It fails every attempt: an incident. */
+	for (int attempt = 0; attempt < 3; attempt++) {
+		XCTAssertEqual([self statusOf:[self send:@"POST" path:[job stringByAppendingString:@"/WorkflowKit.Execute"]
+		                                     body:nil service:service]], (NSInteger)400);
+	}
+	NSDictionary *failed = [self jsonOf:[self get:job service:service]];
+	XCTAssertEqualObjects([failed objectForKey:@"Retries"], @0);
+	XCTAssertNotEqualObjects([failed objectForKey:@"ExceptionMessage"], [NSNull null]);
+	NSString *incidents = [NSString stringWithFormat:@"Incidents?$filter=ProcessInstanceId eq '%@'", pid];
+	NSArray *open = [[self jsonOf:[self get:incidents service:service]] objectForKey:@"value"];
+	XCTAssertEqual([open count], (NSUInteger)1);
+	XCTAssertEqualObjects([[open firstObject] objectForKey:@"Configuration"], [[jobs firstObject] objectForKey:@"JobId"]);
+	XCTAssertEqualObjects([[open firstObject] objectForKey:@"ActivityId"], @"route");
+
+	/* Fixed, and given an attempt: the incident is resolved and it runs. */
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:[instance stringByAppendingString:@"/WorkflowKit.SetVariables"]
+	                                     body:@{ @"Variables": @{ @"amount": @500 } } service:service]]), (NSInteger)204);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:[job stringByAppendingString:@"/WorkflowKit.SetRetries"]
+	                                     body:@{ @"Retries": @1 } service:service]]), (NSInteger)204);
+	XCTAssertEqual([[[self jsonOf:[self get:incidents service:service]] objectForKey:@"value"] count], (NSUInteger)0);
+	XCTAssertEqual([self statusOf:[self send:@"POST" path:[job stringByAppendingString:@"/WorkflowKit.Execute"]
+	                                     body:nil service:service]], (NSInteger)204);
+	XCTAssertTrue([self ended:pid engine:engine]);
+
+	/* And its history. */
+	NSString *of = [NSString stringWithFormat:@"?$filter=ProcessInstanceId eq '%@'", pid];
+	NSArray *activities = [[self jsonOf:[self get:[@"HistoricActivityInstances" stringByAppendingString:of]
+	                                       service:service]] objectForKey:@"value"];
+	XCTAssertTrue([[activities valueForKey:@"ActivityId"] containsObject:@"big"], @"%@", activities);
+	NSArray *past = [[self jsonOf:[self get:[@"HistoricIncidents" stringByAppendingString:of] service:service]]
+		objectForKey:@"value"];
+	XCTAssertEqual([past count], (NSUInteger)1);
+	NSArray *log = [[self jsonOf:[self get:[@"HistoricJobLogs" stringByAppendingString:of] service:service]]
+		objectForKey:@"value"];
+	XCTAssertTrue([[log valueForKey:@"State"] count] >= 4, @"%@", log);
+	NSArray *updates = [[self jsonOf:[self get:[@"HistoricVariableUpdates" stringByAppendingString:of] service:service]]
+		objectForKey:@"value"];
+	XCTAssertEqualObjects([updates valueForKey:@"Number"], @[ @500 ]);
+
+	/* A definition suspended starts nothing. */
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:[definition stringByAppendingString:@"/WorkflowKit.Suspend"]
+	                                     body:@{ @"IncludeInstances": @NO } service:service]]), (NSInteger)204);
+	XCTAssertEqualObjects([[self jsonOf:[self get:definition service:service]] objectForKey:@"Suspended"], @YES);
+	XCTAssertEqual([self statusOf:[self send:@"POST" path:@"StartProcessInstance" body:@{ @"Key": @"fragile" }
+	                                  service:service]], (NSInteger)409);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:[definition stringByAppendingString:@"/WorkflowKit.Activate"]
+	                                     body:@{ @"IncludeInstances": @NO } service:service]]), (NSInteger)204);
 }

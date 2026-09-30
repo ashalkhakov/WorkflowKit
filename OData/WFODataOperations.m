@@ -2,6 +2,8 @@
 #import "WFEntities.h"
 #import "WFRuntimeService.h"
 #import "WFTaskService.h"
+#import "WFManagementService.h"
+#import "WFRepositoryService.h"
 #import <ODataKit/ODataError.h>
 
 @protocol WFODataTaskFunctions <ODataFunctions>
@@ -24,6 +26,28 @@
 - (void)cancelWithReason:(NSString *)reason reply:(ODataReply *)reply;
 - (void)setVariablesWithVariables:(NSDictionary *)variables reply:(ODataReply *)reply;
 - (void)removeVariablesWithNames:(NSArray *)names reply:(ODataReply *)reply;
+@end
+
+@protocol WFODataProcessInstanceFunctions <ODataFunctions>
+/* The activities it is in now, each once. */
+- (NSArray *)activeActivities:(ODataReply *)reply;
+@end
+
+@protocol WFODataJobActions <ODataActions>
+/* Runs it now, whatever its due date; a failure counts as an attempt. */
+- (void)execute:(ODataReply *)reply;
+/* Gives a failed job attempts again, which resolves its incident. */
+- (void)setRetriesWithRetries:(int32_t)retries reply:(ODataReply *)reply;
+@end
+
+@protocol WFODataDefinitionActions <ODataActions>
+- (void)suspendWithIncludeInstances:(BOOL)includeInstances reply:(ODataReply *)reply;
+- (void)activateWithIncludeInstances:(BOOL)includeInstances reply:(ODataReply *)reply;
+@end
+
+@protocol WFODataDefinitionFunctions <ODataFunctions>
+/* The BPMN it was deployed from, as text: what a client draws. */
+- (NSString *)bpmn:(ODataReply *)reply;
 @end
 
 /* Finishes the reply with the engine's answer: nothing, or its error. */
@@ -105,6 +129,28 @@ WFODataValue(id value)
 		: [_engine.runtimeService correlateMessage:name businessKey:WFODataValue(businessKey) correlationKeys:nil
 		                                 variables:WFODataValue(variables) error:&error];
 	WFODataFinish(reply, done, error);
+}
+
+- (NSString *)deployWithName:(NSString *)name resources:(NSDictionary *)resources reply:(ODataReply *)reply
+{
+	/* Text resources -- BPMN, DMN, XForms -- by name. */
+	NSMutableDictionary *bytes = [NSMutableDictionary dictionary];
+	for (NSString *resource in WFODataValue(resources)) {
+		id text = [resources objectForKey:resource];
+		if (![text isKindOfClass:[NSString class]]) {
+			[reply failWithError:ODataServiceError(400, [NSString stringWithFormat:@"%@ is not text", resource])];
+			return nil;
+		}
+		[bytes setObject:[text dataUsingEncoding:NSUTF8StringEncoding] forKey:resource];
+	}
+	NSError *error = nil;
+	WFDeployment *deployment = [_engine.repositoryService deployResources:bytes name:WFODataValue(name) ?: @"deployment"
+	                                                     filterDuplicates:YES error:&error];
+	if (deployment == nil) {
+		[reply failWithError:WFODataError(error)];
+		return nil;
+	}
+	return deployment.deploymentId;
 }
 
 - (WFExecutionEntity *)submitStartFormWithKey:(NSString *)key
@@ -207,14 +253,15 @@ WFODataValue(id value)
 
 @end
 
-@interface WFExecutionEntity (WFOData) <WFODataProcessInstanceActions>
+@interface WFExecutionEntity (WFOData) <WFODataProcessInstanceActions, WFODataProcessInstanceFunctions>
 @end
 
 @implementation WFExecutionEntity (WFOData)
 
 + (NSDictionary *)ODataOperationTypes
 {
-	return @{ @"removeVariablesWithNames:reply:.names": @"Collection(Edm.String)" };
+	return @{ @"removeVariablesWithNames:reply:.names": @"Collection(Edm.String)",
+	          @"activeActivities:": @"Collection(Edm.String)" };
 }
 
 - (WFRuntimeService *)wf_runtimeServiceFor:(ODataReply *)reply
@@ -258,6 +305,86 @@ WFODataValue(id value)
 	BOOL done = [[self wf_runtimeServiceFor:reply] removeVariables:WFODataValue(names) ?: @[]
 	                                            processInstanceId:self.executionId error:&error];
 	WFODataFinish(reply, done, error);
+}
+
+@end
+
+@implementation WFExecutionEntity (WFODataFunctions)
+
+- (NSArray *)activeActivities:(ODataReply *)reply
+{
+	NSError *error = nil;
+	NSArray *active = [[self wf_runtimeServiceFor:reply] activeActivityIdsForProcessInstance:self.executionId error:&error];
+	if (active == nil) {
+		[reply failWithError:WFODataError(error)];
+		return nil;
+	}
+	return [[NSOrderedSet orderedSetWithArray:active] array];
+}
+
+@end
+
+@interface WFJobEntity (WFOData) <WFODataJobActions>
+@end
+
+@implementation WFJobEntity (WFOData)
+
+- (WFManagementService *)wf_managementServiceFor:(ODataReply *)reply
+{
+	return [WFODataOperations operationsOf:reply.request].engine.managementService;
+}
+
+- (void)execute:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[self wf_managementServiceFor:reply] executeJob:self.jobId error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (void)setRetriesWithRetries:(int32_t)retries reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[self wf_managementServiceFor:reply] setRetries:retries forJob:self.jobId error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+@end
+
+@interface WFDefinitionRecordEntity (WFOData) <WFODataDefinitionActions, WFODataDefinitionFunctions>
+@end
+
+@implementation WFDefinitionRecordEntity (WFOData)
+
+- (WFRepositoryService *)wf_repositoryServiceFor:(ODataReply *)reply
+{
+	return [WFODataOperations operationsOf:reply.request].engine.repositoryService;
+}
+
+- (void)suspendWithIncludeInstances:(BOOL)includeInstances reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[self wf_repositoryServiceFor:reply] suspendDefinition:self.definitionId
+	                                                    includeInstances:includeInstances error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (void)activateWithIncludeInstances:(BOOL)includeInstances reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[self wf_repositoryServiceFor:reply] activateDefinition:self.definitionId
+	                                                     includeInstances:includeInstances error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (NSString *)bpmn:(ODataReply *)reply
+{
+	for (NSManagedObject *resource in [self.deployment valueForKey:@"resources"]) {
+		if ([[resource valueForKey:@"name"] isEqualToString:self.resourceName]) {
+			return [[NSString alloc] initWithData:[resource valueForKey:@"bytes"] encoding:NSUTF8StringEncoding];
+		}
+	}
+	[reply failWithError:ODataServiceError(404, [NSString stringWithFormat:@"%@ is not deployed", self.resourceName])];
+	return nil;
 }
 
 @end

@@ -81,6 +81,17 @@ WFODataIsNil(NSString *key, BOOL isNil)
 	NSDictionary *sets = @{ @"Tasks": @"WFTask",
 	                        @"ProcessDefinitions": @"WFDefinitionRecord",
 	                        @"Forms": @"WFFormRecord",
+	                        @"Deployments": @"WFDeployment",
+	                        @"Resources": @"WFResource",
+	                        @"DecisionDefinitions": @"WFDecisionRecord",
+	                        @"Jobs": @"WFJob",
+	                        @"Incidents": @"WFIncident",
+	                        @"ExternalTasks": @"WFExternalTask",
+	                        @"HistoricActivityInstances": @"WFHistoricActivityInstance",
+	                        @"HistoricVariableUpdates": @"WFHistoricVariableUpdate",
+	                        @"HistoricIncidents": @"WFHistoricIncident",
+	                        @"HistoricJobLogs": @"WFHistoricJobLog",
+	                        @"HistoricDecisionInstances": @"WFHistoricDecisionInstance",
 	                        @"HistoricProcessInstances": @"WFHistoricProcessInstance",
 	                        @"HistoricTaskInstances": @"WFHistoricTaskInstance" };
 	for (NSString *set in sets) {

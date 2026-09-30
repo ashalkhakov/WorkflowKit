@@ -239,6 +239,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 				insertNewObjectForEntityForName:WFResourceEntity
 				         inManagedObjectContext:self->_context];
 			[resource setValue:name forKey:@"name"];
+			[resource setValue:[NSString stringWithFormat:@"%@:%@", deployment.deploymentId, name] forKey:@"resourceId"];
 			[resource setValue:[deployment.resources objectForKey:name] forKey:@"bytes"];
 			[resource setValue:row forKey:@"deployment"];
 		}
