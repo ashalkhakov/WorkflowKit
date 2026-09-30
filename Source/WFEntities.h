@@ -113,6 +113,9 @@ extern NSString * const WFIdentityLinkCandidate;
 
 extern NSString * const WFEventTypeMessage;
 extern NSString * const WFEventTypeSignal;
+/* A conditional event waiting for its condition to hold; without an
+ * execution, a process's conditional start event. */
+extern NSString * const WFEventTypeConditional;
 /* A completed activity's compensation handler, waiting on its scope:
  * activityId the activity, eventName the subprocess it completed in when
  * it was carried up out of one. */

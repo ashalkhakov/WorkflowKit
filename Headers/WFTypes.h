@@ -37,13 +37,26 @@ typedef NS_ENUM(NSInteger, WFEventTrigger) {
 	/* Like an error, but not critical: uncaught, the thrower goes on. */
 	WFEventTriggerEscalation,
 	/* Runs the compensation handlers of completed activities. */
-	WFEventTriggerCompensation
+	WFEventTriggerCompensation,
+	/* A jump: a link throw event goes on at the link catch event of the
+	 * same name in its scope. */
+	WFEventTriggerLink,
+	/* Fires when a condition over the variables holds. */
+	WFEventTriggerConditional
 };
 
 typedef NS_ENUM(NSInteger, WFTaskKind) {
 	WFTaskKindUser = 0,
+	/* Service, send and business rule tasks run as external tasks. */
 	WFTaskKindService,
-	WFTaskKindScript
+	WFTaskKindScript,
+	WFTaskKindSend,
+	WFTaskKindBusinessRule,
+	/* Waits for a message, as a message catch event does. */
+	WFTaskKindReceive,
+	/* Manual tasks and plain tasks are passed through. */
+	WFTaskKindManual,
+	WFTaskKindNone
 };
 
 typedef NS_ENUM(NSInteger, WFGatewayKind) {
@@ -71,7 +84,12 @@ typedef NS_ENUM(NSInteger, WFErrorCode) {
 	 * committed, and the call can be retried. */
 	WFErrorConflict,
 	/* The process instance, or its definition, is suspended. */
-	WFErrorSuspended
+	WFErrorSuspended,
+	/* A DMN resource the engine cannot read. */
+	WFErrorInvalidDmn,
+	/* A decision could not be evaluated: an input or output that is not
+	 * of its type, several rules where one may match. */
+	WFErrorDecision
 };
 
 extern NSString * const WFErrorDomain;

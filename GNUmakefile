@@ -29,6 +29,7 @@ WorkflowKit_OBJC_FILES = \
 	Source/WFRepositoryService.m \
 	Source/WFDuration.m \
 	Source/WFBpmn.m \
+	Source/WFDmn.m \
 	Source/WFEntities.m \
 	Source/WFCommandContext.m \
 	Source/WFServices.m \
@@ -43,6 +44,7 @@ WorkflowKit_HEADER_FILES = \
 	WFFeel.h \
 	WFFlowElements.h \
 	WFProcessDefinition.h \
+	WFDecision.h \
 	WFHandlers.h \
 	WFStore.h \
 	WFRepositoryService.h \
@@ -51,6 +53,7 @@ WorkflowKit_HEADER_FILES = \
 	WFHistoryService.h \
 	WFManagementService.h \
 	WFExternalTaskService.h \
+	WFDecisionService.h \
 	WFProcessEngine.h \
 	WFBpmn.h \
 	WorkflowKit.h

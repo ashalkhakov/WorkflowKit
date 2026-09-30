@@ -306,6 +306,20 @@ WFCaughtCode(NSString *code)
 		[definition addChild:WFFormalExpression([tags objectAtIndex:(NSUInteger)event.timer.kind], text)];
 		break;
 	}
+	case WFEventTriggerLink:
+		definition = WFElement(@"bpmn:linkEventDefinition");
+		WFSet(definition, @"name", event.linkName);
+		break;
+	case WFEventTriggerConditional: {
+		WFEventCondition *condition = event.condition;
+		definition = WFElement(@"bpmn:conditionalEventDefinition");
+		WFSet(definition, @"camunda:variableName", condition.variableName);
+		if ([condition.variableEvents count] > 0) {
+			WFSet(definition, @"camunda:variableEvents", [condition.variableEvents componentsJoinedByString:@", "]);
+		}
+		[definition addChild:WFFormalExpression(@"bpmn:condition", [condition.expression expressionString])];
+		break;
+	}
 	case WFEventTriggerNone:
 		break;
 	}
@@ -438,10 +452,38 @@ WFCaughtCode(NSString *code)
 						WFAttributeText(expression, (WFAttributeKind)[[attribute objectAtIndex:2] integerValue]) ]];
 				}
 			}
-		} else if (task.kind == WFTaskKindService) {
-			tag = @"bpmn:serviceTask";
+		} else if (task.kind == WFTaskKindBusinessRule && task.decisionRef != nil) {
+			tag = @"bpmn:businessRuleTask";
+			[attributes addObject:@[ @"camunda:decisionRef", task.decisionRef ]];
+			if (task.decisionBinding == WFCalledElementBindingDeployment) {
+				[attributes addObject:@[ @"camunda:decisionRefBinding", @"deployment" ]];
+			} else if (task.decisionBinding == WFCalledElementBindingVersion) {
+				[attributes addObject:@[ @"camunda:decisionRefBinding", @"version" ]];
+				[attributes addObject:@[ @"camunda:decisionRefVersion",
+					[NSString stringWithFormat:@"%ld", (long)task.decisionVersion] ]];
+			}
+			if (task.resultVariable != nil) {
+				[attributes addObject:@[ @"camunda:resultVariable", task.resultVariable ]];
+			}
+			NSArray *mappings = @[ @"resultList", @"singleEntry", @"singleResult", @"collectEntries" ];
+			if (task.mapDecisionResult != WFDecisionResultMappingResultList) {
+				[attributes addObject:@[ @"camunda:mapDecisionResult",
+					[mappings objectAtIndex:(NSUInteger)task.mapDecisionResult] ]];
+			}
+		} else if (task.kind == WFTaskKindService || task.kind == WFTaskKindSend
+		           || task.kind == WFTaskKindBusinessRule) {
+			tag = task.kind == WFTaskKindService ? @"bpmn:serviceTask"
+				: task.kind == WFTaskKindSend ? @"bpmn:sendTask" : @"bpmn:businessRuleTask";
 			[attributes addObject:@[ @"camunda:type", @"external" ]];
 			[attributes addObject:@[ @"camunda:topic", task.actionKey ?: @"" ]];
+		} else if (task.kind == WFTaskKindReceive) {
+			tag = @"bpmn:receiveTask";
+			[attributes addObject:@[ @"messageRef",
+				[self idFor:task.messageName prefix:@"Message_" in:context.messages] ]];
+		} else if (task.kind == WFTaskKindManual) {
+			tag = @"bpmn:manualTask";
+		} else if (task.kind == WFTaskKindNone) {
+			tag = @"bpmn:task";
 		} else {
 			/* Camunda script tasks run script text; ours run an action by
 			 * key, which only our own attribute can say. */
@@ -1083,7 +1125,9 @@ WFIgnoredElements(void)
 		    && ![name isEqualToString:@"signalEventDefinition"]
 		    && ![name isEqualToString:@"terminateEventDefinition"]
 		    && ![name isEqualToString:@"escalationEventDefinition"]
-		    && ![name isEqualToString:@"compensateEventDefinition"]) {
+		    && ![name isEqualToString:@"compensateEventDefinition"]
+		    && ![name isEqualToString:@"linkEventDefinition"]
+		    && ![name isEqualToString:@"conditionalEventDefinition"]) {
 			*unsupported = name;
 			return nil;
 		}
@@ -1137,6 +1181,47 @@ WFIgnoredElements(void)
 	return expression != nil ? [[WFTimer alloc] initWithKind:kind expression:expression] : nil;
 }
 
+/* A conditionalEventDefinition's condition, and when it is evaluated:
+ * camunda:variableName and camunda:variableEvents narrow the changes that
+ * make it look again. */
++ (WFEventCondition *)conditionOf:(NSXMLElement *)definition
+                               id:(NSString *)elementId
+                          context:(WFBpmnReadContext *)context
+{
+	NSXMLElement *text = [self child:definition named:@"condition"];
+	if ([[self trimmed:[text stringValue]] length] == 0) {
+		[self fail:context error:WFBpmnError(@"%@: conditional event without a condition", elementId)];
+		return nil;
+	}
+	WFFeelExpression *expression = [self expressionFrom:[text stringValue]
+	                                           language:[self attr:@"language" of:text]
+	                                               what:[NSString stringWithFormat:@"%@: condition", elementId]
+	                                            context:context];
+	if (expression == nil) {
+		return nil;
+	}
+	NSString *variableName = [self trimmed:[self attr:@"variableName" namespace:WFCamundaNamespace
+	                                                of:definition]];
+	NSMutableArray *events = nil;
+	NSString *list = [self attr:@"variableEvents" namespace:WFCamundaNamespace of:definition];
+	for (NSString *item in [list componentsSeparatedByString:@","]) {
+		NSString *kind = [self trimmed:item];
+		if ([kind length] == 0) {
+			continue;
+		}
+		if (![@[ @"create", @"update", @"delete" ] containsObject:kind]) {
+			[self fail:context error:WFBpmnError(
+				@"%@: variable event \"%@\" is none of create, update and delete", elementId, kind)];
+			return nil;
+		}
+		events = events ?: [NSMutableArray array];
+		[events addObject:kind];
+	}
+	return [[WFEventCondition alloc] initWithExpression:expression
+	                                       variableName:[variableName length] > 0 ? variableName : nil
+	                                     variableEvents:events];
+}
+
 + (NSString *)messageNameOf:(NSXMLElement *)definition
                          id:(NSString *)elementId
                     context:(WFBpmnReadContext *)context
@@ -1148,6 +1233,52 @@ WFIgnoredElements(void)
 		return nil;
 	}
 	return [context.messages objectForKey:ref] ?: ref;
+}
+
+/* A business rule task that evaluates a decision: camunda:decisionRef,
+ * its binding, and where the result goes. */
++ (BOOL)readDecisionTask:(NSXMLElement *)element
+                      id:(NSString *)elementId
+                    into:(WFDefinitionBuilder *)builder
+                 context:(WFBpmnReadContext *)context
+{
+	NSString *decisionRef = [self attr:@"decisionRef" namespace:WFCamundaNamespace of:element];
+	if ([decisionRef hasPrefix:@"${"] || [decisionRef hasPrefix:@"#{"]) {
+		[self fail:context error:WFBpmnError(@"%@: expressions in camunda:decisionRef are not supported", elementId)];
+		return NO;
+	}
+	if ([self attr:@"decisionRefTenantId" namespace:WFCamundaNamespace of:element] != nil) {
+		[self fail:context error:WFBpmnError(@"%@: camunda:decisionRefTenantId is not supported", elementId)];
+		return NO;
+	}
+	NSDictionary *mappings = @{ @"resultList": @(WFDecisionResultMappingResultList),
+		@"singleEntry": @(WFDecisionResultMappingSingleEntry),
+		@"singleResult": @(WFDecisionResultMappingSingleResult),
+		@"collectEntries": @(WFDecisionResultMappingCollectEntries) };
+	NSString *mapping = [self attr:@"mapDecisionResult" namespace:WFCamundaNamespace of:element] ?: @"resultList";
+	if ([mappings objectForKey:mapping] == nil) {
+		[self fail:context error:WFBpmnError(@"%@: camunda:mapDecisionResult \"%@\" is not supported",
+			elementId, mapping)];
+		return NO;
+	}
+	[builder addBusinessRuleTask:elementId
+	                    decision:decisionRef
+	              resultVariable:[self attr:@"resultVariable" namespace:WFCamundaNamespace of:element]
+	                     mapping:(WFDecisionResultMapping)[[mappings objectForKey:mapping] integerValue]];
+	NSString *binding = [self attr:@"decisionRefBinding" namespace:WFCamundaNamespace of:element] ?: @"latest";
+	NSString *version = [self attr:@"decisionRefVersion" namespace:WFCamundaNamespace of:element];
+	long long number = 0;
+	if ([binding isEqualToString:@"deployment"]) {
+		[builder setDecisionBinding:WFCalledElementBindingDeployment version:0 forElement:elementId];
+	} else if ([binding isEqualToString:@"version"] && WFParseWhole(version, &number) && number > 0) {
+		[builder setDecisionBinding:WFCalledElementBindingVersion version:(NSInteger)number forElement:elementId];
+	} else if (![binding isEqualToString:@"latest"]) {
+		[self fail:context error:WFBpmnError(
+			@"%@: camunda:decisionRefBinding \"%@\" is not supported; use latest, deployment, or version with a whole camunda:decisionRefVersion",
+			elementId, binding)];
+		return NO;
+	}
+	return YES;
 }
 
 + (BOOL)readCall:(NSXMLElement *)element
@@ -1287,6 +1418,19 @@ WFIgnoredElements(void)
 	BOOL terminate = [trigger isEqualToString:@"terminateEventDefinition"];
 	BOOL escalation = [trigger isEqualToString:@"escalationEventDefinition"];
 	BOOL compensate = [trigger isEqualToString:@"compensateEventDefinition"];
+	BOOL link = [trigger isEqualToString:@"linkEventDefinition"];
+	NSString *linkName = link ? [self attr:@"name" of:definition] : nil;
+	if (link && [linkName length] == 0) {
+		[self fail:context error:WFBpmnError(@"%@: link event without a name", elementId)];
+		return NO;
+	}
+	WFEventCondition *condition = nil;
+	if ([trigger isEqualToString:@"conditionalEventDefinition"]) {
+		condition = [self conditionOf:definition id:elementId context:context];
+		if (condition == nil) {
+			return NO;
+		}
+	}
 	NSString *escalationCode = nil;
 	if (escalation) {
 		NSString *ref = [self attr:@"escalationRef" of:definition];
@@ -1339,6 +1483,9 @@ WFIgnoredElements(void)
 			[self fail:context error:WFBpmnError(
 				@"%@: compensation event subprocesses are not supported yet", elementId)];
 			return NO;
+		} else if (condition != nil) {
+			[[builder addConditionalStart:elementId condition:@"true"]
+				setCondition:condition forElement:elementId];
 		} else {
 			[builder addStart:elementId];
 		}
@@ -1374,9 +1521,14 @@ WFIgnoredElements(void)
 				setTimer:[self timerOf:definition id:elementId context:context] forElement:elementId];
 		} else if (signal) {
 			[builder addSignalCatch:elementId signal:signalName];
+		} else if (link) {
+			[builder addLinkCatch:elementId link:linkName];
+		} else if (condition != nil) {
+			[[builder addConditionalCatch:elementId condition:@"true"]
+				setCondition:condition forElement:elementId];
 		} else {
 			[self fail:context error:WFBpmnError(
-				@"%@: a catch event needs a message, timer or signal", elementId)];
+				@"%@: a catch event needs a message, timer, signal, link or condition", elementId)];
 		}
 	} else if ([name isEqualToString:@"intermediateThrowEvent"]) {
 		if (message) {
@@ -1388,11 +1540,13 @@ WFIgnoredElements(void)
 			[builder addEscalationThrow:elementId code:escalationCode];
 		} else if (compensate) {
 			[builder addCompensationThrow:elementId activity:[self attr:@"activityRef" of:definition]];
+		} else if (link) {
+			[builder addLinkThrow:elementId link:linkName];
 		} else if (definition == nil) {
 			[builder addIntermediateThrow:elementId];
 		} else {
 			[self fail:context error:WFBpmnError(
-				@"%@: only message, signal, escalation, compensation and none throw events are supported",
+				@"%@: only message, signal, escalation, compensation, link and none throw events are supported",
 				elementId)];
 		}
 	} else if ([name isEqualToString:@"boundaryEvent"]) {
@@ -1418,9 +1572,13 @@ WFIgnoredElements(void)
 		} else if (compensate) {
 			/* Its handler comes from the association, read with the scope. */
 			[builder addBoundaryCompensation:elementId onTask:host handler:nil];
+		} else if (condition != nil) {
+			[[builder addBoundaryConditional:elementId onTask:host condition:@"true"
+			                    interrupting:interrupting]
+				setCondition:condition forElement:elementId];
 		} else {
 			[self fail:context error:WFBpmnError(
-				@"%@: a boundary event needs a message, timer, signal, error, escalation or compensation",
+				@"%@: a boundary event needs a message, timer, signal, error, escalation, compensation or condition",
 				elementId)];
 		}
 	} else if ([name isEqualToString:@"userTask"]) {
@@ -1446,6 +1604,39 @@ WFIgnoredElements(void)
 			return NO;
 		}
 		[builder addServiceTask:elementId action:topic];
+	} else if ([name isEqualToString:@"businessRuleTask"]
+	           && [self attr:@"decisionRef" namespace:WFCamundaNamespace of:element] != nil) {
+		return [self readDecisionTask:element id:elementId into:builder context:context];
+	} else if ([name isEqualToString:@"sendTask"] || [name isEqualToString:@"businessRuleTask"]) {
+		NSString *type = [self attr:@"type" namespace:WFCamundaNamespace of:element];
+		NSString *topic = [self attr:@"topic" namespace:WFCamundaNamespace of:element];
+		if (![type isEqualToString:@"external"] || topic == nil) {
+			[self fail:context error:WFBpmnError(
+				@"%@: %@ (camunda:type=\"external\" with a camunda:topic)", elementId,
+				[name isEqualToString:@"sendTask"] ? @"send tasks must be external tasks"
+					: @"business rule tasks call a decision (camunda:decisionRef) or are external tasks")];
+			return NO;
+		}
+		if ([name isEqualToString:@"sendTask"]) {
+			[builder addSendTask:elementId action:topic];
+		} else {
+			[builder addBusinessRuleTask:elementId action:topic];
+		}
+	} else if ([name isEqualToString:@"receiveTask"]) {
+		if ([[self attr:@"instantiate" of:element] isEqualToString:@"true"]) {
+			[self fail:context error:WFBpmnError(
+				@"%@: a receive task cannot start a process; use a message start event", elementId)];
+			return NO;
+		}
+		NSString *messageName = [self messageNameOf:element id:elementId context:context];
+		if (messageName == nil) {
+			return NO;
+		}
+		[builder addReceiveTask:elementId message:messageName];
+	} else if ([name isEqualToString:@"manualTask"]) {
+		[builder addManualTask:elementId];
+	} else if ([name isEqualToString:@"task"]) {
+		[builder addTask:elementId];
 	} else if ([name isEqualToString:@"scriptTask"]) {
 		NSString *action = [self attr:@"action" namespace:WFBpmnExtensionNamespace of:element];
 		if (action == nil) {

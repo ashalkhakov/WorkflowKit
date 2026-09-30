@@ -17,6 +17,83 @@
 @property (nonatomic, readonly, getter=isEnded) BOOL ended;
 @end
 
+/* An activity instance of a running process instance, in its tree: the
+ * process instance at the root (its activityId the process's), and a
+ * subprocess or multi-instance body (activityId "task#multiInstanceBody")
+ * holding the activity instances inside it. */
+@interface WFActivityInstance : NSObject
+@property (nonatomic, readonly, copy) NSString *activityInstanceId;
+@property (nonatomic, readonly, copy) NSString *activityId;
+/* nil at the root. */
+@property (nonatomic, readonly, copy) NSString *parentActivityInstanceId;
+@property (nonatomic, readonly, copy) NSArray<WFActivityInstance *> *childActivityInstances;
+/* The activity instances of that activity in the tree, depth first. */
+- (NSArray<WFActivityInstance *> *)activityInstancesForActivity:(NSString *)activityId;
+@end
+
+/*
+ * Instructions that change where a running process instance is, for
+ * -[WFRuntimeService modifyProcessInstance:error:]. They run in order, in
+ * one command:
+ *
+ * A start instruction starts a new path: before an activity, which is
+ * entered as a sequence flow would enter it (an asyncBefore stops at a
+ * job); after an activity with one outgoing flow; or on a sequence flow.
+ * The subprocesses around it that have no instance get one, their start
+ * event skipped, their inputs mapped and their boundary events and event
+ * subprocesses armed; a subprocess with several instances needs the
+ * ancestor activity instance to start in. Paths cannot be started inside
+ * a multi-instance or event subprocess, nor at a boundary event.
+ *
+ * A cancel instruction cancels an activity instance with everything in
+ * it; a subprocess or multi-instance body left with nothing is canceled
+ * in turn. An instance with nothing left once every instruction has run
+ * ends, externally terminated.
+ */
+@interface WFProcessInstanceModification : NSObject
+@property (nonatomic, readonly, copy) NSString *processInstanceId;
++ (instancetype)modificationOfProcessInstance:(NSString *)processInstanceId;
+- (instancetype)init NS_UNAVAILABLE;
+- (instancetype)startBeforeActivity:(NSString *)activityId;
+/* The variables are the new path's own. */
+- (instancetype)startBeforeActivity:(NSString *)activityId
+                           ancestor:(NSString *)ancestorActivityInstanceId
+                          variables:(NSDictionary *)variables;
+- (instancetype)startAfterActivity:(NSString *)activityId;
+- (instancetype)startTransition:(NSString *)flowId;
+- (instancetype)cancelActivityInstance:(NSString *)activityInstanceId;
+- (instancetype)cancelAllForActivity:(NSString *)activityId;
+@end
+
+/*
+ * How running instances move from one deployed definition to another, for
+ * -[WFRuntimeService migrateProcessInstances:plan:error:]: each source
+ * activity mapped to a target activity of the same kind -- the same class
+ * of task, event (kind and trigger) or gateway, multi-instance or not --
+ * in corresponding scopes (the subprocesses around them mapped to each
+ * other), a boundary event with its activity. mapEqualActivities adds a
+ * mapping for every activity of the same id, kind and scope.
+ *
+ * Migrated, an instance keeps its paths, tasks, jobs and variables: they
+ * move to the mapped activities. Every activity it is in must be mapped,
+ * and be a scope (with boundary events or parameters) in both definitions
+ * or in neither. Waits for events whose activities are not mapped go;
+ * boundary events and event subprocesses the target adds are armed. A
+ * mapped event keeps the trigger it has -- its message, signal or timer --
+ * unless its mapping updates it to the target's.
+ */
+@interface WFMigrationPlan : NSObject
+@property (nonatomic, readonly, copy) NSString *sourceDefinitionId;
+@property (nonatomic, readonly, copy) NSString *targetDefinitionId;
++ (instancetype)planFromDefinition:(NSString *)sourceDefinitionId toDefinition:(NSString *)targetDefinitionId;
+- (instancetype)init NS_UNAVAILABLE;
+- (instancetype)mapActivity:(NSString *)sourceActivityId toActivity:(NSString *)targetActivityId;
+- (instancetype)mapActivity:(NSString *)sourceActivityId
+                 toActivity:(NSString *)targetActivityId
+         updateEventTrigger:(BOOL)updateEventTrigger;
+- (instancetype)mapEqualActivities;
+@end
+
 /*
  * Process instances, messages and variables.
  *
@@ -60,6 +137,23 @@
  * particular order. */
 - (NSArray<WFProcessInstance *> *)subProcessInstancesOf:(NSString *)processInstanceId
                                                   error:(NSError **)error;
+/* The instance's activity instance tree; nil, with an error, for an
+ * instance that is not running. */
+- (WFActivityInstance *)activityInstanceTreeOfProcessInstance:(NSString *)processInstanceId
+                                                        error:(NSError **)error;
+/* Runs the modification's instructions: all of them, or, with an error,
+ * none. A suspended instance cannot be modified. */
+- (BOOL)modifyProcessInstance:(WFProcessInstanceModification *)modification error:(NSError **)error;
+
+/* Checks the plan against its two definitions: YES, or NO with an error
+ * saying what cannot be mapped. */
+- (BOOL)validateMigrationPlan:(WFMigrationPlan *)plan error:(NSError **)error;
+/* Migrates the instances, all in one command: every one of them, or, with
+ * an error, none. */
+- (BOOL)migrateProcessInstances:(NSArray<NSString *> *)processInstanceIds
+                           plan:(WFMigrationPlan *)plan
+                          error:(NSError **)error;
+
 /* The activities the instance's paths are active in, sorted. A path
  * waiting at a join is not active. */
 - (NSArray<NSString *> *)activeActivityIdsForProcessInstance:(NSString *)processInstanceId
@@ -70,6 +164,15 @@
 - (BOOL)setVariables:(NSDictionary *)variables
    processInstanceId:(NSString *)processInstanceId
                error:(NSError **)error;
+
+/* Starts each process whose conditional start event's condition holds
+ * over the variables -- the latest version of each, unless it is
+ * suspended -- with those variables and the business key, and answers the
+ * instances started, perhaps none. It is an error when no deployed process
+ * has a conditional start event. */
+- (NSArray<WFProcessInstance *> *)evaluateStartConditions:(NSDictionary *)variables
+                                              businessKey:(NSString *)businessKey
+                                                    error:(NSError **)error;
 
 /*
  * Delivers a message to exactly one recipient: a path waiting on a catch

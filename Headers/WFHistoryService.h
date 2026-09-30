@@ -106,6 +106,25 @@ extern NSString * const WFJobLogStateDeleted;
 @property (nonatomic, readonly) NSInteger retries;
 @end
 
+/* One evaluation of a decision, recorded at history level full: by a
+ * business rule task, or through the decision service. */
+@interface WFHistoricDecisionInstance : NSObject
+@property (nonatomic, readonly, copy) NSString *decisionInstanceId;
+@property (nonatomic, readonly, copy) NSString *decisionDefinitionId;
+@property (nonatomic, readonly, copy) NSString *decisionKey;
+/* The instance and activity that evaluated it; nil through the decision
+ * service. */
+@property (nonatomic, readonly, copy) NSString *processInstanceId;
+@property (nonatomic, readonly, copy) NSString *activityId;
+@property (nonatomic, readonly, copy) NSString *activityInstanceId;
+@property (nonatomic, readonly, copy) NSDate *evaluationTime;
+/* A decision table's input values by input id; a date as its ISO-8601
+ * text. */
+@property (nonatomic, readonly, copy) NSDictionary *inputs;
+/* The result, as WFDecisionResult's resultList. */
+@property (nonatomic, readonly, copy) NSArray<NSDictionary *> *outputs;
+@end
+
 /*
  * What happened, kept after the runtime rows of an instance are gone.
  * Written in the same transaction as the runtime change it records, at
@@ -124,6 +143,8 @@ extern NSString * const WFJobLogStateDeleted;
 - (NSArray<WFHistoricVariableUpdate *> *)historicVariableUpdatesForProcessInstance:(NSString *)processInstanceId;
 - (NSArray<WFHistoricIncident *> *)historicIncidentsForProcessInstance:(NSString *)processInstanceId;
 - (NSArray<WFHistoricJobLog *> *)historicJobLogForProcessInstance:(NSString *)processInstanceId;
+- (NSArray<WFHistoricDecisionInstance *> *)historicDecisionInstancesForProcessInstance:(NSString *)processInstanceId;
+- (NSArray<WFHistoricDecisionInstance *> *)historicDecisionInstancesForDecisionKey:(NSString *)decisionKey;
 
 /* Removes the history of up to batchSize ended process instances whose
  * definition's historyTimeToLive has run out since they ended, with

@@ -118,6 +118,34 @@
 	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"after" ]);
 }
 
+/* A non-interrupting handler inside a subprocess runs beside its work;
+ * the subprocess's own boundary events still wait on the subprocess, and
+ * take all of it. */
+- (void)testABoundaryStillInterruptsASubprocessWhoseHandlerRan
+{
+	NSError *error = nil;
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	WFDefinitionBuilder *inner = [WFDefinitionBuilder process:@"sub"];
+	[[[inner addStart:@"s"] addUserTask:@"slow" name:@"Slow" assignee:@"ann"] addEnd:@"e"];
+	[[inner connect:@"s" to:@"slow"] connect:@"slow" to:@"e"];
+	[inner addEventSubProcess:@"note" name:@"Note" inner:[self handler:@"note"
+		start:^(WFDefinitionBuilder *b) {
+			[[b addMessageStart:@"handlerStart" message:@"ping"] setInterrupting:NO forElement:@"handlerStart"];
+		} task:@"answer"]];
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"outer"];
+	[[[[b addStart:@"start"] addSubProcess:@"sub" name:@"Sub" inner:[inner build:&error]]
+		addUserTask:@"after" name:@"After" assignee:@"ann"] addEnd:@"end"];
+	[[[b connect:@"start" to:@"sub"] connect:@"sub" to:@"after"] connect:@"after" to:@"end"];
+	[[[b addBoundaryMessage:@"abort" onTask:@"sub" message:@"abort" interrupting:YES]
+		addUserTask:@"aborted" name:@"Aborted" assignee:@"ann"] addEnd:@"abortedEnd"];
+	[[b connect:@"abort" to:@"aborted"] connect:@"aborted" to:@"abortedEnd"];
+	NSString *pid = [self run:[b build:&error] engine:engine variables:nil];
+	[self correlate:@"ping" to:pid engine:engine];
+	XCTAssertEqualObjects([self active:pid engine:engine], (@[ @"answer", @"slow" ]));
+	[self correlate:@"abort" to:pid engine:engine];
+	XCTAssertEqualObjects([self active:pid engine:engine], @[ @"aborted" ]);
+}
+
 /* An error event subprocess inside the subprocess catches before an error
  * boundary on the subprocess; an error thrown inside it goes outward. */
 - (WFProcessDefinition *)guarded:(NSString *)handlerTopic
@@ -294,7 +322,7 @@ WFEventSubProcessDocument(NSString *inside)
 	NSDictionary *refused = @{
 		@"<bpmn:subProcess id=\"x\" triggeredByEvent=\"true\"><bpmn:startEvent id=\"xs\"/>"
 		 @"<bpmn:endEvent id=\"xe\"/><bpmn:sequenceFlow id=\"x1\" sourceRef=\"xs\" targetRef=\"xe\"/>"
-		 @"</bpmn:subProcess>": @"message, timer, signal, error or escalation start",
+		 @"</bpmn:subProcess>": @"message, timer, signal, error, escalation or conditional start",
 		@"<bpmn:subProcess id=\"x\" triggeredByEvent=\"true\">"
 		 @"<bpmn:startEvent id=\"xs\"><bpmn:messageEventDefinition messageRef=\"Message_1\"/></bpmn:startEvent>"
 		 @"<bpmn:endEvent id=\"xe\"/><bpmn:sequenceFlow id=\"x1\" sourceRef=\"xs\" targetRef=\"xe\"/>"

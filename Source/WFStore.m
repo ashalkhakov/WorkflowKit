@@ -5,6 +5,7 @@
 static NSString * const WFDeploymentEntity = @"WFDeployment";
 static NSString * const WFResourceEntity = @"WFResource";
 static NSString * const WFDefinitionEntity = @"WFDefinitionRecord";
+static NSString * const WFDecisionEntity = @"WFDecisionRecord";
 static NSString * const WFSubscriptionEntity = @"WFEventSubscription";
 static NSString * const WFJobEntityName = @"WFJob";
 
@@ -12,6 +13,9 @@ static NSString * const WFJobEntityName = @"WFJob";
 @end
 
 @implementation WFDefinitionRecord
+@end
+
+@implementation WFDecisionRecord
 @end
 
 
@@ -179,8 +183,25 @@ static NSString * const WFJobEntityName = @"WFJob";
 	return record;
 }
 
+- (WFDecisionRecord *)decisionRecordFromRow:(NSManagedObject *)row
+{
+	if (row == nil) {
+		return nil;
+	}
+	WFDecisionRecord *record = [[WFDecisionRecord alloc] init];
+	record.definitionId = [row valueForKey:@"definitionId"];
+	record.key = [row valueForKey:@"key"];
+	record.name = [row valueForKey:@"name"];
+	record.version = [[row valueForKey:@"version"] integerValue];
+	record.versionTag = [row valueForKey:@"versionTag"];
+	record.deploymentId = [[row valueForKey:@"deployment"] valueForKey:@"deploymentId"];
+	record.resourceName = [row valueForKey:@"resourceName"];
+	return record;
+}
+
 - (NSArray<WFDefinitionRecord *> *)insertDeployment:(WFDeploymentRecord *)deployment
                                         definitions:(NSArray<WFDefinitionRecord *> *)definitions
+                                          decisions:(NSArray<WFDecisionRecord *> *)decisions
                                               error:(NSError **)error
 {
 	__block BOOL ok = NO;
@@ -303,6 +324,17 @@ static NSString * const WFJobEntityName = @"WFJob";
 				start.definitionId = record.definitionId;
 				start.createdAt = deployment.deployedAt;
 			}
+			if (definition.conditionalStart) {
+				WFEventSubscriptionEntity *start = [NSEntityDescription
+					insertNewObjectForEntityForName:WFSubscriptionEntity
+					         inManagedObjectContext:self->_context];
+				start.subscriptionId = [[NSUUID UUID] UUIDString];
+				start.eventType = WFEventTypeConditional;
+				start.eventName = definition.key;
+				start.activityId = definition.key;
+				start.definitionId = record.definitionId;
+				start.createdAt = deployment.deployedAt;
+			}
 			if (definition.messageStartName != nil) {
 				WFEventSubscriptionEntity *start = [NSEntityDescription
 					insertNewObjectForEntityForName:WFSubscriptionEntity
@@ -315,6 +347,32 @@ static NSString * const WFJobEntityName = @"WFJob";
 				start.definitionId = record.definitionId;
 				start.createdAt = deployment.deployedAt;
 			}
+		}
+		NSMutableDictionary *nextDecision = [NSMutableDictionary dictionary];
+		for (WFDecisionRecord *decision in decisions) {
+			NSNumber *version = [nextDecision objectForKey:decision.key];
+			if (version == nil) {
+				NSManagedObject *latest = [[self fetch:WFDecisionEntity
+				                             predicate:[NSPredicate predicateWithFormat:@"key == %@", decision.key]
+				                                  sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"version"
+				                                                                        ascending:NO] ]
+				                                 limit:1] lastObject];
+				version = [NSNumber numberWithInteger:[[latest valueForKey:@"version"] integerValue] + 1];
+			}
+			[nextDecision setObject:[NSNumber numberWithInteger:[version integerValue] + 1] forKey:decision.key];
+			decision.definitionId = [[NSUUID UUID] UUIDString];
+			decision.version = [version integerValue];
+			decision.deploymentId = deployment.deploymentId;
+			NSManagedObject *decisionRow = [NSEntityDescription
+				insertNewObjectForEntityForName:WFDecisionEntity
+				         inManagedObjectContext:self->_context];
+			[decisionRow setValue:decision.definitionId forKey:@"definitionId"];
+			[decisionRow setValue:decision.key forKey:@"key"];
+			[decisionRow setValue:decision.name forKey:@"name"];
+			[decisionRow setValue:version forKey:@"version"];
+			[decisionRow setValue:decision.versionTag forKey:@"versionTag"];
+			[decisionRow setValue:decision.resourceName forKey:@"resourceName"];
+			[decisionRow setValue:row forKey:@"deployment"];
 		}
 		if (localError != nil) {
 			[self->_context rollback];
@@ -412,6 +470,49 @@ static NSString * const WFJobEntityName = @"WFJob";
 		[self->_context reset];
 	}];
 	return record;
+}
+
+- (NSArray<WFDecisionRecord *> *)decisionRecords:(NSPredicate *)predicate limit:(NSUInteger)limit
+{
+	NSMutableArray *records = [NSMutableArray array];
+	[_context performBlockAndWait:^{
+		NSArray *rows = [self fetch:WFDecisionEntity
+		                  predicate:predicate
+		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"key" ascending:YES],
+		                               [NSSortDescriptor sortDescriptorWithKey:@"version" ascending:NO] ]
+		                      limit:limit];
+		for (NSManagedObject *row in rows) {
+			[records addObject:[self decisionRecordFromRow:row]];
+		}
+		[self->_context reset];
+	}];
+	return records;
+}
+
+- (NSArray<WFDecisionRecord *> *)decisionRecordsInDeployment:(NSString *)deploymentId
+{
+	return [self decisionRecords:[NSPredicate predicateWithFormat:@"deployment.deploymentId == %@", deploymentId]
+	                       limit:0];
+}
+
+- (WFDecisionRecord *)decisionRecordForKey:(NSString *)key version:(NSInteger)version
+{
+	if (key == nil) {
+		return nil;
+	}
+	NSPredicate *predicate = version > 0
+		? [NSPredicate predicateWithFormat:@"key == %@ AND version == %@", key, [NSNumber numberWithInteger:version]]
+		: [NSPredicate predicateWithFormat:@"key == %@", key];
+	return [[self decisionRecords:predicate limit:1] firstObject];
+}
+
+- (WFDecisionRecord *)decisionRecordWithId:(NSString *)definitionId
+{
+	if (definitionId == nil) {
+		return nil;
+	}
+	return [[self decisionRecords:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId] limit:1]
+		firstObject];
 }
 
 @end

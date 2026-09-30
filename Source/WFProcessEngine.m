@@ -67,6 +67,7 @@ WFIsConflict(NSError *error)
 	_historyService = [[WFHistoryService alloc] initWithProcessEngine:self];
 	_managementService = [[WFManagementService alloc] initWithProcessEngine:self];
 	_externalTaskService = [[WFExternalTaskService alloc] initWithProcessEngine:self];
+	_decisionService = [[WFDecisionService alloc] initWithProcessEngine:self];
 	_jobExecutorActive = YES;
 	_historyLevel = WFHistoryLevelAudit;
 	_identifier = [NSString stringWithFormat:@"workflowkit@%@",

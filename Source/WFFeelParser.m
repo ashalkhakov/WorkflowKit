@@ -473,6 +473,37 @@ WFFeelKeyText(NSString *key)
 	return test;
 }
 
+/* A DMN input entry: tests of the input value ?, maybe inside not(...). */
+- (WFFeelNode *)parseUnaryTestsEntry
+{
+	WFFeelNode *subject = [WFFeelNode node:WFFeelNodeName];
+	subject.name = @"?";
+	BOOL negated = [self isWord:@"not"] && [self peekAhead:1].kind == WFFeelTokenLParen;
+	if (negated) {
+		[self eat];
+		[self eat];
+	}
+	NSMutableArray *tests = [NSMutableArray arrayWithObject:[self parseUnaryTest]];
+	while ([self match:WFFeelTokenComma]) {
+		[tests addObject:[self parseUnaryTest]];
+	}
+	if (negated) {
+		[self expect:WFFeelTokenRParen what:@"')'"];
+	}
+	if (self.error == nil && [self peek].kind != WFFeelTokenEnd) {
+		[self fail:@"',' or the end"];
+	}
+	WFFeelNode *node = [WFFeelNode node:WFFeelNodeIn];
+	node.children = [@[ subject ] arrayByAddingObjectsFromArray:tests];
+	if (negated) {
+		WFFeelNode *call = [WFFeelNode node:WFFeelNodeCall];
+		call.name = @"not";
+		call.children = @[ node ];
+		node = call;
+	}
+	return self.error == nil ? node : nil;
+}
+
 - (WFFeelNode *)parseAdditive
 {
 	WFFeelNode *left = [self parseMultiplicative];
@@ -774,6 +805,23 @@ WFFeelParse(NSString *text, BOOL camunda7, NSError **error)
 	} else {
 		node = [parser parse];
 	}
+	if (node == nil && error != NULL) {
+		*error = parser.error;
+	}
+	return node;
+}
+
+WFFeelNode *
+WFFeelParseUnaryTests(NSString *text, NSError **error)
+{
+	NSString *trimmed = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+	if ([trimmed length] == 0 || [trimmed isEqualToString:@"-"]) {
+		return [WFFeelNode literal:[NSNumber numberWithBool:YES]];
+	}
+	WFFeelParser *parser = [[WFFeelParser alloc] init];
+	parser.text = trimmed;
+	parser.tokens = [[[WFFeelLexer alloc] initWithString:parser.text camunda7:NO] tokens];
+	WFFeelNode *node = [parser parseUnaryTestsEntry];
 	if (node == nil && error != NULL) {
 		*error = parser.error;
 	}

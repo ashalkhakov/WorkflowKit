@@ -3,6 +3,7 @@
 
 NSString * const WFEventTypeMessage = @"message";
 NSString * const WFEventTypeSignal = @"signal";
+NSString * const WFEventTypeConditional = @"conditional";
 NSString * const WFEventTypeCompensate = @"compensate";
 NSString * const WFEventTypeCompensating = @"compensating";
 NSString * const WFJobTypeTimerName = @"timer";

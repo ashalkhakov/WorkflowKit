@@ -84,3 +84,7 @@
 @interface WFHistoryService (WFInternal)
 - (instancetype)initWithProcessEngine:(WFProcessEngine *)engine;
 @end
+
+@interface WFDecisionService (WFInternal)
+- (instancetype)initWithProcessEngine:(WFProcessEngine *)engine;
+@end

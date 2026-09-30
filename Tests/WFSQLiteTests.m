@@ -142,3 +142,45 @@
 @implementation WFInputOutputSQLiteTests
 #include "WFInputOutputTests.inc"
 @end
+
+@interface WFTaskKindsSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFTaskKindsSQLiteTests
+#include "WFTaskKindsTests.inc"
+@end
+
+@interface WFLinkEventSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFLinkEventSQLiteTests
+#include "WFLinkEventTests.inc"
+@end
+
+@interface WFConditionalEventSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFConditionalEventSQLiteTests
+#include "WFConditionalEventTests.inc"
+@end
+
+@interface WFDecisionSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFDecisionSQLiteTests
+#include "WFDecisionTests.inc"
+@end
+
+@interface WFModificationSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFModificationSQLiteTests
+#include "WFModificationTests.inc"
+@end
+
+@interface WFMigrationSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFMigrationSQLiteTests
+#include "WFMigrationTests.inc"
+@end

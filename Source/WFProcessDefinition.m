@@ -20,6 +20,11 @@
 @end
 
 @interface WFTask (WFBuilderAccess)
+- (void)setDecisionRef:(NSString *)decisionRef;
+- (void)setDecisionBinding:(WFCalledElementBinding)binding;
+- (void)setDecisionVersion:(NSInteger)version;
+- (void)setResultVariable:(NSString *)resultVariable;
+- (void)setMapDecisionResult:(WFDecisionResultMapping)mapping;
 - (void)setAssigneeExpression:(WFFeelExpression *)expression;
 - (void)setCandidateUsers:(WFFeelExpression *)expression;
 - (void)setCandidateGroups:(WFFeelExpression *)expression;
@@ -33,6 +38,7 @@
 - (void)setTimer:(WFTimer *)timer;
 - (void)setCodeVariable:(NSString *)name;
 - (void)wf_setMessageName:(NSString *)name;
+- (void)wf_setCondition:(WFEventCondition *)condition;
 @end
 
 @interface WFSubProcess (WFBuilderAccess)
@@ -408,6 +414,125 @@
 	                                       actionKey:actionKey
 	                                        assignee:nil];
 	return [self addNode:task];
+}
+
+- (instancetype)addTask:(NSString *)elementId kind:(WFTaskKind)kind actionKey:(NSString *)actionKey
+{
+	return [self addNode:[[WFTask alloc] initWithElementId:elementId
+	                                                  name:elementId
+	                                                  kind:kind
+	                                             actionKey:actionKey
+	                                              assignee:nil]];
+}
+
+- (instancetype)addSendTask:(NSString *)elementId action:(NSString *)topic
+{
+	return [self addTask:elementId kind:WFTaskKindSend actionKey:topic];
+}
+
+- (instancetype)addBusinessRuleTask:(NSString *)elementId action:(NSString *)topic
+{
+	return [self addTask:elementId kind:WFTaskKindBusinessRule actionKey:topic];
+}
+
+- (instancetype)addBusinessRuleTask:(NSString *)elementId
+                           decision:(NSString *)decisionRef
+                     resultVariable:(NSString *)resultVariable
+                            mapping:(WFDecisionResultMapping)mapping
+{
+	[self addTask:elementId kind:WFTaskKindBusinessRule actionKey:nil];
+	WFTask *task = (WFTask *)[self.nodes objectForKey:elementId];
+	[task setDecisionRef:decisionRef];
+	[task setResultVariable:resultVariable];
+	[task setMapDecisionResult:mapping];
+	return self;
+}
+
+- (instancetype)setDecisionBinding:(WFCalledElementBinding)binding
+                           version:(NSInteger)version
+                        forElement:(NSString *)elementId
+{
+	WFTask *task = (WFTask *)[self.nodes objectForKey:elementId];
+	if ([task isKindOfClass:[WFTask class]]) {
+		[task setDecisionBinding:binding];
+		[task setDecisionVersion:binding == WFCalledElementBindingVersion ? version : 0];
+	}
+	return self;
+}
+
+- (instancetype)addReceiveTask:(NSString *)elementId message:(NSString *)messageName
+{
+	return [self addTask:elementId kind:WFTaskKindReceive actionKey:messageName];
+}
+
+- (instancetype)addManualTask:(NSString *)elementId
+{
+	return [self addTask:elementId kind:WFTaskKindManual actionKey:nil];
+}
+
+- (instancetype)addTask:(NSString *)elementId
+{
+	return [self addTask:elementId kind:WFTaskKindNone actionKey:nil];
+}
+
+- (instancetype)addLinkThrow:(NSString *)elementId link:(NSString *)linkName
+{
+	return [self addEvent:elementId kind:WFEventKindIntermediateThrow trigger:WFEventTriggerLink
+	          messageName:linkName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addLinkCatch:(NSString *)elementId link:(NSString *)linkName
+{
+	return [self addEvent:elementId kind:WFEventKindIntermediateCatch trigger:WFEventTriggerLink
+	          messageName:linkName timer:nil attachedToId:nil errorRef:nil interrupting:YES];
+}
+
+- (instancetype)addConditional:(NSString *)elementId
+                          kind:(WFEventKind)kind
+                        onTask:(NSString *)taskId
+                     condition:(NSString *)condition
+                  interrupting:(BOOL)interrupting
+{
+	[self addEvent:elementId kind:kind trigger:WFEventTriggerConditional messageName:nil timer:nil
+	  attachedToId:taskId errorRef:nil interrupting:interrupting];
+	WFFeelExpression *expression = [self feel:condition];
+	if (expression == nil) {
+		return self;
+	}
+	return [self setCondition:[[WFEventCondition alloc] initWithExpression:expression
+	                                                         variableName:nil
+	                                                       variableEvents:nil]
+	               forElement:elementId];
+}
+
+- (instancetype)addConditionalStart:(NSString *)elementId condition:(NSString *)condition
+{
+	return [self addConditional:elementId kind:WFEventKindStart onTask:nil condition:condition
+	               interrupting:YES];
+}
+
+- (instancetype)addConditionalCatch:(NSString *)elementId condition:(NSString *)condition
+{
+	return [self addConditional:elementId kind:WFEventKindIntermediateCatch onTask:nil
+	                  condition:condition interrupting:YES];
+}
+
+- (instancetype)addBoundaryConditional:(NSString *)elementId
+                                onTask:(NSString *)taskId
+                             condition:(NSString *)condition
+                          interrupting:(BOOL)interrupting
+{
+	return [self addConditional:elementId kind:WFEventKindBoundary onTask:taskId condition:condition
+	               interrupting:interrupting];
+}
+
+- (instancetype)setCondition:(WFEventCondition *)condition forElement:(NSString *)elementId
+{
+	WFFlowNode *node = [self.nodes objectForKey:elementId];
+	if ([node isKindOfClass:[WFEvent class]]) {
+		[(WFEvent *)node wf_setCondition:condition];
+	}
+	return self;
 }
 
 - (instancetype)addExclusive:(NSString *)elementId
@@ -940,9 +1065,9 @@
 	}
 	if (start.trigger != WFEventTriggerMessage && start.trigger != WFEventTriggerTimer
 	    && start.trigger != WFEventTriggerSignal && start.trigger != WFEventTriggerError
-	    && start.trigger != WFEventTriggerEscalation) {
+	    && start.trigger != WFEventTriggerEscalation && start.trigger != WFEventTriggerConditional) {
 		return [self fail:error message:[NSString stringWithFormat:
-			@"%@: an event subprocess starts from a message, timer, signal, error or escalation start event",
+			@"%@: an event subprocess starts from a message, timer, signal, error, escalation or conditional start event",
 			node.elementId]];
 	}
 	if (start.trigger == WFEventTriggerError && !start.isInterrupting) {
@@ -1008,7 +1133,51 @@
 		}
 	}
 
+	/* Link catch events by name: each throw needs one. */
+	NSMutableDictionary *linkCatches = [NSMutableDictionary dictionary];
 	for (WFFlowNode *node in [self.nodes allValues]) {
+		WFEvent *event = [node isKindOfClass:[WFEvent class]] ? (WFEvent *)node : nil;
+		if (event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateCatch) {
+			if ([event.linkName length] == 0 || [linkCatches objectForKey:event.linkName] != nil) {
+				return [self fail:error message:[NSString stringWithFormat:
+					@"%@: a link catch event needs a name no other one in its scope has", node.elementId]];
+			}
+			[linkCatches setObject:event forKey:event.linkName];
+		}
+	}
+
+	for (WFFlowNode *node in [self.nodes allValues]) {
+		WFEvent *event = [node isKindOfClass:[WFEvent class]] ? (WFEvent *)node : nil;
+		BOOL isLinkCatch = event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateCatch;
+		BOOL isLinkThrow = event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateThrow;
+		if (isLinkThrow && [linkCatches objectForKey:event.linkName ?: @""] == nil) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: no link catch event in its scope is named \"%@\"", node.elementId, event.linkName]];
+		}
+		if ((isLinkThrow && [node.outgoingFlowIds count] > 0) || (isLinkCatch && [node.incomingFlowIds count] > 0)) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: a link throw event has no outgoing flow, and a link catch event no incoming one",
+				node.elementId]];
+		}
+		if (event.trigger == WFEventTriggerConditional && event.condition == nil) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: a conditional event needs its condition", node.elementId]];
+		}
+		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindBusinessRule
+		    && [[(WFTask *)node decisionRef] length] == 0 && [[(WFTask *)node actionKey] length] == 0) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: a business rule task needs a decision or an external task's topic", node.elementId]];
+		}
+		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node decisionBinding] == WFCalledElementBindingVersion
+		    && [(WFTask *)node decisionVersion] < 1) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: a decision bound by version needs the version", node.elementId]];
+		}
+		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindReceive
+		    && [[(WFTask *)node messageName] length] == 0) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: a receive task needs its message", node.elementId]];
+		}
 		BOOL isStart = [node isKindOfClass:[WFEvent class]]
 			&& [(WFEvent *)node kind] == WFEventKindStart;
 		BOOL isEnd = [node isKindOfClass:[WFEvent class]]
@@ -1106,12 +1275,12 @@
 			}
 		}
 
-		if (!isStart && [node.incomingFlowIds count] == 0) {
+		if (!isStart && !isLinkCatch && [node.incomingFlowIds count] == 0) {
 			return [self fail:error
 			          message:[NSString stringWithFormat:
 					@"node %@ has no incoming flow", node.elementId]];
 		}
-		if (!isEnd && [node.outgoingFlowIds count] == 0) {
+		if (!isEnd && !isLinkThrow && [node.outgoingFlowIds count] == 0) {
 			return [self fail:error
 			          message:[NSString stringWithFormat:
 					@"node %@ has no outgoing flow", node.elementId]];

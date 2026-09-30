@@ -1,5 +1,6 @@
 #import "WFRepositoryService.h"
 #import "WFProcessDefinition+Repository.h"
+#import "WFDecision+Repository.h"
 #import "WFStore.h"
 #import "WFBpmn.h"
 #import "WFFlowElements.h"
@@ -22,11 +23,18 @@ WFIsBpmnResource(NSString *name)
 	return [name hasSuffix:@".bpmn"] || [name hasSuffix:@".bpmn20.xml"];
 }
 
+static BOOL
+WFIsDmnResource(NSString *name)
+{
+	return [name hasSuffix:@".dmn"] || [name hasSuffix:@".dmn11.xml"];
+}
+
 @interface WFDeployment ()
 @property (nonatomic, readwrite, copy) NSString *deploymentId;
 @property (nonatomic, readwrite, copy) NSString *name;
 @property (nonatomic, readwrite, copy) NSDate *deployedAt;
 @property (nonatomic, readwrite, copy) NSArray<WFProcessDefinition *> *definitions;
+@property (nonatomic, readwrite, copy) NSArray<WFDecisionDefinition *> *decisions;
 @end
 
 @implementation WFDeployment
@@ -38,6 +46,8 @@ WFIsBpmnResource(NSString *name)
 	/* Definition id to its definition. Definitions are immutable, so a
 	 * cached one never goes stale. */
 	NSMutableDictionary<NSString *, WFProcessDefinition *> *_cache;
+	/* The same for decisions. */
+	NSMutableDictionary<NSString *, WFDecisionDefinition *> *_decisions;
 	void (^_didStoreDeployment)(void);
 	__weak WFProcessEngine *_engine;
 }
@@ -99,6 +109,7 @@ WFIsBpmnResource(NSString *name)
 	if (self) {
 		_store = store;
 		_cache = [NSMutableDictionary dictionary];
+		_decisions = [NSMutableDictionary dictionary];
 	}
 	return self;
 }
@@ -140,6 +151,133 @@ WFIsBpmnResource(NSString *name)
 		}
 	}
 	return parsed;
+}
+
+/* Every decision in the deployment's DMN resources, paired with the
+ * resource it came from. */
+- (NSArray *)parseDecisions:(NSDictionary<NSString *, NSData *> *)resources
+                      error:(NSError **)error
+{
+	NSMutableArray *parsed = [NSMutableArray array];
+	NSMutableSet *keys = [NSMutableSet set];
+	for (NSString *name in [[resources allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
+		if (!WFIsDmnResource(name)) {
+			continue;
+		}
+		NSError *parseError = nil;
+		NSArray *decisions = [WFDmnReader decisionsFromData:[resources objectForKey:name] error:&parseError];
+		if (decisions == nil) {
+			if (error != NULL) {
+				*error = WFRepositoryError(WFErrorInvalidDmn,
+					[NSString stringWithFormat:@"%@: %@", name, [parseError localizedDescription]]);
+			}
+			return nil;
+		}
+		for (WFDecisionDefinition *decision in decisions) {
+			if ([keys containsObject:decision.key]) {
+				if (error != NULL) {
+					*error = WFRepositoryError(WFErrorInvalidDefinition, [NSString stringWithFormat:
+						@"decision %@ is defined twice in one deployment", decision.key]);
+				}
+				return nil;
+			}
+			[keys addObject:decision.key];
+			[parsed addObject:@[ decision, name ]];
+		}
+	}
+	return parsed;
+}
+
+- (WFDecisionDefinition *)stampDecision:(WFDecisionDefinition *)parsed with:(WFDecisionRecord *)record
+{
+	WFDecisionDefinition *decision = [parsed wf_deployedCopyWithVersion:record.version
+	                                                        definitionId:record.definitionId
+	                                                        deploymentId:record.deploymentId
+	                                                        resourceName:record.resourceName];
+	@synchronized (_decisions) {
+		[_decisions setObject:decision forKey:decision.definitionId];
+	}
+	return decision;
+}
+
+- (WFDecisionDefinition *)decisionForRecord:(WFDecisionRecord *)record error:(NSError **)error
+{
+	@synchronized (_decisions) {
+		WFDecisionDefinition *cached = [_decisions objectForKey:record.definitionId];
+		if (cached != nil) {
+			return cached;
+		}
+	}
+	WFDeploymentRecord *deployment = [_store deploymentWithId:record.deploymentId];
+	NSData *bytes = [deployment.resources objectForKey:record.resourceName];
+	NSArray *parsed = bytes != nil ? [WFDmnReader decisionsFromData:bytes error:error] : nil;
+	for (WFDecisionDefinition *candidate in parsed) {
+		if ([candidate.key isEqualToString:record.key]) {
+			return [self stampDecision:candidate with:record];
+		}
+	}
+	if ((bytes == nil || parsed != nil) && error != NULL) {
+		*error = WFRepositoryError(WFErrorInvalidDefinition, [NSString stringWithFormat:
+			@"resource %@ of deployment %@ no longer defines decision %@",
+			record.resourceName, record.deploymentId, record.key]);
+	}
+	return nil;
+}
+
+- (WFDecisionDefinition *)latestDecisionForKey:(NSString *)key error:(NSError **)error
+{
+	return [self decisionForKey:key version:0 error:error];
+}
+
+- (WFDecisionDefinition *)decisionForKey:(NSString *)key
+                                 version:(NSInteger)version
+                                   error:(NSError **)error
+{
+	WFDecisionRecord *record = [_store decisionRecordForKey:key version:version];
+	if (record == nil) {
+		if (error != NULL) {
+			*error = WFRepositoryError(WFErrorInvalidDefinition, version > 0
+				? [NSString stringWithFormat:@"decision %@ version %ld is not deployed", key, (long)version]
+				: [NSString stringWithFormat:@"decision %@ is not deployed", key]);
+		}
+		return nil;
+	}
+	return [self decisionForRecord:record error:error];
+}
+
+- (WFDecisionDefinition *)decisionWithId:(NSString *)definitionId error:(NSError **)error
+{
+	@synchronized (_decisions) {
+		WFDecisionDefinition *cached = [_decisions objectForKey:definitionId];
+		if (cached != nil) {
+			return cached;
+		}
+	}
+	WFDecisionRecord *record = [_store decisionRecordWithId:definitionId];
+	if (record == nil) {
+		if (error != NULL) {
+			*error = WFRepositoryError(WFErrorInvalidDefinition,
+				[NSString stringWithFormat:@"no decision %@", definitionId]);
+		}
+		return nil;
+	}
+	return [self decisionForRecord:record error:error];
+}
+
+- (WFDecisionDefinition *)decisionForKey:(NSString *)key
+                             inDeployment:(NSString *)deploymentId
+                                    error:(NSError **)error
+{
+	for (WFDecisionRecord *record in [_store decisionRecordsInDeployment:deploymentId]) {
+		if ([record.key isEqualToString:key]) {
+			return [self decisionForRecord:record error:error];
+		}
+	}
+	if (error != NULL) {
+		*error = WFRepositoryError(WFErrorInvalidDefinition, [NSString stringWithFormat:
+			@"decision %@ is not in deployment %@", key, deploymentId]);
+	}
+	return nil;
 }
 
 - (WFProcessDefinition *)cached:(NSString *)definitionId
@@ -212,11 +350,20 @@ WFIsBpmnResource(NSString *name)
 		}
 		[definitions addObject:definition];
 	}
+	NSMutableArray *decisions = [NSMutableArray array];
+	for (WFDecisionRecord *decisionRecord in [_store decisionRecordsInDeployment:record.deploymentId]) {
+		WFDecisionDefinition *decision = [self decisionForRecord:decisionRecord error:error];
+		if (decision == nil) {
+			return nil;
+		}
+		[decisions addObject:decision];
+	}
 	WFDeployment *deployment = [[WFDeployment alloc] init];
 	deployment.deploymentId = record.deploymentId;
 	deployment.name = record.name;
 	deployment.deployedAt = record.deployedAt;
 	deployment.definitions = definitions;
+	deployment.decisions = decisions;
 	return deployment;
 }
 
@@ -244,6 +391,20 @@ WFIsBpmnResource(NSString *name)
 	if (parsed == nil) {
 		return nil;
 	}
+	NSArray *parsedDecisions = [self parseDecisions:resources error:error];
+	if (parsedDecisions == nil) {
+		return nil;
+	}
+	NSMutableArray *decisionRecords = [NSMutableArray array];
+	for (NSArray *pair in parsedDecisions) {
+		WFDecisionDefinition *decision = [pair objectAtIndex:0];
+		WFDecisionRecord *record = [[WFDecisionRecord alloc] init];
+		record.key = decision.key;
+		record.name = decision.name;
+		record.versionTag = decision.versionTag;
+		record.resourceName = [pair objectAtIndex:1];
+		[decisionRecords addObject:record];
+	}
 	WFDeploymentRecord *deploymentRecord = [[WFDeploymentRecord alloc] init];
 	deploymentRecord.deploymentId = [[NSUUID UUID] UUIDString];
 	deploymentRecord.name = name;
@@ -262,6 +423,8 @@ WFIsBpmnResource(NSString *name)
 			record.messageStartName = start.messageName;
 		} else if (start.trigger == WFEventTriggerSignal) {
 			record.signalStartName = start.signalName;
+		} else if (start.trigger == WFEventTriggerConditional) {
+			record.conditionalStart = YES;
 		} else if (start.trigger == WFEventTriggerTimer) {
 			NSInteger attempts = WF_DEFAULT_ATTEMPTS;
 			NSArray *delays = nil;
@@ -286,6 +449,7 @@ WFIsBpmnResource(NSString *name)
 	}
 	NSArray *stored = [_store insertDeployment:deploymentRecord
 	                               definitions:records
+	                                 decisions:decisionRecords
 	                                     error:error];
 	if (stored == nil) {
 		return nil;
@@ -298,11 +462,17 @@ WFIsBpmnResource(NSString *name)
 		[definitions addObject:[self stamp:[[parsed objectAtIndex:i] objectAtIndex:0]
 		                              with:[stored objectAtIndex:i]]];
 	}
+	NSMutableArray *decisions = [NSMutableArray array];
+	for (NSUInteger i = 0; i < [decisionRecords count]; i++) {
+		[decisions addObject:[self stampDecision:[[parsedDecisions objectAtIndex:i] objectAtIndex:0]
+		                                    with:[decisionRecords objectAtIndex:i]]];
+	}
 	WFDeployment *deployment = [[WFDeployment alloc] init];
 	deployment.deploymentId = deploymentRecord.deploymentId;
 	deployment.name = name;
 	deployment.deployedAt = deploymentRecord.deployedAt;
 	deployment.definitions = definitions;
+	deployment.decisions = decisions;
 	return deployment;
 }
 

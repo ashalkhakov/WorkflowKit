@@ -7,6 +7,7 @@
 #import "WFDuration.h"
 #import "WFTimers.h"
 #import "WFFeelInternal.h"
+#import "WFDecision.h"
 #include <math.h>
 
 static NSString * const WFExecutionName = @"WFExecution";
@@ -44,6 +45,11 @@ WFActivityType(WFFlowNode *node)
 		case WFTaskKindUser: return @"userTask";
 		case WFTaskKindService: return @"serviceTask";
 		case WFTaskKindScript: return @"scriptTask";
+		case WFTaskKindSend: return @"sendTask";
+		case WFTaskKindBusinessRule: return @"businessRuleTask";
+		case WFTaskKindReceive: return @"receiveTask";
+		case WFTaskKindManual: return @"manualTask";
+		case WFTaskKindNone: return @"task";
 		}
 	}
 	if ([node isKindOfClass:[WFGateway class]]) {
@@ -79,6 +85,11 @@ WFCommandError(WFErrorCode code, NSString *message)
 	NSMutableDictionary *_definitions;
 	NSMutableDictionary *_historicVariables;
 	NSMutableDictionary *_openActivities;
+	/* Variable changes conditional events have yet to see: @[owner
+	 * execution, name, "create" or "update"]. */
+	NSMutableArray *_variableChanges;
+	/* Definition id to whether it has conditional events. */
+	NSMutableDictionary *_watchedDefinitions;
 }
 
 - (instancetype)initWithEngine:(WFProcessEngine *)engine
@@ -92,6 +103,7 @@ WFCommandError(WFErrorCode code, NSString *message)
 		_definitions = [NSMutableDictionary dictionary];
 		_historicVariables = [NSMutableDictionary dictionary];
 		_openActivities = [NSMutableDictionary dictionary];
+		_watchedDefinitions = [NSMutableDictionary dictionary];
 	}
 	return self;
 }
@@ -476,6 +488,8 @@ WFGone(NSManagedObject *object)
 			       activity:boundary.elementId];
 		} else if (boundary.trigger == WFEventTriggerTimer) {
 			[self timer:inner event:boundary];
+		} else if (boundary.trigger == WFEventTriggerConditional) {
+			[self waitForCondition:boundary on:inner];
 		}
 	}
 }
@@ -514,6 +528,10 @@ WFGone(NSManagedObject *object)
 		}
 		if (event.trigger == WFEventTriggerCompensation) {
 			[self throwCompensation:event execution:execution];
+			return;
+		}
+		if (event.trigger == WFEventTriggerLink) {
+			[self jump:event execution:execution];
 			return;
 		}
 		if (event.trigger == WFEventTriggerMessage) {
@@ -560,7 +578,16 @@ WFGone(NSManagedObject *object)
 			       activity:event.elementId];
 		} else if (event.trigger == WFEventTriggerTimer) {
 			[self timer:execution event:event];
+		} else if (event.trigger == WFEventTriggerConditional) {
+			/* Holding already, it does not wait. */
+			if ([self conditionOf:event holdsOn:execution]) {
+				[self leave:event execution:execution];
+			} else if (_failure == nil) {
+				[self subscribe:execution type:WFEventTypeConditional name:event.elementId
+				       activity:event.elementId];
+			}
 		} else {
+			/* A link catch event: the path has jumped here. */
 			[self leave:event execution:execution];
 		}
 		return;
@@ -583,6 +610,164 @@ WFGone(NSManagedObject *object)
 	}];
 }
 
+/* A link throw event: the path goes on at the catch event of the same
+ * name in its scope. */
+- (void)jump:(WFEvent *)event execution:(WFExecutionEntity *)execution
+{
+	WFProcessDefinition *scope = [self scopeOf:event.elementId execution:execution];
+	WFFlowNode *target = nil;
+	for (WFFlowNode *node in [scope.nodes allValues]) {
+		if ([node isKindOfClass:[WFEvent class]] && [(WFEvent *)node trigger] == WFEventTriggerLink
+		    && [(WFEvent *)node kind] == WFEventKindIntermediateCatch
+		    && [[(WFEvent *)node linkName] isEqualToString:event.linkName]) {
+			target = node;
+		}
+	}
+	[self activityEnded:execution.activityInstanceId canceled:NO];
+	[self schedule:^{
+		if (!WFGone(execution)) {
+			[self enter:target execution:execution];
+		}
+	}];
+}
+
+#pragma mark - Conditional events
+
+/* Whether the event's condition holds over the variables visible there.
+ * A condition that cannot be evaluated fails the command. */
+- (BOOL)conditionOf:(WFEvent *)event holdsOn:(WFExecutionEntity *)execution
+{
+	NSError *error = nil;
+	BOOL holds = [event.condition.expression evaluateWithVariables:[self visibleVariables:execution]
+	                                                          error:&error];
+	if (error != nil) {
+		[self fail:WFCommandError(WFErrorInvalidState, [NSString stringWithFormat:@"%@: %@",
+			event.elementId, [error localizedDescription]])];
+		return NO;
+	}
+	return holds;
+}
+
+/* A boundary event, an event subprocess's start or an event after an
+ * event-based gateway starts waiting for its condition: it may hold
+ * already, which is seen once what armed it is done. */
+- (void)waitForCondition:(WFEvent *)event on:(WFExecutionEntity *)execution
+{
+	WFEventSubscriptionEntity *subscription =
+		[self subscribe:execution type:WFEventTypeConditional name:event.elementId activity:event.elementId];
+	[self schedule:^{
+		if (!WFGone(subscription) && !WFGone(execution) && [self conditionOf:event holdsOn:execution]) {
+			[self event:event triggeredOn:execution subscription:subscription];
+		}
+	}];
+}
+
+/* Whether any event in the definition, or in its subprocesses, waits for
+ * a condition: most do not, and their variables need no watching. */
+static BOOL
+WFHasConditionalEvents(WFProcessDefinition *definition)
+{
+	for (WFFlowNode *node in [definition.nodes allValues]) {
+		if ([node isKindOfClass:[WFEvent class]] && [(WFEvent *)node trigger] == WFEventTriggerConditional) {
+			return YES;
+		}
+		if ([node isKindOfClass:[WFSubProcess class]]
+		    && WFHasConditionalEvents([(WFSubProcess *)node innerDefinition])) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* A variable was set: conditional events that see it look again, once
+ * the operation that set it is done. */
+- (void)variable:(WFVariableEntity *)variable changedBy:(NSString *)change
+{
+	if (variable.execution == nil) {
+		return;
+	}
+	WFProcessDefinition *definition = [self definitionForExecution:variable.execution];
+	NSNumber *watched = definition.definitionId != nil ? [_watchedDefinitions objectForKey:definition.definitionId] : nil;
+	if (watched == nil) {
+		watched = [NSNumber numberWithBool:WFHasConditionalEvents(definition)];
+		if (definition.definitionId != nil) {
+			[_watchedDefinitions setObject:watched forKey:definition.definitionId];
+		}
+	}
+	if (![watched boolValue]) {
+		return;
+	}
+	if (_variableChanges == nil) {
+		_variableChanges = [NSMutableArray array];
+		[self schedule:^{
+			[self dispatchVariableChanges];
+		}];
+	}
+	[_variableChanges addObject:@[ variable.execution, variable.name, change ]];
+}
+
+- (BOOL)change:(NSArray *)change concerns:(WFEvent *)event on:(WFExecutionEntity *)execution
+{
+	WFEventCondition *condition = event.condition;
+	if ((condition.variableName != nil && ![condition.variableName isEqualToString:[change objectAtIndex:1]])
+	    || (condition.variableEvents != nil && ![condition.variableEvents containsObject:[change objectAtIndex:2]])) {
+		return NO;
+	}
+	/* Only where the variable is visible: in the subtree of the execution
+	 * it belongs to. */
+	WFExecutionEntity *owner = [change objectAtIndex:0];
+	for (WFExecutionEntity *scope = execution; scope != nil; scope = scope.parent) {
+		if (scope == owner) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* Each conditional event waiting where a changed variable is visible is
+ * evaluated, oldest first; each whose condition holds fires. */
+- (void)dispatchVariableChanges
+{
+	NSArray *changes = _variableChanges;
+	_variableChanges = nil;
+	NSMutableSet *instances = [NSMutableSet set];
+	for (NSArray *change in changes) {
+		WFExecutionEntity *owner = [change objectAtIndex:0];
+		if (!WFGone(owner) && owner.processInstanceId != nil) {
+			[instances addObject:owner.processInstanceId];
+		}
+	}
+	for (NSString *processInstanceId in instances) {
+		NSArray *waiting = [self fetch:WFSubscriptionName
+		                     predicate:[NSPredicate predicateWithFormat:
+		                         @"eventType == %@ AND processInstanceId == %@",
+		                         WFEventTypeConditional, processInstanceId]
+		                          sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"sequence" ascending:YES] ]
+		                         limit:0];
+		for (WFEventSubscriptionEntity *subscription in waiting) {
+			WFExecutionEntity *execution = subscription.execution;
+			if (_failure != nil) {
+				return;
+			}
+			if (WFGone(subscription) || execution == nil || WFGone(execution) || execution.suspended) {
+				continue;
+			}
+			WFFlowNode *node = [self node:subscription.activityId of:execution];
+			if (![node isKindOfClass:[WFEvent class]]) {
+				continue;
+			}
+			WFEvent *event = (WFEvent *)node;
+			BOOL concerned = NO;
+			for (NSArray *change in changes) {
+				concerned = concerned || [self change:change concerns:event on:execution];
+			}
+			if (concerned && [self conditionOf:event holdsOn:execution]) {
+				[self event:event triggeredOn:execution subscription:subscription];
+			}
+		}
+	}
+}
+
 - (void)subscribe:(WFExecutionEntity *)execution
           message:(NSString *)messageName
          activity:(NSString *)activityId
@@ -590,10 +775,10 @@ WFGone(NSManagedObject *object)
 	[self subscribe:execution type:WFEventTypeMessage name:messageName activity:activityId];
 }
 
-- (void)subscribe:(WFExecutionEntity *)execution
-             type:(NSString *)eventType
-             name:(NSString *)eventName
-         activity:(NSString *)activityId
+- (WFEventSubscriptionEntity *)subscribe:(WFExecutionEntity *)execution
+                                    type:(NSString *)eventType
+                                    name:(NSString *)eventName
+                                activity:(NSString *)activityId
 {
 	WFEventSubscriptionEntity *subscription = [self insert:WFSubscriptionName];
 	subscription.subscriptionId = [WFCommandContext newId];
@@ -604,6 +789,7 @@ WFGone(NSManagedObject *object)
 	subscription.createdAt = [NSDate date];
 	subscription.sequence = [self.engine wf_nextSequence];
 	subscription.execution = execution;
+	return subscription;
 }
 
 /* Arms the event's timer on the execution: its expression is evaluated
@@ -676,7 +862,7 @@ WFGone(NSManagedObject *object)
 	if (node == nil || ![self setVariables:variables from:execution]) {
 		return;
 	}
-	[self event:(WFEvent *)node triggeredOn:execution subscription:subscription];
+	[self event:node triggeredOn:execution subscription:subscription];
 }
 
 - (void)runJob:(WFJobEntity *)job
@@ -812,15 +998,18 @@ WFGone(NSManagedObject *object)
 	}
 }
 
-- (void)event:(WFEvent *)event
+/* What a path waits for has come: an event, or a receive task's
+ * message. */
+- (void)event:(WFFlowNode *)node
   triggeredOn:(WFExecutionEntity *)execution
  subscription:(WFEventSubscriptionEntity *)subscription
 {
-	if (event.kind == WFEventKindStart) {
+	WFEvent *event = [node isKindOfClass:[WFEvent class]] ? (WFEvent *)node : nil;
+	if (event != nil && event.kind == WFEventKindStart) {
 		[self eventSubProcessStarted:event on:execution];
 		return;
 	}
-	if (event.kind == WFEventKindBoundary) {
+	if (event != nil && event.kind == WFEventKindBoundary) {
 		[self boundary:event firedOn:execution subscription:subscription];
 		return;
 	}
@@ -847,13 +1036,20 @@ WFGone(NSManagedObject *object)
 			}
 		}
 		[self activityEnded:execution.activityInstanceId canceled:NO];
-		execution.activityId = event.elementId;
+		execution.activityId = node.elementId;
 		execution.activityInstanceId = [WFCommandContext newId];
-		[self activityStarted:event execution:execution];
-	} else if (subscription != nil) {
-		[self remove:subscription];
+		[self activityStarted:node execution:execution];
+	} else {
+		if (subscription != nil) {
+			[self remove:subscription];
+		}
+		if (event == nil) {
+			/* A receive task, which may be a scope of its own. */
+			[self completeActivity:execution];
+			return;
+		}
 	}
-	[self leave:event execution:execution];
+	[self leave:node execution:execution];
 }
 
 /* inner is the scope execution of the activity the boundary event is on. */
@@ -1590,20 +1786,26 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	return starts;
 }
 
-/* A scope starts: its event subprocesses' message and signal starts
- * subscribe, and their timers are set, on the scope execution, for as
- * long as it lasts. Error starts are found when an error is thrown. */
+/* A scope starts: its event subprocesses' message, signal and conditional
+ * starts subscribe, and their timers are set, on the scope execution, for
+ * as long as it lasts. Error starts are found when an error is thrown. */
 - (void)armEventSubProcessesOf:(WFProcessDefinition *)scope on:(WFExecutionEntity *)execution
 {
 	for (WFSubProcess *handler in [self eventSubProcessesIn:scope]) {
-		WFEvent *start = [handler.innerDefinition startEvent];
-		if (start.trigger == WFEventTriggerMessage) {
-			[self subscribe:execution message:start.messageName activity:start.elementId];
-		} else if (start.trigger == WFEventTriggerSignal) {
-			[self subscribe:execution type:WFEventTypeSignal name:start.signalName activity:start.elementId];
-		} else if (start.trigger == WFEventTriggerTimer) {
-			[self timer:execution event:start];
-		}
+		[self armEventSubProcessStart:[handler.innerDefinition startEvent] on:execution];
+	}
+}
+
+- (void)armEventSubProcessStart:(WFEvent *)start on:(WFExecutionEntity *)execution
+{
+	if (start.trigger == WFEventTriggerMessage) {
+		[self subscribe:execution message:start.messageName activity:start.elementId];
+	} else if (start.trigger == WFEventTriggerSignal) {
+		[self subscribe:execution type:WFEventTypeSignal name:start.signalName activity:start.elementId];
+	} else if (start.trigger == WFEventTriggerTimer) {
+		[self timer:execution event:start];
+	} else if (start.trigger == WFEventTriggerConditional) {
+		[self waitForCondition:start on:execution];
 	}
 }
 
@@ -1663,10 +1865,21 @@ static NSString * const WFLoopCounter = @"loopCounter";
 
 /* A new concurrent path in the scope. When the scope execution is itself
  * the scope's one path, what that path is doing moves into a concurrent
- * child first -- everything but the scope's own waits, the event
- * subprocesses' starts. */
+ * child first -- everything but the scope's own waits: the event
+ * subprocesses' starts, and the boundary events of its activity. */
 - (WFExecutionEntity *)pathBeside:(WFExecutionEntity *)scopeExecution keeping:(NSSet *)scopeWaits
 {
+	/* The boundary events of the activity whose scope this is wait on the
+	 * scope too. */
+	WFExecutionEntity *host = scopeExecution.parent;
+	if (host.activityId != nil) {
+		NSMutableSet *waits = [scopeWaits mutableCopy] ?: [NSMutableSet set];
+		for (WFEvent *boundary in [[self scopeOf:host.activityId execution:host]
+		         boundaryEventsAttachedTo:host.activityId]) {
+			[waits addObject:boundary.elementId];
+		}
+		scopeWaits = waits;
+	}
 	if ([[scopeExecution concurrentChildren] count] == 0
 	    && (scopeExecution.activityId != nil || [scopeExecution.children count] > 0)) {
 		NSArray *children = [scopeExecution.children allObjects];
@@ -1790,6 +2003,669 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	history.state = WFHistoricStateExternallyTerminated;
 	history.deleteReason = reason;
 	[self remove:root];
+}
+
+#pragma mark - Modification
+
+/* The root and every execution under it. */
+- (NSArray<WFExecutionEntity *> *)executionsUnder:(WFExecutionEntity *)root
+{
+	NSMutableArray *all = [NSMutableArray array];
+	NSMutableArray *pending = [NSMutableArray arrayWithObject:root];
+	while ([pending count] > 0) {
+		WFExecutionEntity *execution = [pending lastObject];
+		[pending removeLastObject];
+		if (WFGone(execution)) {
+			continue;
+		}
+		[all addObject:execution];
+		[pending addObjectsFromArray:[execution.children allObjects]];
+	}
+	return all;
+}
+
+/* The execution that holds an activity instance: the topmost of those
+ * that carry its id -- a scope activity's host, not its inner scope. */
+- (WFExecutionEntity *)executionOfActivityInstance:(NSString *)activityInstanceId under:(WFExecutionEntity *)root
+{
+	for (WFExecutionEntity *execution in [self executionsUnder:root]) {
+		if (execution.activityId != nil && [execution.activityInstanceId isEqualToString:activityInstanceId]
+		    && ![execution.parent.activityInstanceId isEqualToString:activityInstanceId]) {
+			return execution;
+		}
+	}
+	return nil;
+}
+
+- (NSDictionary *)activityInstanceTreeOf:(WFExecutionEntity *)root
+{
+	NSMutableDictionary *top = [@{ @"activityInstanceId": root.processInstanceId,
+		@"activityId": [[self definitionForExecution:root] processId] ?: @"",
+		@"children": [NSMutableArray array] } mutableCopy];
+	NSMutableSet *seen = [NSMutableSet set];
+	[self addActivityInstancesOf:root to:top seen:seen];
+	return top;
+}
+
+- (void)addActivityInstancesOf:(WFExecutionEntity *)execution
+                            to:(NSMutableDictionary *)parent
+                          seen:(NSMutableSet *)seen
+{
+	NSMutableDictionary *node = parent;
+	NSString *activityInstanceId = execution.activityInstanceId;
+	if (execution.activityId != nil && activityInstanceId != nil && ![seen containsObject:activityInstanceId]) {
+		BOOL body = NO;
+		for (WFExecutionEntity *child in execution.children) {
+			body = body || child.isMultiInstanceBody;
+		}
+		node = [@{ @"activityInstanceId": activityInstanceId,
+			@"activityId": body ? [execution.activityId stringByAppendingString:@"#multiInstanceBody"]
+				: execution.activityId,
+			@"parentActivityInstanceId": [parent objectForKey:@"activityInstanceId"],
+			@"children": [NSMutableArray array] } mutableCopy];
+		[[parent objectForKey:@"children"] addObject:node];
+		[seen addObject:activityInstanceId];
+	}
+	NSArray *children = [[execution.children allObjects] sortedArrayUsingComparator:
+		^NSComparisonResult(WFExecutionEntity *a, WFExecutionEntity *b) {
+			return [a.executionId compare:b.executionId];
+		}];
+	for (WFExecutionEntity *child in children) {
+		if (!WFGone(child)) {
+			[self addActivityInstancesOf:child to:node seen:seen];
+		}
+	}
+}
+
+/* Everything the execution holds is canceled and removed; it stays,
+ * doing nothing. */
+- (void)clearExecution:(WFExecutionEntity *)execution
+{
+	[self cancelSubtree:execution];
+	for (WFExecutionEntity *child in [execution.children allObjects]) {
+		if (!WFGone(child)) {
+			[self remove:child];
+		}
+	}
+	NSArray *rows = [[[[[execution.tasks allObjects]
+		arrayByAddingObjectsFromArray:[execution.externalTasks allObjects]]
+		arrayByAddingObjectsFromArray:[execution.jobs allObjects]]
+		arrayByAddingObjectsFromArray:[execution.eventSubscriptions allObjects]]
+		arrayByAddingObjectsFromArray:[execution.incidents allObjects]];
+	for (NSManagedObject *row in rows) {
+		if (!WFGone(row)) {
+			[self remove:row];
+		}
+	}
+	execution.activityId = nil;
+	execution.activityInstanceId = nil;
+	execution.isActive = NO;
+}
+
+/* An execution left with nothing to do goes; a scope it empties is
+ * canceled in turn, up to the process instance, which is only checked
+ * once every instruction has run. */
+- (void)detachEmpty:(WFExecutionEntity *)execution
+{
+	WFExecutionEntity *parent = execution.parent;
+	if (parent == nil) {
+		return;
+	}
+	if (execution.isConcurrent) {
+		[self remove:execution];
+		NSArray *paths = [parent concurrentChildren];
+		if ([paths count] == 0) {
+			[self detachEmpty:parent];
+		} else {
+			if ([paths count] == 1) {
+				[self compact:parent into:[paths objectAtIndex:0]];
+			}
+			[self retryInclusiveJoinsAt:parent];
+		}
+		return;
+	}
+	[self remove:execution];
+	if (parent.isMultiInstanceBody) {
+		/* One instance fewer; with none left, the activity is canceled. */
+		[self setCount:WFNrOfActiveInstances to:MAX(0, [self count:WFNrOfActiveInstances of:parent] - 1) on:parent];
+		if ([parent.children count] == 0 && parent.parent.activityInstanceId != nil) {
+			[self cancelActivityInstance:parent.parent.activityInstanceId under:[parent processInstance]];
+		}
+		return;
+	}
+	if (parent.activityInstanceId != nil && parent.activityId != nil) {
+		/* The inner scope of a subprocess or a scope activity: the activity
+		 * instance around it is canceled. */
+		[self cancelActivityInstance:parent.activityInstanceId under:[parent processInstance]];
+		return;
+	}
+	[self clearExecution:parent];
+	[self detachEmpty:parent];
+}
+
+- (BOOL)cancelActivityInstance:(NSString *)activityInstanceId under:(WFExecutionEntity *)root
+{
+	WFExecutionEntity *execution = [self executionOfActivityInstance:activityInstanceId under:root];
+	if (execution == nil) {
+		[self fail:WFCommandError(WFErrorUnknownElement, [NSString stringWithFormat:
+			@"process instance %@ has no activity instance %@", root.processInstanceId, activityInstanceId])];
+		return NO;
+	}
+	[self clearExecution:execution];
+	[self detachEmpty:execution];
+	return YES;
+}
+
+/* The subprocess whose inside the scope is. */
+- (WFSubProcess *)containerOf:(WFProcessDefinition *)scope in:(WFProcessDefinition *)definition
+{
+	for (WFFlowNode *node in [definition.nodes allValues]) {
+		if (![node isKindOfClass:[WFSubProcess class]]) {
+			continue;
+		}
+		WFProcessDefinition *inner = [(WFSubProcess *)node innerDefinition];
+		if (inner == scope) {
+			return (WFSubProcess *)node;
+		}
+		WFSubProcess *nested = [self containerOf:scope in:inner];
+		if (nested != nil) {
+			return nested;
+		}
+	}
+	return nil;
+}
+
+/* A subprocess instance opened without its start event: its inputs
+ * mapped, its boundary events and event subprocesses armed, and its inner
+ * scope, empty, answered for work to start in. */
+- (WFExecutionEntity *)openScope:(WFSubProcess *)container on:(WFExecutionEntity *)path
+{
+	WFProcessDefinition *scope = [self scopeOf:container.elementId execution:path];
+	path.activityId = container.elementId;
+	path.activityInstanceId = [WFCommandContext newId];
+	[self activityStarted:container execution:path];
+	WFExecutionEntity *inner = [self newChildOf:path concurrent:NO];
+	path.isActive = NO;
+	if (![self mapInputsOf:container from:path into:inner]) {
+		return nil;
+	}
+	[self armBoundaryEventsOf:container scope:scope on:inner];
+	[self armEventSubProcessesOf:container.innerDefinition on:inner];
+	return inner;
+}
+
+/* Somewhere new to start in the scope: the scope execution itself when it
+ * holds nothing, else a path beside what it holds. */
+- (WFExecutionEntity *)newPathIn:(WFExecutionEntity *)scopeExecution
+{
+	if (scopeExecution.activityId == nil && [scopeExecution.children count] == 0) {
+		scopeExecution.isActive = YES;
+		return scopeExecution;
+	}
+	return [self pathBeside:scopeExecution keeping:[self scopeWaitsOf:[self definitionScopeOf:scopeExecution]]];
+}
+
+- (BOOL)execution:(WFExecutionEntity *)execution isUnder:(NSString *)activityInstanceId
+{
+	for (WFExecutionEntity *scope = execution; scope != nil; scope = scope.parent) {
+		if ([scope.activityInstanceId isEqualToString:activityInstanceId]) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* The scope execution the node's flow runs in: the subprocess instances
+ * around it, found or opened, the ancestor saying which when there are
+ * several. nil, with the command failed, when that cannot be. */
+- (WFExecutionEntity *)scopeExecutionFor:(WFFlowNode *)node
+                                    root:(WFExecutionEntity *)root
+                                ancestor:(NSString *)ancestor
+{
+	WFProcessDefinition *definition = [self definitionForExecution:root];
+	NSMutableArray *chain = [NSMutableArray array];
+	for (WFProcessDefinition *scope = [definition scopeOfFlowNode:node.elementId];
+	     scope != nil && scope != definition; ) {
+		WFSubProcess *container = [self containerOf:scope in:definition];
+		if (container == nil) {
+			break;
+		}
+		[chain insertObject:container atIndex:0];
+		scope = [definition scopeOfFlowNode:container.elementId];
+	}
+	WFExecutionEntity *current = root;
+	for (WFSubProcess *container in chain) {
+		if (container.multiInstance != nil || container.isTriggeredByEvent) {
+			[self fail:WFCommandError(WFErrorInvalidState, [NSString stringWithFormat:
+				@"%@ is inside %@, and instances cannot be started inside a %@ subprocess",
+				node.elementId, container.elementId, container.multiInstance != nil ? @"multi-instance" : @"event"])];
+			return nil;
+		}
+		NSMutableArray *hosts = [NSMutableArray array];
+		for (WFExecutionEntity *execution in [self executionsUnder:current]) {
+			if ([execution.activityId isEqualToString:container.elementId] && execution.activityInstanceId != nil
+			    && ![execution.parent.activityInstanceId isEqualToString:execution.activityInstanceId]
+			    && (ancestor == nil || [self execution:execution isUnder:ancestor]
+			        || [self executionOfActivityInstance:ancestor under:execution] != nil)) {
+				[hosts addObject:execution];
+			}
+		}
+		if ([hosts count] > 1) {
+			[self fail:WFCommandError(WFErrorInvalidState, [NSString stringWithFormat:
+				@"%@ has %lu instances; name the ancestor activity instance to start %@ in",
+				container.elementId, (unsigned long)[hosts count], node.elementId])];
+			return nil;
+		}
+		if ([hosts count] == 1) {
+			WFExecutionEntity *inner = nil;
+			for (WFExecutionEntity *child in [[hosts firstObject] children]) {
+				if (child.isScope && !child.isConcurrent && !WFGone(child)) {
+					inner = child;
+				}
+			}
+			current = inner ?: current;
+			continue;
+		}
+		current = [self openScope:container on:[self newPathIn:current]];
+		if (current == nil) {
+			return nil;
+		}
+	}
+	return current;
+}
+
+- (WFSequenceFlow *)flowWithId:(NSString *)flowId in:(WFProcessDefinition *)definition
+{
+	WFSequenceFlow *flow = [definition flowWithId:flowId];
+	for (WFFlowNode *node in [definition.nodes allValues]) {
+		if (flow == nil && [node isKindOfClass:[WFSubProcess class]]) {
+			flow = [self flowWithId:flowId in:[(WFSubProcess *)node innerDefinition]];
+		}
+	}
+	return flow;
+}
+
+- (void)startBefore:(NSString *)activityId
+           ancestor:(NSString *)ancestor
+          variables:(NSDictionary *)variables
+               root:(WFExecutionEntity *)root
+{
+	WFFlowNode *node = [[self definitionForExecution:root] flowNodeWithId:activityId];
+	if (node == nil || ([node isKindOfClass:[WFEvent class]] && [(WFEvent *)node kind] == WFEventKindBoundary)) {
+		[self fail:WFCommandError(WFErrorUnknownElement, [NSString stringWithFormat:node == nil
+			? @"the process has no activity %@" : @"%@ is a boundary event; start after it instead", activityId])];
+		return;
+	}
+	WFExecutionEntity *scopeExecution = [self scopeExecutionFor:node root:root ancestor:ancestor];
+	if (scopeExecution == nil) {
+		return;
+	}
+	WFExecutionEntity *path = [self newPathIn:scopeExecution];
+	for (NSString *name in variables) {
+		if (![self setLocal:name value:[variables objectForKey:name] on:path]) {
+			return;
+		}
+	}
+	[self schedule:^{
+		if (!WFGone(path)) {
+			[self enter:node execution:path];
+		}
+	}];
+}
+
+- (void)startTransition:(NSString *)flowId root:(WFExecutionEntity *)root
+{
+	WFProcessDefinition *definition = [self definitionForExecution:root];
+	WFSequenceFlow *flow = [self flowWithId:flowId in:definition];
+	WFFlowNode *source = [definition flowNodeWithId:flow.sourceId];
+	if (flow == nil || source == nil) {
+		[self fail:WFCommandError(WFErrorUnknownElement, [NSString stringWithFormat:
+			@"the process has no sequence flow %@", flowId])];
+		return;
+	}
+	WFExecutionEntity *scopeExecution = [self scopeExecutionFor:source root:root ancestor:nil];
+	if (scopeExecution == nil) {
+		return;
+	}
+	[self take:@[ flow ] scope:[definition scopeOfFlowNode:source.elementId] execution:[self newPathIn:scopeExecution]];
+}
+
+- (void)modifyProcessInstance:(WFExecutionEntity *)root instructions:(NSArray<NSDictionary *> *)instructions
+{
+	if (root.suspended) {
+		[self fail:WFCommandError(WFErrorSuspended, [NSString stringWithFormat:
+			@"process instance %@ is suspended", root.processInstanceId])];
+		return;
+	}
+	WFProcessDefinition *definition = [self definitionForExecution:root];
+	for (NSDictionary *instruction in instructions) {
+		if (_failure != nil) {
+			return;
+		}
+		NSString *type = [instruction objectForKey:@"type"];
+		NSString *target = [instruction objectForKey:@"target"];
+		if ([type isEqualToString:@"startBefore"]) {
+			[self startBefore:target ancestor:[instruction objectForKey:@"ancestor"]
+			        variables:[instruction objectForKey:@"variables"] root:root];
+		} else if ([type isEqualToString:@"startAfter"]) {
+			WFFlowNode *node = [definition flowNodeWithId:target];
+			NSArray *outgoing = [[definition scopeOfFlowNode:target] outgoingFlowsFrom:target];
+			if (node == nil || [outgoing count] != 1) {
+				[self fail:WFCommandError(WFErrorInvalidState, [NSString stringWithFormat:node == nil
+					? @"the process has no activity %@" : @"%@ has %lu outgoing flows; start after an activity with one",
+					target, (unsigned long)[outgoing count]])];
+				return;
+			}
+			[self startTransition:[[outgoing firstObject] elementId] root:root];
+		} else if ([type isEqualToString:@"startTransition"]) {
+			[self startTransition:target root:root];
+		} else if ([type isEqualToString:@"cancel"]) {
+			[self cancelActivityInstance:target under:root];
+		} else if ([type isEqualToString:@"cancelAll"]) {
+			NSMutableArray *instances = [NSMutableArray array];
+			for (WFExecutionEntity *execution in [self executionsUnder:root]) {
+				if ([execution.activityId isEqualToString:target] && execution.activityInstanceId != nil
+				    && ![instances containsObject:execution.activityInstanceId]) {
+					[instances addObject:execution.activityInstanceId];
+				}
+			}
+			for (NSString *activityInstanceId in instances) {
+				/* An instance inside one canceled before it is gone already. */
+				if ([self executionOfActivityInstance:activityInstanceId under:root] != nil) {
+					[self cancelActivityInstance:activityInstanceId under:root];
+				}
+			}
+		}
+		/* Each instruction's work is done before the next looks. */
+		[self runAgenda];
+	}
+	if (_failure == nil && !WFGone(root) && root.activityId == nil && [root.children count] == 0) {
+		[self deleteProcessInstance:root reason:@"all activity instances were canceled"];
+	}
+}
+
+#pragma mark - Migration
+
+/* Whether two nodes are of one kind, as migration needs them to be. */
+static BOOL
+WFSameKind(WFFlowNode *a, WFFlowNode *b)
+{
+	if ([a class] != [b class] || (a.multiInstance == nil) != (b.multiInstance == nil)) {
+		return NO;
+	}
+	if ([a isKindOfClass:[WFTask class]]) {
+		return [(WFTask *)a kind] == [(WFTask *)b kind];
+	}
+	if ([a isKindOfClass:[WFEvent class]]) {
+		return [(WFEvent *)a kind] == [(WFEvent *)b kind] && [(WFEvent *)a trigger] == [(WFEvent *)b trigger];
+	}
+	if ([a isKindOfClass:[WFGateway class]]) {
+		return [(WFGateway *)a kind] == [(WFGateway *)b kind];
+	}
+	if ([a isKindOfClass:[WFSubProcess class]]) {
+		return [(WFSubProcess *)a isTriggeredByEvent] == [(WFSubProcess *)b isTriggeredByEvent];
+	}
+	return YES;
+}
+
+/* The id of the subprocess a node is in; nil at the process's level. */
+- (NSString *)containerIdOf:(NSString *)nodeId in:(WFProcessDefinition *)definition
+{
+	WFProcessDefinition *scope = [definition scopeOfFlowNode:nodeId];
+	return scope == definition ? nil : [[self containerOf:scope in:definition] elementId];
+}
+
+- (void)collectNodesOf:(WFProcessDefinition *)definition into:(NSMutableArray *)nodes
+{
+	for (WFFlowNode *node in [definition.nodes allValues]) {
+		[nodes addObject:node];
+		if ([node isKindOfClass:[WFSubProcess class]]) {
+			[self collectNodesOf:[(WFSubProcess *)node innerDefinition] into:nodes];
+		}
+	}
+}
+
+- (NSDictionary<NSString *, NSDictionary *> *)migrationFrom:(WFProcessDefinition *)source
+                                                          to:(WFProcessDefinition *)target
+                                                    mappings:(NSArray<NSDictionary *> *)mappings
+                                                    mapEqual:(BOOL)mapEqual
+{
+	NSMutableDictionary *resolved = [NSMutableDictionary dictionary];
+	NSMutableArray *problems = [NSMutableArray array];
+	for (NSDictionary *mapping in mappings) {
+		NSString *from = [mapping objectForKey:@"source"];
+		NSString *to = [mapping objectForKey:@"target"];
+		WFFlowNode *a = [source flowNodeWithId:from];
+		WFFlowNode *b = [target flowNodeWithId:to];
+		if (a == nil || b == nil) {
+			[problems addObject:[NSString stringWithFormat:@"%@ -> %@: %@ is not in the %@ definition",
+				from, to, a == nil ? from : to, a == nil ? @"source" : @"target"]];
+		} else if ([resolved objectForKey:from] != nil) {
+			[problems addObject:[NSString stringWithFormat:@"%@ is mapped twice", from]];
+		} else if (!WFSameKind(a, b)) {
+			[problems addObject:[NSString stringWithFormat:@"%@ -> %@: they are not the same kind of activity", from, to]];
+		} else {
+			[resolved setObject:@{ @"target": b,
+				@"updateEventTrigger": [mapping objectForKey:@"updateEventTrigger"] ?: @NO } forKey:from];
+		}
+	}
+	if (mapEqual) {
+		NSMutableArray *nodes = [NSMutableArray array];
+		[self collectNodesOf:source into:nodes];
+		for (WFFlowNode *a in nodes) {
+			WFFlowNode *b = [target flowNodeWithId:a.elementId];
+			NSString *containerA = [self containerIdOf:a.elementId in:source];
+			NSString *containerB = b != nil ? [self containerIdOf:b.elementId in:target] : nil;
+			if ([resolved objectForKey:a.elementId] == nil && b != nil && WFSameKind(a, b)
+			    && (containerA == containerB || [containerA isEqualToString:containerB])) {
+				[resolved setObject:@{ @"target": b, @"updateEventTrigger": @NO } forKey:a.elementId];
+			}
+		}
+	}
+	/* Each mapping stays in corresponding scopes, and a boundary event
+	 * with its activity. */
+	for (NSString *from in resolved) {
+		WFFlowNode *b = [[resolved objectForKey:from] objectForKey:@"target"];
+		NSString *containerA = [self containerIdOf:from in:source];
+		NSString *containerB = [self containerIdOf:b.elementId in:target];
+		NSString *mappedContainer = containerA != nil
+			? [[[resolved objectForKey:containerA] objectForKey:@"target"] elementId] : nil;
+		if (!(containerA == nil && containerB == nil) && ![mappedContainer isEqualToString:containerB]) {
+			[problems addObject:[NSString stringWithFormat:
+				@"%@ -> %@: the subprocess around %@ must be mapped to the one around %@", from, b.elementId,
+				from, b.elementId]];
+		}
+		WFFlowNode *a = [source flowNodeWithId:from];
+		if ([a isKindOfClass:[WFEvent class]] && [(WFEvent *)a kind] == WFEventKindBoundary) {
+			NSString *host = [[[resolved objectForKey:[(WFEvent *)a attachedToId]] objectForKey:@"target"] elementId];
+			if (![host isEqualToString:[(WFEvent *)b attachedToId]]) {
+				[problems addObject:[NSString stringWithFormat:
+					@"%@ -> %@: a boundary event's activity must be mapped to the target's", from, b.elementId]];
+			}
+		}
+	}
+	if ([problems count] > 0) {
+		[self fail:WFCommandError(WFErrorInvalidDefinition, [NSString stringWithFormat:@"migration plan from %@ to %@: %@",
+			source.definitionId, target.definitionId,
+			[[problems sortedArrayUsingSelector:@selector(compare:)] componentsJoinedByString:@"; "]])];
+		return nil;
+	}
+	return resolved;
+}
+
+- (BOOL)migrate:(WFExecutionEntity *)root
+      mappings:(NSDictionary<NSString *, NSDictionary *> *)mappings
+        source:(WFProcessDefinition *)source
+        target:(WFProcessDefinition *)target
+{
+	if (![root.definitionId isEqualToString:source.definitionId]) {
+		[self fail:WFCommandError(WFErrorInvalidState, [NSString stringWithFormat:
+			@"process instance %@ runs on %@, not on the plan's %@", root.processInstanceId,
+			root.definitionId, source.definitionId])];
+		return NO;
+	}
+	NSArray *executions = [self executionsUnder:root];
+	NSMutableArray *problems = [NSMutableArray array];
+	for (WFExecutionEntity *execution in executions) {
+		NSString *activityId = execution.activityId;
+		if (activityId == nil) {
+			continue;
+		}
+		WFFlowNode *b = [[mappings objectForKey:activityId] objectForKey:@"target"];
+		if (b == nil) {
+			[problems addObject:[NSString stringWithFormat:@"%@ is not mapped", activityId]];
+			continue;
+		}
+		WFFlowNode *a = [source flowNodeWithId:activityId];
+		if ([self isScopeActivity:a scope:[source scopeOfFlowNode:activityId]]
+		    != [self isScopeActivity:b scope:[target scopeOfFlowNode:b.elementId]]) {
+			[problems addObject:[NSString stringWithFormat:
+				@"%@ -> %@: one has boundary events or parameters and the other not", activityId, b.elementId]];
+		}
+	}
+	if ([problems count] > 0) {
+		NSArray *distinct = [[[NSSet setWithArray:problems] allObjects] sortedArrayUsingSelector:@selector(compare:)];
+		[self fail:WFCommandError(WFErrorInvalidState, [NSString stringWithFormat:
+			@"process instance %@ cannot be migrated: %@", root.processInstanceId,
+			[distinct componentsJoinedByString:@"; "]])];
+		return NO;
+	}
+	NSString *(^mapped)(NSString *) = ^NSString *(NSString *activityId) {
+		return activityId == nil ? nil : [[[mappings objectForKey:activityId] objectForKey:@"target"] elementId];
+	};
+	NSPredicate *mine = [NSPredicate predicateWithFormat:@"processInstanceId == %@", root.processInstanceId];
+	for (WFExecutionEntity *execution in executions) {
+		execution.definitionId = target.definitionId;
+		execution.activityId = mapped(execution.activityId) ?: execution.activityId;
+	}
+	for (WFTaskEntity *task in [self fetch:WFTaskName predicate:mine sort:nil limit:0]) {
+		task.taskDefinitionKey = mapped(task.taskDefinitionKey) ?: task.taskDefinitionKey;
+		task.definitionId = target.definitionId;
+	}
+	for (WFExternalTaskEntity *externalTask in [self fetch:WFExternalTaskName predicate:mine sort:nil limit:0]) {
+		externalTask.activityId = mapped(externalTask.activityId) ?: externalTask.activityId;
+	}
+	for (WFIncidentEntity *incident in [self fetch:WFIncidentName predicate:mine sort:nil limit:0]) {
+		incident.activityId = mapped(incident.activityId) ?: incident.activityId;
+	}
+	/* Waits for events that were not mapped go; those mapped keep their
+	 * trigger unless the mapping updates it. */
+	for (WFJobEntity *job in [self fetch:WFJobName predicate:mine sort:nil limit:0]) {
+		NSDictionary *mapping = [mappings objectForKey:job.activityId];
+		WFFlowNode *b = [mapping objectForKey:@"target"];
+		if (b == nil) {
+			[self historyJob:job state:WFJobLogStateDeleted];
+			[self remove:job];
+			continue;
+		}
+		job.activityId = b.elementId;
+		if ([[mapping objectForKey:@"updateEventTrigger"] boolValue] && [job.jobType isEqualToString:WFJobTypeTimer]
+		    && [b isKindOfClass:[WFEvent class]] && [(WFEvent *)b timer] != nil) {
+			WFExecutionEntity *execution = job.execution;
+			[self historyJob:job state:WFJobLogStateDeleted];
+			[self remove:job];
+			[self timer:execution event:(WFEvent *)b];
+		}
+	}
+	for (WFEventSubscriptionEntity *subscription in [self fetch:WFSubscriptionName predicate:mine sort:nil limit:0]) {
+		NSDictionary *mapping = [mappings objectForKey:subscription.activityId];
+		WFFlowNode *b = [mapping objectForKey:@"target"];
+		if (b == nil) {
+			[self remove:subscription];
+			continue;
+		}
+		subscription.activityId = b.elementId;
+		if ([subscription.eventType isEqualToString:WFEventTypeCompensate]
+		    || [subscription.eventType isEqualToString:WFEventTypeCompensating]) {
+			subscription.eventName = mapped(subscription.eventName) ?: subscription.eventName;
+		} else if ([subscription.eventType isEqualToString:WFEventTypeConditional]) {
+			subscription.eventName = b.elementId;
+		} else if ([[mapping objectForKey:@"updateEventTrigger"] boolValue]) {
+			NSString *name = [b isKindOfClass:[WFTask class]] ? [(WFTask *)b messageName]
+				: [subscription.eventType isEqualToString:WFEventTypeSignal] ? [(WFEvent *)b signalName]
+				: [(WFEvent *)b messageName];
+			subscription.eventName = name ?: subscription.eventName;
+		}
+	}
+	[self armWhatTheTargetAdds:executions target:target];
+	if ([self records:WFHistoryLevelActivity]) {
+		WFHistoricProcessInstanceEntity *history = [[self fetch:WFHistoricInstanceName predicate:mine sort:nil limit:1]
+			lastObject];
+		history.definitionId = target.definitionId;
+		history.definitionKey = target.processId;
+		for (WFHistoricActivityInstanceEntity *activity in [self fetch:WFHistoricActivityName
+		         predicate:[NSPredicate predicateWithFormat:@"processInstanceId == %@ AND endTime == nil",
+		             root.processInstanceId]
+		              sort:nil
+		             limit:0]) {
+			NSString *activityId = activity.activityId;
+			BOOL body = [activityId hasSuffix:@"#multiInstanceBody"];
+			NSString *plain = body ? [activityId substringToIndex:[activityId length] - 18] : activityId;
+			NSString *moved = mapped(plain);
+			if (moved != nil) {
+				activity.activityId = body ? [moved stringByAppendingString:@"#multiInstanceBody"] : moved;
+			}
+		}
+	}
+	return _failure == nil;
+}
+
+/* Boundary events and event subprocesses the target has and the source
+ * did not: armed where their activity or scope is running. */
+- (void)armWhatTheTargetAdds:(NSArray<WFExecutionEntity *> *)executions target:(WFProcessDefinition *)target
+{
+	for (WFExecutionEntity *execution in executions) {
+		if (WFGone(execution)) {
+			continue;
+		}
+		NSMutableSet *armed = [NSMutableSet set];
+		for (WFEventSubscriptionEntity *subscription in execution.eventSubscriptions) {
+			if (!WFGone(subscription) && subscription.activityId != nil) {
+				[armed addObject:subscription.activityId];
+			}
+		}
+		for (WFJobEntity *job in execution.jobs) {
+			if (!WFGone(job) && job.activityId != nil) {
+				[armed addObject:job.activityId];
+			}
+		}
+		WFProcessDefinition *scope = [self definitionScopeOf:execution];
+		if (scope != nil) {
+			for (WFSubProcess *handler in [self eventSubProcessesIn:scope]) {
+				WFEvent *start = [handler.innerDefinition startEvent];
+				if (![armed containsObject:start.elementId]) {
+					[self armEventSubProcessStart:start on:execution];
+				}
+			}
+		}
+		/* The execution a scope activity's boundary events wait on: its
+		 * host's inner scope, or a multi-instance body. */
+		WFExecutionEntity *host = execution.parent;
+		if (host == nil || !execution.isScope || execution.isConcurrent || host.activityId == nil
+		    || execution.parent.isMultiInstanceBody) {
+			continue;
+		}
+		WFFlowNode *node = [target flowNodeWithId:host.activityId];
+		WFProcessDefinition *nodeScope = [target scopeOfFlowNode:host.activityId];
+		if (node == nil || (node.multiInstance != nil && !execution.isMultiInstanceBody)
+		    || (node.multiInstance == nil && ![self isScopeActivity:node scope:nodeScope])) {
+			continue;
+		}
+		for (WFEvent *boundary in [nodeScope boundaryEventsAttachedTo:node.elementId]) {
+			if ([armed containsObject:boundary.elementId]) {
+				continue;
+			}
+			if (boundary.trigger == WFEventTriggerMessage) {
+				[self subscribe:execution message:boundary.messageName activity:boundary.elementId];
+			} else if (boundary.trigger == WFEventTriggerSignal) {
+				[self subscribe:execution type:WFEventTypeSignal name:boundary.signalName activity:boundary.elementId];
+			} else if (boundary.trigger == WFEventTriggerTimer) {
+				[self timer:execution event:boundary];
+			} else if (boundary.trigger == WFEventTriggerConditional) {
+				[self waitForCondition:boundary on:execution];
+			}
+		}
+	}
 }
 
 #pragma mark - Signals and terminate
@@ -2019,6 +2895,18 @@ static NSString * const WFLoopCounter = @"loopCounter";
 
 - (void)executeTask:(WFTask *)task execution:(WFExecutionEntity *)execution
 {
+	if (task.kind == WFTaskKindManual || task.kind == WFTaskKindNone) {
+		[self completeActivity:execution];
+		return;
+	}
+	if (task.kind == WFTaskKindReceive) {
+		[self subscribe:execution message:task.messageName activity:task.elementId];
+		return;
+	}
+	if (task.kind == WFTaskKindBusinessRule && task.decisionRef != nil) {
+		[self evaluateDecisionOf:task execution:execution];
+		return;
+	}
 	if (task.kind == WFTaskKindUser) {
 		WFTaskEntity *row = [self insert:WFTaskName];
 		row.taskId = [WFCommandContext newId];
@@ -2042,8 +2930,8 @@ static NSString * const WFLoopCounter = @"loopCounter";
 		}];
 		return;
 	}
-	/* Service and script tasks are external tasks under the action's
-	 * topic. */
+	/* Service, send, business rule and script tasks are external tasks
+	 * under the action's topic. */
 	WFExternalTaskEntity *row = [self insert:WFExternalTaskName];
 	row.externalTaskId = [WFCommandContext newId];
 	row.topic = task.actionKey ?: task.elementId;
@@ -2062,6 +2950,144 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	[self afterCommit:^{
 		[engine wf_externalTaskCreated:externalTaskId processInstanceId:processInstanceId];
 	}];
+}
+
+#pragma mark - Decisions
+
+/* A value history can keep as JSON: dates as ISO-8601 text. */
+static id
+WFJSONValue(id value)
+{
+	if ([value isKindOfClass:[NSDate class]]) {
+		NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+		[formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
+		[formatter setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+		[formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss'Z'"];
+		return [formatter stringFromDate:value];
+	}
+	if ([value isKindOfClass:[NSArray class]]) {
+		NSMutableArray *items = [NSMutableArray array];
+		for (id item in value) {
+			[items addObject:WFJSONValue(item)];
+		}
+		return items;
+	}
+	if ([value isKindOfClass:[NSDictionary class]]) {
+		NSMutableDictionary *entries = [NSMutableDictionary dictionary];
+		for (id key in value) {
+			[entries setObject:WFJSONValue([value objectForKey:key]) forKey:[key description]];
+		}
+		return entries;
+	}
+	if (value == nil || [value isKindOfClass:[NSString class]] || [value isKindOfClass:[NSNumber class]]
+	    || value == [NSNull null]) {
+		return value ?: [NSNull null];
+	}
+	return [value description];
+}
+
+- (WFDecisionResult *)evaluateDecision:(WFDecisionDefinition *)decision
+                             variables:(NSDictionary *)variables
+                             execution:(WFExecutionEntity *)execution
+{
+	NSMutableDictionary *inputs = [NSMutableDictionary dictionary];
+	NSError *error = nil;
+	WFDecisionResult *result = [decision evaluateWithVariables:variables inputs:inputs error:&error];
+	if (result == nil) {
+		[self fail:error];
+		return nil;
+	}
+	if ([self records:WFHistoryLevelFull]) {
+		NSManagedObject *row = [self insert:@"WFHistoricDecisionInstance"];
+		[row setValue:[WFCommandContext newId] forKey:@"decisionInstanceId"];
+		[row setValue:decision.definitionId forKey:@"decisionDefinitionId"];
+		[row setValue:decision.key forKey:@"decisionKey"];
+		[row setValue:execution.processInstanceId forKey:@"processInstanceId"];
+		[row setValue:execution.activityId forKey:@"activityId"];
+		[row setValue:execution.activityInstanceId forKey:@"activityInstanceId"];
+		[row setValue:[NSDate date] forKey:@"evaluationTime"];
+		[row setValue:[NSNumber numberWithLongLong:[self.engine wf_nextSequence]] forKey:@"sequence"];
+		[row setValue:[NSJSONSerialization dataWithJSONObject:WFJSONValue(inputs) options:0 error:NULL]
+		       forKey:@"inputs"];
+		[row setValue:[NSJSONSerialization dataWithJSONObject:WFJSONValue(result.resultList) options:0 error:NULL]
+		       forKey:@"outputs"];
+	}
+	return result;
+}
+
+/* The version of the task's decision its binding picks. */
+- (WFDecisionDefinition *)decisionOf:(WFTask *)task execution:(WFExecutionEntity *)execution
+{
+	NSError *error = nil;
+	WFRepositoryService *repository = self.engine.repositoryService;
+	WFDecisionDefinition *decision = nil;
+	switch (task.decisionBinding) {
+	case WFCalledElementBindingLatest:
+		decision = [repository latestDecisionForKey:task.decisionRef error:&error];
+		break;
+	case WFCalledElementBindingDeployment:
+		decision = [repository decisionForKey:task.decisionRef
+		                          inDeployment:[[self definitionForExecution:execution] deploymentId]
+		                                 error:&error];
+		break;
+	case WFCalledElementBindingVersion:
+		decision = [repository decisionForKey:task.decisionRef version:task.decisionVersion error:&error];
+		break;
+	}
+	if (decision == nil) {
+		[self fail:WFCommandError(WFErrorInvalidDefinition, [NSString stringWithFormat:@"%@: %@",
+			task.elementId, [error localizedDescription]])];
+	}
+	return decision;
+}
+
+/* A business rule task with a decision: evaluated now, its result kept as
+ * the task maps it, and the task done. */
+- (void)evaluateDecisionOf:(WFTask *)task execution:(WFExecutionEntity *)execution
+{
+	WFDecisionDefinition *decision = [self decisionOf:task execution:execution];
+	WFDecisionResult *result = decision != nil
+		? [self evaluateDecision:decision variables:[self visibleVariables:execution] execution:execution] : nil;
+	if (result == nil) {
+		return;
+	}
+	if (task.resultVariable != nil) {
+		NSError *error = nil;
+		id value = nil;
+		switch (task.mapDecisionResult) {
+		case WFDecisionResultMappingResultList:
+			value = result.resultList;
+			break;
+		case WFDecisionResultMappingSingleResult:
+			value = [result singleResult:&error];
+			break;
+		case WFDecisionResultMappingSingleEntry:
+			value = [result singleEntry:&error];
+			break;
+		case WFDecisionResultMappingCollectEntries: {
+			NSMutableSet *names = [NSMutableSet set];
+			for (NSDictionary *each in result.resultList) {
+				[names addObjectsFromArray:[each allKeys]];
+			}
+			if ([names count] > 1) {
+				error = WFCommandError(WFErrorDecision, [NSString stringWithFormat:
+					@"collectEntries needs a single output, and the result has %@",
+					[[[names allObjects] sortedArrayUsingSelector:@selector(compare:)] componentsJoinedByString:@", "]]);
+			}
+			value = [result collectEntries:[names anyObject]];
+			break;
+		}
+		}
+		if (error != nil) {
+			[self fail:WFCommandError(WFErrorDecision, [NSString stringWithFormat:@"%@: %@",
+				task.elementId, [error localizedDescription]])];
+			return;
+		}
+		if (![self setVariables:@{ task.resultVariable: value ?: [NSNull null] } from:execution]) {
+			return;
+		}
+	}
+	[self completeActivity:execution];
 }
 
 - (void)completeActivity:(WFExecutionEntity *)execution
@@ -2410,16 +3436,30 @@ static NSString * const WFLoopCounter = @"loopCounter";
 			           && event.trigger == WFEventTriggerSignal) {
 				[self subscribe:execution type:WFEventTypeSignal name:event.signalName
 				       activity:event.elementId];
+			} else if (event.kind == WFEventKindIntermediateCatch
+			           && event.trigger == WFEventTriggerConditional) {
+				[self waitForCondition:event on:execution];
+			} else if ([self isPlainReceiveTask:target scope:scope]) {
+				[self subscribe:execution message:[(WFTask *)target messageName] activity:target.elementId];
 			} else {
 				[self fail:WFCommandError(WFErrorInvalidDefinition,
 					[NSString stringWithFormat:
-						@"event-based gateway %@ may only be followed by message, timer or signal catch events",
+						@"event-based gateway %@ may only be followed by message, timer, signal or conditional "
+						@"catch events, and receive tasks without boundary events, loops or parameters",
 						gateway.elementId])];
 				return;
 			}
 		}
 		return;
 	}
+}
+
+/* A receive task an event-based gateway can wait for: one that is not a
+ * scope of its own, since the gateway's path passes it without entering. */
+- (BOOL)isPlainReceiveTask:(WFFlowNode *)node scope:(WFProcessDefinition *)scope
+{
+	return [node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindReceive
+		&& ![self isScopeActivity:node scope:scope] && node.multiInstance == nil && !node.isAsyncBefore;
 }
 
 /* The path leaves the gateway, after any join: by its choice of flows, or,
@@ -2855,6 +3895,7 @@ static NSString * const WFLoopCounter = @"loopCounter";
 - (BOOL)setLocal:(NSString *)name value:(id)value on:(WFExecutionEntity *)execution
 {
 	WFVariableEntity *variable = [execution localVariableNamed:name];
+	NSString *change = variable == nil ? @"create" : @"update";
 	if (variable == nil) {
 		variable = [self insert:WFVariableName];
 		variable.variableId = [WFCommandContext newId];
@@ -2868,6 +3909,7 @@ static NSString * const WFLoopCounter = @"loopCounter";
 		return NO;
 	}
 	[self recordHistoryOf:variable];
+	[self variable:variable changedBy:change];
 	return YES;
 }
 
@@ -2880,6 +3922,7 @@ static NSString * const WFLoopCounter = @"loopCounter";
 		     scope = scope.parent) {
 			variable = [scope localVariableNamed:name];
 		}
+		NSString *change = variable == nil ? @"create" : @"update";
 		if (variable == nil) {
 			WFExecutionEntity *root = [execution processInstance];
 			variable = [self insert:WFVariableName];
@@ -2895,6 +3938,7 @@ static NSString * const WFLoopCounter = @"loopCounter";
 			return NO;
 		}
 		[self recordHistoryOf:variable];
+		[self variable:variable changedBy:change];
 	}
 	return YES;
 }

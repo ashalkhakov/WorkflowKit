@@ -17,6 +17,9 @@
  * Anything that fails rolls the whole command back; nothing it scheduled
  * after commit happens.
  */
+@class WFDecisionDefinition;
+@class WFDecisionResult;
+
 @interface WFCommandContext : NSObject
 
 @property (nonatomic, readonly, weak) WFProcessEngine *engine;
@@ -72,6 +75,28 @@
 - (void)setSuspended:(BOOL)suspended processInstance:(NSString *)processInstanceId;
 - (void)setSuspended:(BOOL)suspended definition:(NSString *)definitionId includeInstances:(BOOL)instances;
 - (void)deleteProcessInstance:(WFExecutionEntity *)root reason:(NSString *)reason;
+/* Modification: each instruction a dictionary -- type (startBefore,
+ * startAfter, startTransition, cancel, cancelAll), target, and for
+ * startBefore an ancestor and variables -- run in order. An instance left
+ * with nothing ends, externally terminated. */
+- (void)modifyProcessInstance:(WFExecutionEntity *)root instructions:(NSArray<NSDictionary *> *)instructions;
+/* Migration: the plan's mappings -- each a dictionary of source, target
+ * and updateEventTrigger -- resolved and checked against the two
+ * definitions; with mapEqual, activities of the same id, type and scope
+ * are added. nil, with the command failed, for a plan that cannot be. */
+- (NSDictionary<NSString *, NSDictionary *> *)migrationFrom:(WFProcessDefinition *)source
+                                                          to:(WFProcessDefinition *)target
+                                                    mappings:(NSArray<NSDictionary *> *)mappings
+                                                    mapEqual:(BOOL)mapEqual;
+/* Moves the instance onto the target definition as the resolved
+ * mappings say; NO, with the command failed, when it cannot be. */
+- (BOOL)migrate:(WFExecutionEntity *)root
+      mappings:(NSDictionary<NSString *, NSDictionary *> *)mappings
+        source:(WFProcessDefinition *)source
+        target:(WFProcessDefinition *)target;
+/* The activity instance tree: nested dictionaries of activityInstanceId,
+ * activityId and children, the process instance at the root. */
+- (NSDictionary *)activityInstanceTreeOf:(WFExecutionEntity *)root;
 /* A job or external task that ran out of retries. */
 - (void)raiseIncident:(NSString *)type
         configuration:(NSString *)configuration
@@ -87,6 +112,12 @@
 - (void)historyTask:(NSString *)taskId assignee:(NSString *)assignee;
 
 /* Variables visible from the execution: its scope chain, nearest first. */
+/* Evaluates the decision over the variables, recording it at history
+ * level full; nil, with the command failed, when it cannot be. The
+ * execution is the business rule task's, nil for the decision service. */
+- (WFDecisionResult *)evaluateDecision:(WFDecisionDefinition *)decision
+                             variables:(NSDictionary *)variables
+                             execution:(WFExecutionEntity *)execution;
 - (NSDictionary *)visibleVariables:(WFExecutionEntity *)execution;
 /* Each one where it exists in the scope chain, else on the process
  * instance. NO, with the command failed, for a value that cannot be

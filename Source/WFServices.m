@@ -178,6 +178,19 @@ WFServiceError(WFErrorCode code, NSString *message)
 
 #pragma mark - Runtime service
 
+@interface WFActivityInstance (WFInternal)
++ (instancetype)wf_instanceWithTree:(NSDictionary *)tree;
+@end
+
+@interface WFProcessInstanceModification (WFInternal)
+- (NSArray<NSDictionary *> *)instructions;
+@end
+
+@interface WFMigrationPlan ()
+@property (nonatomic) BOOL mapsEqualActivities;
+- (NSArray<NSDictionary *> *)mappings;
+@end
+
 @implementation WFRuntimeService
 {
 	__weak WFProcessEngine *_engine;
@@ -250,6 +263,81 @@ WFServiceError(WFErrorCode code, NSString *message)
 		                            definition:definition];
 }
 
+- (NSArray<WFProcessInstance *> *)evaluateStartConditions:(NSDictionary *)variables
+                                              businessKey:(NSString *)businessKey
+                                                    error:(NSError **)error
+{
+	if (![WFCommandContext areStorableVariables:variables error:error]) {
+		return nil;
+	}
+	WFProcessEngine *engine = _engine;
+	NSMutableArray *started = [NSMutableArray array];
+	NSMutableArray *definitions = [NSMutableArray array];
+	BOOL ok = [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		NSArray *starts = [command fetch:@"WFEventSubscription"
+		                        predicate:[NSPredicate predicateWithFormat:
+		                            @"execution == nil AND eventType == %@", WFEventTypeConditional]
+		                             sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"activityId"
+		                                                                   ascending:YES] ]
+		                            limit:0];
+		if ([starts count] == 0) {
+			if (commandError != NULL) {
+				*commandError = WFServiceError(WFErrorNoPath,
+					@"no deployed process has a conditional start event");
+			}
+			return NO;
+		}
+		for (WFEventSubscriptionEntity *start in starts) {
+			if ([command isDefinitionSuspended:start.definitionId]) {
+				continue;
+			}
+			WFProcessDefinition *definition =
+				[engine.repositoryService definitionWithId:start.definitionId error:commandError];
+			if (definition == nil) {
+				return NO;
+			}
+			WFEvent *event = [definition startEvent];
+			NSError *conditionError = nil;
+			BOOL holds = [event.condition.expression evaluateWithVariables:variables ?: @{}
+			                                                         error:&conditionError];
+			if (conditionError != nil) {
+				if (commandError != NULL) {
+					*commandError = WFServiceError(WFErrorInvalidState, [NSString stringWithFormat:@"%@: %@",
+						event.elementId, [conditionError localizedDescription]]);
+				}
+				return NO;
+			}
+			if (!holds) {
+				continue;
+			}
+			WFExecutionEntity *root = [command startProcessInstance:definition
+			                                            businessKey:businessKey
+			                                              variables:variables
+			                                             startEvent:event];
+			if (root == nil) {
+				return NO;
+			}
+			[started addObject:root.processInstanceId];
+			[definitions addObject:definition];
+		}
+		return YES;
+	} error:error];
+	if (!ok) {
+		return nil;
+	}
+	NSMutableArray *instances = [NSMutableArray array];
+	for (NSUInteger i = 0; i < [started count]; i++) {
+		NSString *processInstanceId = [started objectAtIndex:i];
+		WFProcessInstance *instance = [self processInstanceWithId:processInstanceId error:NULL]
+			?: [self endedInstance:processInstanceId]
+			?: [WFProcessInstance wf_endedInstance:processInstanceId
+			                           businessKey:businessKey
+			                            definition:[definitions objectAtIndex:i]];
+		[instances addObject:instance];
+	}
+	return instances;
+}
+
 - (WFProcessInstance *)endedInstance:(NSString *)processInstanceId
 {
 	__block WFProcessInstance *instance = nil;
@@ -310,6 +398,94 @@ WFServiceError(WFErrorCode code, NSString *message)
 			return NO;
 		}
 		[command deleteProcessInstance:root reason:reason];
+		return YES;
+	} error:error];
+}
+
+- (WFActivityInstance *)activityInstanceTreeOfProcessInstance:(NSString *)processInstanceId
+                                                        error:(NSError **)error
+{
+	__block NSDictionary *tree = nil;
+	BOOL ok = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		WFExecutionEntity *root = [self root:processInstanceId in:command];
+		if (root == nil) {
+			if (commandError != NULL) {
+				*commandError = [self notRunning:processInstanceId];
+			}
+			return NO;
+		}
+		tree = [command activityInstanceTreeOf:root];
+		return YES;
+	} error:error];
+	return ok ? [WFActivityInstance wf_instanceWithTree:tree] : nil;
+}
+
+- (BOOL)modifyProcessInstance:(WFProcessInstanceModification *)modification error:(NSError **)error
+{
+	NSString *processInstanceId = modification.processInstanceId;
+	for (NSDictionary *instruction in modification.instructions) {
+		NSDictionary *variables = [instruction objectForKey:@"variables"];
+		if (variables != nil && ![WFCommandContext areStorableVariables:variables error:error]) {
+			return NO;
+		}
+	}
+	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		WFExecutionEntity *root = [self root:processInstanceId in:command];
+		if (root == nil) {
+			if (commandError != NULL) {
+				*commandError = [self notRunning:processInstanceId];
+			}
+			return NO;
+		}
+		[command modifyProcessInstance:root instructions:modification.instructions];
+		return YES;
+	} error:error];
+}
+
+/* The plan's two definitions and its resolved mappings, in the command;
+ * nil, with the command failed, when it cannot be. */
+- (NSArray *)resolve:(WFMigrationPlan *)plan command:(WFCommandContext *)command error:(NSError **)error
+{
+	WFProcessDefinition *source = [_engine.repositoryService definitionWithId:plan.sourceDefinitionId error:error];
+	WFProcessDefinition *target = source != nil
+		? [_engine.repositoryService definitionWithId:plan.targetDefinitionId error:error] : nil;
+	if (target == nil) {
+		return nil;
+	}
+	NSDictionary *mappings = [command migrationFrom:source to:target mappings:plan.mappings
+	                                        mapEqual:plan.mapsEqualActivities];
+	return mappings != nil ? @[ source, target, mappings ] : nil;
+}
+
+- (BOOL)validateMigrationPlan:(WFMigrationPlan *)plan error:(NSError **)error
+{
+	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		return [self resolve:plan command:command error:commandError] != nil;
+	} error:error];
+}
+
+- (BOOL)migrateProcessInstances:(NSArray<NSString *> *)processInstanceIds
+                           plan:(WFMigrationPlan *)plan
+                          error:(NSError **)error
+{
+	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		NSArray *resolved = [self resolve:plan command:command error:commandError];
+		if (resolved == nil) {
+			return NO;
+		}
+		for (NSString *processInstanceId in processInstanceIds) {
+			WFExecutionEntity *root = [self root:processInstanceId in:command];
+			if (root == nil) {
+				if (commandError != NULL) {
+					*commandError = [self notRunning:processInstanceId];
+				}
+				return NO;
+			}
+			if (![command migrate:root mappings:[resolved objectAtIndex:2] source:[resolved objectAtIndex:0]
+			               target:[resolved objectAtIndex:1]]) {
+				return NO;
+			}
+		}
 		return YES;
 	} error:error];
 }
@@ -864,6 +1040,21 @@ processInstanceId:(NSString *)processInstanceId
 @implementation WFHistoricJobLog
 @end
 
+@interface WFHistoricDecisionInstance ()
+@property (nonatomic, readwrite, copy) NSString *decisionInstanceId;
+@property (nonatomic, readwrite, copy) NSString *decisionDefinitionId;
+@property (nonatomic, readwrite, copy) NSString *decisionKey;
+@property (nonatomic, readwrite, copy) NSString *processInstanceId;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *activityInstanceId;
+@property (nonatomic, readwrite, copy) NSDate *evaluationTime;
+@property (nonatomic, readwrite, copy) NSDictionary *inputs;
+@property (nonatomic, readwrite, copy) NSArray<NSDictionary *> *outputs;
+@end
+
+@implementation WFHistoricDecisionInstance
+@end
+
 @implementation WFHistoryService
 {
 	__weak WFProcessEngine *_engine;
@@ -1031,7 +1222,8 @@ processInstanceId:(NSString *)processInstanceId
 				instance.processInstanceId];
 			for (NSString *entity in @[ @"WFHistoricActivityInstance", @"WFHistoricTaskInstance",
 			                            @"WFHistoricVariable", @"WFHistoricVariableUpdate",
-			                            @"WFHistoricIncident", @"WFHistoricJobLog" ]) {
+			                            @"WFHistoricIncident", @"WFHistoricJobLog",
+			                            @"WFHistoricDecisionInstance" ]) {
 				for (NSManagedObject *row in [command fetch:entity predicate:mine sort:nil limit:0]) {
 					[command.context deleteObject:row];
 				}
@@ -1042,6 +1234,45 @@ processInstanceId:(NSString *)processInstanceId
 		return YES;
 	} error:error];
 	return ok ? removed : -1;
+}
+
+- (NSArray<WFHistoricDecisionInstance *> *)decisionInstances:(NSPredicate *)predicate
+{
+	NSMutableArray *values = [NSMutableArray array];
+	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+		(void)error;
+		for (NSManagedObject *row in [command fetch:@"WFHistoricDecisionInstance"
+		                                  predicate:predicate
+		                                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"sequence" ascending:YES] ]
+		                                      limit:0]) {
+			WFHistoricDecisionInstance *value = [[WFHistoricDecisionInstance alloc] init];
+			value.decisionInstanceId = [row valueForKey:@"decisionInstanceId"];
+			value.decisionDefinitionId = [row valueForKey:@"decisionDefinitionId"];
+			value.decisionKey = [row valueForKey:@"decisionKey"];
+			value.processInstanceId = [row valueForKey:@"processInstanceId"];
+			value.activityId = [row valueForKey:@"activityId"];
+			value.activityInstanceId = [row valueForKey:@"activityInstanceId"];
+			value.evaluationTime = [row valueForKey:@"evaluationTime"];
+			NSData *inputs = [row valueForKey:@"inputs"];
+			NSData *outputs = [row valueForKey:@"outputs"];
+			value.inputs = inputs != nil ? [NSJSONSerialization JSONObjectWithData:inputs options:0 error:NULL] : @{};
+			value.outputs = outputs != nil ? [NSJSONSerialization JSONObjectWithData:outputs options:0 error:NULL] : @[];
+			[values addObject:value];
+		}
+		return YES;
+	} error:NULL];
+	return values;
+}
+
+- (NSArray<WFHistoricDecisionInstance *> *)historicDecisionInstancesForProcessInstance:(NSString *)processInstanceId
+{
+	return [self decisionInstances:[NSPredicate predicateWithFormat:@"processInstanceId == %@",
+		processInstanceId ?: @""]];
+}
+
+- (NSArray<WFHistoricDecisionInstance *> *)historicDecisionInstancesForDecisionKey:(NSString *)decisionKey
+{
+	return [self decisionInstances:[NSPredicate predicateWithFormat:@"decisionKey == %@", decisionKey ?: @""]];
 }
 
 - (NSArray<WFHistoricJobLog *> *)historicJobLogForProcessInstance:(NSString *)processInstanceId
@@ -1060,6 +1291,230 @@ processInstanceId:(NSString *)processInstanceId
 		value.retries = row.retries;
 		return value;
 	}];
+}
+
+@end
+
+#pragma mark - Activity instances and modification
+
+@interface WFActivityInstance ()
+@property (nonatomic, readwrite, copy) NSString *activityInstanceId;
+@property (nonatomic, readwrite, copy) NSString *activityId;
+@property (nonatomic, readwrite, copy) NSString *parentActivityInstanceId;
+@property (nonatomic, readwrite, copy) NSArray<WFActivityInstance *> *childActivityInstances;
+@end
+
+@implementation WFActivityInstance
+
++ (instancetype)wf_instanceWithTree:(NSDictionary *)tree
+{
+	WFActivityInstance *instance = [[WFActivityInstance alloc] init];
+	instance.activityInstanceId = [tree objectForKey:@"activityInstanceId"];
+	instance.activityId = [tree objectForKey:@"activityId"];
+	instance.parentActivityInstanceId = [tree objectForKey:@"parentActivityInstanceId"];
+	NSMutableArray *children = [NSMutableArray array];
+	for (NSDictionary *child in [tree objectForKey:@"children"]) {
+		[children addObject:[self wf_instanceWithTree:child]];
+	}
+	instance.childActivityInstances = children;
+	return instance;
+}
+
+- (NSArray<WFActivityInstance *> *)activityInstancesForActivity:(NSString *)activityId
+{
+	NSMutableArray *found = [NSMutableArray array];
+	if ([self.activityId isEqualToString:activityId]) {
+		[found addObject:self];
+	}
+	for (WFActivityInstance *child in self.childActivityInstances) {
+		[found addObjectsFromArray:[child activityInstancesForActivity:activityId]];
+	}
+	return found;
+}
+
+- (NSString *)description
+{
+	NSMutableString *text = [NSMutableString stringWithFormat:@"%@ (%@)", self.activityId, self.activityInstanceId];
+	for (WFActivityInstance *child in self.childActivityInstances) {
+		[text appendFormat:@"\n  %@", [[child description] stringByReplacingOccurrencesOfString:@"\n"
+		                                                                               withString:@"\n  "]];
+	}
+	return text;
+}
+
+@end
+
+@implementation WFProcessInstanceModification
+{
+	NSMutableArray *_instructions;
+}
+
++ (instancetype)modificationOfProcessInstance:(NSString *)processInstanceId
+{
+	return [[self alloc] initWithProcessInstance:processInstanceId];
+}
+
+- (instancetype)initWithProcessInstance:(NSString *)processInstanceId
+{
+	self = [super init];
+	if (self) {
+		_processInstanceId = [processInstanceId copy];
+		_instructions = [NSMutableArray array];
+	}
+	return self;
+}
+
+- (NSArray<NSDictionary *> *)instructions
+{
+	return [_instructions copy];
+}
+
+- (instancetype)add:(NSString *)type target:(NSString *)target
+{
+	[_instructions addObject:@{ @"type": type, @"target": target ?: @"" }];
+	return self;
+}
+
+- (instancetype)startBeforeActivity:(NSString *)activityId
+{
+	return [self add:@"startBefore" target:activityId];
+}
+
+- (instancetype)startBeforeActivity:(NSString *)activityId
+                           ancestor:(NSString *)ancestorActivityInstanceId
+                          variables:(NSDictionary *)variables
+{
+	NSMutableDictionary *instruction = [@{ @"type": @"startBefore", @"target": activityId ?: @"" } mutableCopy];
+	[instruction setValue:ancestorActivityInstanceId forKey:@"ancestor"];
+	[instruction setValue:variables forKey:@"variables"];
+	[_instructions addObject:instruction];
+	return self;
+}
+
+- (instancetype)startAfterActivity:(NSString *)activityId
+{
+	return [self add:@"startAfter" target:activityId];
+}
+
+- (instancetype)startTransition:(NSString *)flowId
+{
+	return [self add:@"startTransition" target:flowId];
+}
+
+- (instancetype)cancelActivityInstance:(NSString *)activityInstanceId
+{
+	return [self add:@"cancel" target:activityInstanceId];
+}
+
+- (instancetype)cancelAllForActivity:(NSString *)activityId
+{
+	return [self add:@"cancelAll" target:activityId];
+}
+
+@end
+
+@implementation WFMigrationPlan
+{
+	NSMutableArray *_mappings;
+}
+
++ (instancetype)planFromDefinition:(NSString *)sourceDefinitionId toDefinition:(NSString *)targetDefinitionId
+{
+	return [[self alloc] initFrom:sourceDefinitionId to:targetDefinitionId];
+}
+
+- (instancetype)initFrom:(NSString *)source to:(NSString *)target
+{
+	self = [super init];
+	if (self) {
+		_sourceDefinitionId = [source copy];
+		_targetDefinitionId = [target copy];
+		_mappings = [NSMutableArray array];
+	}
+	return self;
+}
+
+- (NSArray<NSDictionary *> *)mappings
+{
+	return [_mappings copy];
+}
+
+- (instancetype)mapActivity:(NSString *)sourceActivityId toActivity:(NSString *)targetActivityId
+{
+	return [self mapActivity:sourceActivityId toActivity:targetActivityId updateEventTrigger:NO];
+}
+
+- (instancetype)mapActivity:(NSString *)sourceActivityId
+                 toActivity:(NSString *)targetActivityId
+         updateEventTrigger:(BOOL)updateEventTrigger
+{
+	[_mappings addObject:@{ @"source": sourceActivityId ?: @"", @"target": targetActivityId ?: @"",
+		@"updateEventTrigger": [NSNumber numberWithBool:updateEventTrigger] }];
+	return self;
+}
+
+- (instancetype)mapEqualActivities
+{
+	_mapsEqualActivities = YES;
+	return self;
+}
+
+@end
+
+#pragma mark - Decision service
+
+@implementation WFDecisionService
+{
+	__weak WFProcessEngine *_engine;
+}
+
+- (instancetype)initWithProcessEngine:(WFProcessEngine *)engine
+{
+	self = [super init];
+	if (self) {
+		_engine = engine;
+	}
+	return self;
+}
+
+- (WFDecisionResult *)evaluate:(WFDecisionDefinition *)decision
+                     variables:(NSDictionary *)variables
+                         error:(NSError **)error
+{
+	if (decision == nil || ![WFCommandContext areStorableVariables:variables error:error]) {
+		return nil;
+	}
+	__block WFDecisionResult *result = nil;
+	BOOL ok = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+		(void)commandError;
+		result = [command evaluateDecision:decision variables:variables ?: @{} execution:nil];
+		return result != nil;
+	} error:error];
+	return ok ? result : nil;
+}
+
+- (WFDecisionResult *)evaluateDecisionByKey:(NSString *)key
+                                  variables:(NSDictionary *)variables
+                                      error:(NSError **)error
+{
+	return [self evaluateDecisionByKey:key version:0 variables:variables error:error];
+}
+
+- (WFDecisionResult *)evaluateDecisionByKey:(NSString *)key
+                                    version:(NSInteger)version
+                                  variables:(NSDictionary *)variables
+                                      error:(NSError **)error
+{
+	return [self evaluate:[_engine.repositoryService decisionForKey:key version:version error:error]
+	            variables:variables error:error];
+}
+
+- (WFDecisionResult *)evaluateDecisionById:(NSString *)definitionId
+                                 variables:(NSDictionary *)variables
+                                     error:(NSError **)error
+{
+	return [self evaluate:[_engine.repositoryService decisionWithId:definitionId error:error]
+	            variables:variables error:error];
 }
 
 @end

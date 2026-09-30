@@ -1,4 +1,5 @@
 #import "WFProcessDefinition.h"
+#import "WFDecision.h"
 
 @class WFStore;
 
@@ -8,6 +9,7 @@
 @property (nonatomic, readonly, copy) NSString *name;
 @property (nonatomic, readonly, copy) NSDate *deployedAt;
 @property (nonatomic, readonly, copy) NSArray<WFProcessDefinition *> *definitions;
+@property (nonatomic, readonly, copy) NSArray<WFDecisionDefinition *> *decisions;
 @end
 
 /*
@@ -17,7 +19,9 @@
  * in .bpmn or .bpmn20.xml is parsed, and each executable process in it
  * becomes a definition, versioned per process key by the repository: the
  * first deployment of a key is version 1, and every later one the next.
- * Instances run on the version they started on.
+ * Instances run on the version they started on. Every resource whose name
+ * ends in .dmn or .dmn11.xml is read the same way, each decision in it
+ * versioned per decision key.
  *
  * Definitions are read back from the stored BPMN when first needed, so an
  * engine opened on an existing store needs nothing deployed again.
@@ -47,6 +51,17 @@
                                   version:(NSInteger)version
                                     error:(NSError **)error;
 - (WFProcessDefinition *)definitionWithId:(NSString *)definitionId error:(NSError **)error;
+
+- (WFDecisionDefinition *)latestDecisionForKey:(NSString *)key error:(NSError **)error;
+/* version 0 means the latest. */
+- (WFDecisionDefinition *)decisionForKey:(NSString *)key
+                                 version:(NSInteger)version
+                                   error:(NSError **)error;
+/* The version of the decision deployed in that deployment. */
+- (WFDecisionDefinition *)decisionForKey:(NSString *)key
+                             inDeployment:(NSString *)deploymentId
+                                    error:(NSError **)error;
+- (WFDecisionDefinition *)decisionWithId:(NSString *)definitionId error:(NSError **)error;
 
 /* A suspended definition starts no instances -- by the API, a message, a
  * signal, its timer or a call activity. With includeInstances its running

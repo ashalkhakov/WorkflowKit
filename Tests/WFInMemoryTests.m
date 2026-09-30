@@ -144,3 +144,45 @@
 @implementation WFInputOutputInMemoryTests
 #include "WFInputOutputTests.inc"
 @end
+
+@interface WFTaskKindsInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFTaskKindsInMemoryTests
+#include "WFTaskKindsTests.inc"
+@end
+
+@interface WFLinkEventInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFLinkEventInMemoryTests
+#include "WFLinkEventTests.inc"
+@end
+
+@interface WFConditionalEventInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFConditionalEventInMemoryTests
+#include "WFConditionalEventTests.inc"
+@end
+
+@interface WFDecisionInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFDecisionInMemoryTests
+#include "WFDecisionTests.inc"
+@end
+
+@interface WFModificationInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFModificationInMemoryTests
+#include "WFModificationTests.inc"
+@end
+
+@interface WFMigrationInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFMigrationInMemoryTests
+#include "WFMigrationTests.inc"
+@end

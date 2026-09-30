@@ -142,3 +142,45 @@
 @implementation WFInputOutputMySQLTests
 #include "WFInputOutputTests.inc"
 @end
+
+@interface WFTaskKindsMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFTaskKindsMySQLTests
+#include "WFTaskKindsTests.inc"
+@end
+
+@interface WFLinkEventMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFLinkEventMySQLTests
+#include "WFLinkEventTests.inc"
+@end
+
+@interface WFConditionalEventMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFConditionalEventMySQLTests
+#include "WFConditionalEventTests.inc"
+@end
+
+@interface WFDecisionMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFDecisionMySQLTests
+#include "WFDecisionTests.inc"
+@end
+
+@interface WFModificationMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFModificationMySQLTests
+#include "WFModificationTests.inc"
+@end
+
+@interface WFMigrationMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFMigrationMySQLTests
+#include "WFMigrationTests.inc"
+@end

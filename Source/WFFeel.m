@@ -26,6 +26,21 @@
 	return [self expressionWithString:text camunda7:YES error:error];
 }
 
++ (instancetype)unaryTestsWithString:(NSString *)text error:(NSError **)error
+{
+	NSError *testsError = nil;
+	WFFeelNode *root = WFFeelParseUnaryTests(text, &testsError);
+	/* Not tests of the value: an expression that is true when the entry
+	 * matches, over the input variable (cellInput <= limit). */
+	if (root == nil) {
+		root = WFFeelParse(text, NO, NULL);
+	}
+	if (root == nil && error != NULL) {
+		*error = testsError;
+	}
+	return root != nil ? [[self alloc] initWithRoot:root] : nil;
+}
+
 - (instancetype)initWithRoot:(WFFeelNode *)root
 {
 	self = [super init];

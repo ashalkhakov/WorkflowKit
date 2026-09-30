@@ -6,6 +6,7 @@
 #import "WFHistoryService.h"
 #import "WFManagementService.h"
 #import "WFExternalTaskService.h"
+#import "WFDecisionService.h"
 #import <dispatch/dispatch.h>
 
 @class WFProcessEngine;
@@ -42,6 +43,7 @@ processInstanceEnded:(WFProcessInstance *)instance;
 @property (nonatomic, readonly, strong) WFHistoryService *historyService;
 @property (nonatomic, readonly, strong) WFManagementService *managementService;
 @property (nonatomic, readonly, strong) WFExternalTaskService *externalTaskService;
+@property (nonatomic, readonly, strong) WFDecisionService *decisionService;
 
 /* Owner of the engine's job locks and worker id of its in-process worker.
  * Stable across restarts on one host by default, so an engine that

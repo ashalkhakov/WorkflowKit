@@ -121,6 +121,12 @@ typedef NS_ENUM(NSInteger, WFFeelOperator) {
  * error saying where, for text that is neither. */
 WFFeelNode *WFFeelParse(NSString *text, BOOL camunda7, NSError **error);
 
+/* A DMN input entry: the tests the input value, the variable named ?, is
+ * checked against -- a comparison (< 10), a range ([1..10], (1..10]), a
+ * value, several of them separated by commas, not(...) of them, or - for
+ * any value at all -- as `? in (tests)`. */
+WFFeelNode *WFFeelParseUnaryTests(NSString *text, NSError **error);
+
 /* The node's value over the variables: FEEL's null is NSNull. Never nil. */
 id WFFeelEvaluate(WFFeelNode *node, NSDictionary *variables);
 
@@ -131,6 +137,10 @@ NSArray<NSString *> *WFFeelMultiWordBuiltins(void);
 
 @interface WFFeelExpression (WFInternal)
 - (WFFeelNode *)root;
+/* An input entry, as WFFeelParseUnaryTests reads it, or else a boolean
+ * expression over the variables and the input variable: evaluated with
+ * the input value under ?, it is true when the value passes. */
++ (instancetype)unaryTestsWithString:(NSString *)text error:(NSError **)error;
 @end
 
 /* A range's value: [1..10], (0..1], x between a and b. */

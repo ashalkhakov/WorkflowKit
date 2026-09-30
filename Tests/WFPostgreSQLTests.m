@@ -142,3 +142,45 @@
 @implementation WFInputOutputPostgreSQLTests
 #include "WFInputOutputTests.inc"
 @end
+
+@interface WFTaskKindsPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFTaskKindsPostgreSQLTests
+#include "WFTaskKindsTests.inc"
+@end
+
+@interface WFLinkEventPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFLinkEventPostgreSQLTests
+#include "WFLinkEventTests.inc"
+@end
+
+@interface WFConditionalEventPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFConditionalEventPostgreSQLTests
+#include "WFConditionalEventTests.inc"
+@end
+
+@interface WFDecisionPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFDecisionPostgreSQLTests
+#include "WFDecisionTests.inc"
+@end
+
+@interface WFModificationPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFModificationPostgreSQLTests
+#include "WFModificationTests.inc"
+@end
+
+@interface WFMigrationPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFMigrationPostgreSQLTests
+#include "WFMigrationTests.inc"
+@end

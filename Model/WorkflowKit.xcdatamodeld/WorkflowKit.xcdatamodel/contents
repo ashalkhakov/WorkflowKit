@@ -28,6 +28,7 @@
         <attribute name="deploymentId" attributeType="String"/>
         <attribute name="name" attributeType="String"/>
         <relationship name="definitions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFDefinitionRecord" inverseName="deployment" inverseEntity="WFDefinitionRecord"/>
+        <relationship name="decisions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFDecisionRecord" inverseName="deployment" inverseEntity="WFDecisionRecord"/>
         <relationship name="resources" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFResource" inverseName="deployment" inverseEntity="WFResource"/>
         <uniquenessConstraints>
             <uniquenessConstraint>
@@ -312,6 +313,46 @@
         <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
         <fetchIndex name="byProcessInstance">
             <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFDecisionRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="definitionId" attributeType="String"/>
+        <attribute name="key" attributeType="String"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="resourceName" attributeType="String"/>
+        <attribute name="version" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="versionTag" optional="YES" attributeType="String"/>
+        <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFDeployment" inverseName="decisions" inverseEntity="WFDeployment"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="definitionId"/>
+            </uniquenessConstraint>
+            <uniquenessConstraint>
+                <constraint value="key"/>
+                <constraint value="version"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+        <fetchIndex name="byKeyVersion">
+            <fetchIndexElement property="key" type="Binary" order="ascending"/>
+            <fetchIndexElement property="version" type="Binary" order="descending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="WFHistoricDecisionInstance" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="activityId" optional="YES" attributeType="String"/>
+        <attribute name="activityInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="decisionDefinitionId" attributeType="String"/>
+        <attribute name="decisionInstanceId" attributeType="String"/>
+        <attribute name="decisionKey" attributeType="String"/>
+        <attribute name="evaluationTime" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="inputs" optional="YES" attributeType="Binary"/>
+        <attribute name="outputs" optional="YES" attributeType="Binary"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
+        <attribute name="sequence" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <fetchIndex name="byProcessInstance">
+            <fetchIndexElement property="processInstanceId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byDecisionKey">
+            <fetchIndexElement property="decisionKey" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
     <entity name="WFProperty" representedClassName="NSManagedObject" syncable="YES">

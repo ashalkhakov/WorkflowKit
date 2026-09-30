@@ -112,6 +112,25 @@ typedef NS_ENUM(NSInteger, WFTimerKind) {
 + (instancetype)timerWithKind:(WFTimerKind)kind text:(NSString *)text;
 @end
 
+/*
+ * When a conditional event fires: when its condition holds over the
+ * variables visible where it waits. It is evaluated as the event starts to
+ * wait and again after each change to a variable it sees -- only to that
+ * variable, and only on those kinds of change, when they are given.
+ */
+@interface WFEventCondition : NSObject
+@property (nonatomic, readonly, strong) WFFeelExpression *expression;
+/* camunda:variableName: nil for any variable. */
+@property (nonatomic, readonly, copy) NSString *variableName;
+/* camunda:variableEvents: "create", "update" or "delete"; nil for any
+ * change. */
+@property (nonatomic, readonly, copy) NSArray<NSString *> *variableEvents;
+- (instancetype)init NS_UNAVAILABLE;
+- (instancetype)initWithExpression:(WFFeelExpression *)expression
+                      variableName:(NSString *)variableName
+                    variableEvents:(NSArray<NSString *> *)variableEvents NS_DESIGNATED_INITIALIZER;
+@end
+
 @interface WFEvent : WFFlowNode
 @property (nonatomic, readonly) WFEventKind kind;
 @property (nonatomic, readonly) WFEventTrigger trigger;
@@ -121,6 +140,10 @@ typedef NS_ENUM(NSInteger, WFTimerKind) {
 @property (nonatomic, readonly, copy) NSString *signalName;
 /* A timer event's timer; nil for other events. */
 @property (nonatomic, readonly, strong) WFTimer *timer;
+/* A link event's name: a throw goes on at the catch of that name. */
+@property (nonatomic, readonly, copy) NSString *linkName;
+/* A conditional event's condition; nil for other events. */
+@property (nonatomic, readonly, strong) WFEventCondition *condition;
 /* An escalation event's escalationCode; nil (or "*") on a catch catches
  * any. */
 @property (nonatomic, readonly, copy) NSString *escalationCode;
@@ -154,9 +177,48 @@ typedef NS_ENUM(NSInteger, WFTimerKind) {
                              name:(NSString *)name NS_UNAVAILABLE;
 @end
 
+/* Which version of the called process a call activity starts, as
+ * camunda:calledElementBinding, and of the decision a business rule task
+ * evaluates, as camunda:decisionRefBinding. */
+typedef NS_ENUM(NSInteger, WFCalledElementBinding) {
+	/* The latest version deployed when the activity is entered. */
+	WFCalledElementBindingLatest = 0,
+	/* The version deployed together with the calling process. */
+	WFCalledElementBindingDeployment,
+	/* The version camunda:calledElementVersion names. */
+	WFCalledElementBindingVersion
+};
+
+/* What of a decision's result a business rule task keeps, as
+ * camunda:mapDecisionResult. */
+typedef NS_ENUM(NSInteger, WFDecisionResultMapping) {
+	/* Every result, a list of dictionaries of outputs. */
+	WFDecisionResultMappingResultList = 0,
+	/* The only result's only output; it is an error to have more. */
+	WFDecisionResultMappingSingleEntry,
+	/* The only result, a dictionary of outputs. */
+	WFDecisionResultMappingSingleResult,
+	/* The only output of every result, a list. */
+	WFDecisionResultMappingCollectEntries
+};
+
 @interface WFTask : WFFlowNode
 @property (nonatomic, readonly) WFTaskKind kind;
+/* The topic a service, send or business rule task's external task has,
+ * and the action a script task runs. */
 @property (nonatomic, readonly, copy) NSString *actionKey;
+/* The message a receive task waits for: the actionKey it was made with. */
+@property (nonatomic, readonly, copy) NSString *messageName;
+/* A business rule task's decision, camunda:decisionRef, which version
+ * of it, and where its result goes: camunda:resultVariable, set as the
+ * mapping has it, or nowhere when nil. A business rule task without a
+ * decision is an external task. */
+@property (nonatomic, readonly, copy) NSString *decisionRef;
+@property (nonatomic, readonly) WFCalledElementBinding decisionBinding;
+/* For WFCalledElementBindingVersion; 0 otherwise. */
+@property (nonatomic, readonly) NSInteger decisionVersion;
+@property (nonatomic, readonly, copy) NSString *resultVariable;
+@property (nonatomic, readonly) WFDecisionResultMapping mapDecisionResult;
 /* A user task's assignee when it is literal text; nil when it is computed
  * or not set. */
 @property (nonatomic, readonly, copy) NSString *assignee;
@@ -214,17 +276,6 @@ typedef NS_ENUM(NSInteger, WFTimerKind) {
 + (instancetype)parameter:(NSString *)name expression:(WFFeelExpression *)expression;
 - (instancetype)init NS_UNAVAILABLE;
 @end
-
-/* Which version of the called process a call activity starts, as
- * camunda:calledElementBinding. */
-typedef NS_ENUM(NSInteger, WFCalledElementBinding) {
-	/* The latest version deployed when the activity is entered. */
-	WFCalledElementBindingLatest = 0,
-	/* The version deployed together with the calling process. */
-	WFCalledElementBindingDeployment,
-	/* The version camunda:calledElementVersion names. */
-	WFCalledElementBindingVersion
-};
 
 /* One camunda:in or camunda:out of a call activity: a variable copied to
  * another name, every variable, or the business key. */

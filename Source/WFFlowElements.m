@@ -184,7 +184,34 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @property (nonatomic, readwrite, getter=isTriggeredByEvent) BOOL triggeredByEvent;
 @end
 
+@implementation WFEventCondition
+
+- (instancetype)initWithExpression:(WFFeelExpression *)expression
+                      variableName:(NSString *)variableName
+                    variableEvents:(NSArray<NSString *> *)variableEvents
+{
+	self = [super init];
+	if (self) {
+		_expression = expression;
+		_variableName = [variableName copy];
+		_variableEvents = [variableEvents copy];
+	}
+	return self;
+}
+
+@end
+
 @implementation WFEvent
+
+- (NSString *)linkName
+{
+	return self.trigger == WFEventTriggerLink ? self.messageName : nil;
+}
+
+- (void)wf_setCondition:(WFEventCondition *)condition
+{
+	_condition = condition;
+}
 
 - (NSString *)signalName
 {
@@ -254,6 +281,11 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @end
 
 @interface WFTask ()
+@property (nonatomic, readwrite, copy) NSString *decisionRef;
+@property (nonatomic, readwrite) WFCalledElementBinding decisionBinding;
+@property (nonatomic, readwrite) NSInteger decisionVersion;
+@property (nonatomic, readwrite, copy) NSString *resultVariable;
+@property (nonatomic, readwrite) WFDecisionResultMapping mapDecisionResult;
 @property (nonatomic, readwrite, strong) WFFeelExpression *assigneeExpression;
 @property (nonatomic, readwrite, strong) WFFeelExpression *candidateUsers;
 @property (nonatomic, readwrite, strong) WFFeelExpression *candidateGroups;
@@ -263,6 +295,19 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @end
 
 @implementation WFTask
+
+@synthesize actionKey = _actionKey;
+
+/* A receive task keeps its message where the others keep their topic. */
+- (NSString *)messageName
+{
+	return self.kind == WFTaskKindReceive ? _actionKey : nil;
+}
+
+- (NSString *)actionKey
+{
+	return self.kind == WFTaskKindReceive ? nil : _actionKey;
+}
 
 - (NSString *)assignee
 {

@@ -79,6 +79,41 @@
                         action:(NSString *)actionKey;
 - (instancetype)addScriptTask:(NSString *)elementId
                        action:(NSString *)actionKey;
+/* A send or business rule task: an external task under the topic, as a
+ * service task is. */
+- (instancetype)addSendTask:(NSString *)elementId action:(NSString *)topic;
+- (instancetype)addBusinessRuleTask:(NSString *)elementId action:(NSString *)topic;
+/* A business rule task evaluating the latest version of the decision,
+ * its result kept in the variable as the mapping says (none when
+ * resultVariable is nil); the binding picks another version. */
+- (instancetype)addBusinessRuleTask:(NSString *)elementId
+                           decision:(NSString *)decisionRef
+                     resultVariable:(NSString *)resultVariable
+                            mapping:(WFDecisionResultMapping)mapping;
+- (instancetype)setDecisionBinding:(WFCalledElementBinding)binding
+                           version:(NSInteger)version
+                        forElement:(NSString *)elementId;
+/* Waits for the message, as a message catch event does. */
+- (instancetype)addReceiveTask:(NSString *)elementId message:(NSString *)messageName;
+/* A manual task, or a plain task: the path passes through. */
+- (instancetype)addManualTask:(NSString *)elementId;
+- (instancetype)addTask:(NSString *)elementId;
+/* Link events: a throw goes on at the catch of the same name in its
+ * scope. A throw has no outgoing flow, a catch no incoming one. */
+- (instancetype)addLinkThrow:(NSString *)elementId link:(NSString *)linkName;
+- (instancetype)addLinkCatch:(NSString *)elementId link:(NSString *)linkName;
+/* Conditional events, on a FEEL condition such as "amount > 1000". A
+ * process's conditional start event starts it from
+ * -[WFRuntimeService evaluateStartConditions:error:]; an event
+ * subprocess's starts it while its scope is active. */
+- (instancetype)addConditionalStart:(NSString *)elementId condition:(NSString *)condition;
+- (instancetype)addConditionalCatch:(NSString *)elementId condition:(NSString *)condition;
+- (instancetype)addBoundaryConditional:(NSString *)elementId
+                                onTask:(NSString *)taskId
+                             condition:(NSString *)condition
+                          interrupting:(BOOL)interrupting;
+/* A conditional event's condition, replacing the one it was added with. */
+- (instancetype)setCondition:(WFEventCondition *)condition forElement:(NSString *)elementId;
 
 - (instancetype)addExclusive:(NSString *)elementId
                  defaultFlow:(NSString *)defaultFlowId;
