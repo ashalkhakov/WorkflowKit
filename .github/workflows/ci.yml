@@ -42,6 +42,11 @@ jobs:
       # connection) and installs the backends' headers where they import,
       # on top of #53's optimistic locking, which the engine's joins rely on.
       FREECOREDATA_REF: 36645cfad092584fd2b6458805a85882f6462852
+      # ODataKit, for the OData API (WorkflowKitOData): #3, which leaves
+      # what the engine keeps for itself out of what it serves
+      # (OData.served NO). Built in its checkout, not installed.
+      ODATAKIT_REF: d37586bcf9d28f5ab261dc838a4b6e43f45f0566
+      ODATAKIT: ${{ github.workspace }}/ODataKit
     defaults:
       run:
         working-directory: ${{ github.workspace }}/source
@@ -88,6 +93,12 @@ jobs:
           repository: ashalkhakov/FreeCoreData
           ref: ${{ env.FREECOREDATA_REF }}
           path: FreeCoreData
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ashalkhakov/ODataKit
+          ref: ${{ env.ODATAKIT_REF }}
+          path: ODataKit
 
       - name: Install packages
         run: |
@@ -148,8 +159,16 @@ jobs:
           make -C Backends/PostgreSQL install
           make -C Backends/MySQL install
 
+      # Its libraries only, against FreeCoreData; ODATAKIT (above) names
+      # the checkout, so the library build and the tests find them there.
+      - name: Build ODataKit
+        working-directory: ${{ github.workspace }}/ODataKit
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make -j"$(nproc)"
+
       # On its own, so a compile error is reported as that and not as a
-      # test failure.
+      # test failure. With ODATAKIT set, WorkflowKitOData too.
       - name: Build the library
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh

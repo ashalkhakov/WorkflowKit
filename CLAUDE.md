@@ -73,10 +73,12 @@ ODataKit: `ODATAKIT` names a built checkout (`/w/odatakit-*` in
 `WFOData*Tests` classes, compiled in with it:
 
 ```sh
-.tools/gnustep.sh make test ODATAKIT=/w/odatakit-served
+.tools/gnustep.sh make test ODATAKIT=/w/odatakit-master
 ```
 
-It is not built on macOS nor in CI yet.
+CI builds ODataKit at the commit pinned by `ODATAKIT_REF` in
+`.github/workflows/ci.yml`, and the OData API with it. It is not built on
+macOS yet.
 
 ## macOS
 
