@@ -100,18 +100,28 @@
 		XCTAssertTrue([xml rangeOfString:served].location != NSNotFound, @"%@ is not served", served);
 	}
 	for (NSString *internal in @[ @"LockRevision", @"IsScope", @"IsConcurrent", @"ActivityInstanceId", @"Children",
-	                              @"WholeNumber", @"Name=\"Type\"", @"IdentityLinks", @"EventSubscriptions" ]) {
+	                              @"WholeNumber", @"IdentityLinks", @"EventSubscriptions" ]) {
 		XCTAssertTrue([xml rangeOfString:internal].location == NSNotFound, @"%@ is served", internal);
 	}
+	NSRange variable = [xml rangeOfString:@"<EntityType Name=\"Variable\">"];
+	NSString *variableType = [xml substringWithRange:NSMakeRange(variable.location,
+		[xml rangeOfString:@"</EntityType>" options:0
+		             range:NSMakeRange(variable.location, [xml length] - variable.location)].location - variable.location)];
+	XCTAssertTrue([variableType rangeOfString:@"Name=\"Type\""].location == NSNotFound, @"%@", variableType);
 	XCTAssertEqualObjects([service.entitySets sortedArrayUsingSelector:@selector(compare:)],
-		(@[ @"HistoricProcessInstances", @"HistoricTaskInstances", @"ProcessDefinitions", @"ProcessInstances", @"Tasks",
-		    @"Variables" ]));
+		(@[ @"FormFields", @"Forms", @"HistoricProcessInstances", @"HistoricTaskInstances", @"ProcessDefinitions",
+		    @"ProcessInstances", @"Tasks", @"Variables" ]));
 	XCTAssertEqualObjects(service.metadataProblems, @[]);
 	XCTAssertEqualObjects(service.operationProblems, @[]);
 	for (NSString *action in @[ @"StartProcessInstance", @"CorrelateMessage", @"Complete", @"Claim", @"Unclaim",
-	                            @"Assign", @"Suspend", @"Activate", @"Cancel", @"SetVariables", @"RemoveVariables" ]) {
+	                            @"Assign", @"Suspend", @"Activate", @"Cancel", @"SetVariables", @"RemoveVariables",
+	                            @"SubmitForm", @"SubmitStartForm" ]) {
 		NSString *declared = [NSString stringWithFormat:@"<Action Name=\"%@\"", action];
 		XCTAssertTrue([xml rangeOfString:declared].location != NSNotFound, @"%@", action);
+	}
+	for (NSString *function in @[ @"FormValues", @"StartFormValues" ]) {
+		NSString *declared = [NSString stringWithFormat:@"<Function Name=\"%@\"", function];
+		XCTAssertTrue([xml rangeOfString:declared].location != NSNotFound, @"%@", function);
 	}
 }
 
@@ -299,4 +309,97 @@
 	XCTAssertEqual([self statusOf:[self send:@"POST" path:@"ProcessInstances" body:@{ @"BusinessKey": @"x" }
 	                                  service:service]], (NSInteger)405);
 	XCTAssertNil([self task:@"approve" of:a engine:engine].assignee);
+}
+
+/* start (a form taking the order's id as the business key) -> check (a
+ * user task with a form) -> end */
+- (WFProcessDefinition *)formOrder
+{
+	NSError *error = nil;
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"formOrder"];
+	[[[b addStart:@"start"] addUserTask:@"check" name:@"Check" assignee:@"ann"] addEnd:@"end"];
+	[[b connect:@"start" to:@"check"] connect:@"check" to:@"end"];
+	WFFormConstraint *required = [WFFormConstraint constraint:@"required" configuration:nil];
+	[b setForm:[WFFormDefinition formWithKey:nil
+	                                  fields:@[ [WFFormField fieldWithId:@"orderId" label:@"Order" type:WFFormFieldTypeString
+	                                                        defaultValue:nil values:nil constraints:@[ required ]
+	                                                          properties:nil] ]
+	                      businessKeyFieldId:@"orderId"]
+	forElement:@"start"];
+	NSArray *fields = @[
+		[WFFormField fieldWithId:@"amount" label:@"Amount" type:WFFormFieldTypeLong defaultValue:nil values:nil
+		             constraints:(@[ required, [WFFormConstraint constraint:@"max" configuration:@"100"] ]) properties:nil],
+		[WFFormField fieldWithId:@"size" label:@"Size" type:WFFormFieldTypeEnum
+		            defaultValue:[WFFeelExpression expressionWithString:@"\"m\"" error:NULL]
+		                  values:(@[ [WFFormFieldValue valueWithId:@"s" name:@"Small"],
+		                             [WFFormFieldValue valueWithId:@"m" name:@"Medium"] ])
+		             constraints:nil properties:@{ @"widget": @"radio" }],
+		[WFFormField fieldWithId:@"due" label:@"Due" type:WFFormFieldTypeDate
+		            defaultValue:[WFFeelExpression expressionWithString:@"date and time(\"2030-01-02T00:00:00Z\")" error:NULL]
+		                  values:nil constraints:nil properties:nil],
+	];
+	[b setForm:[WFFormDefinition formWithKey:@"app:check" fields:fields businessKeyFieldId:nil] forElement:@"check"];
+	WFProcessDefinition *definition = [b build:&error];
+	XCTAssertNotNil(definition, @"%@", error);
+	return definition;
+}
+
+- (void)testODataServesForms
+{
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	ODataService *service = [self serviceFor:engine];
+	[self deploy:[self formOrder] engine:engine];
+
+	/* The start form, from the definition. */
+	NSString *definitionId = [[[[self jsonOf:[self get:@"ProcessDefinitions" service:service]] objectForKey:@"value"]
+		firstObject] objectForKey:@"ProcessDefinitionId"];
+	NSArray *forms = [[self jsonOf:[self get:[NSString stringWithFormat:@"ProcessDefinitions('%@')/Forms?$orderby=ActivityId",
+	                                          definitionId] service:service]] objectForKey:@"value"];
+	XCTAssertEqualObjects([forms valueForKey:@"ActivityId"], (@[ @"check", @"start" ]), @"%@", forms);
+	XCTAssertEqualObjects([forms valueForKey:@"IsStartForm"], (@[ @NO, @YES ]));
+	XCTAssertEqualObjects([[forms lastObject] objectForKey:@"BusinessKeyField"], @"orderId");
+	NSDictionary *startValues = [self jsonOf:[self get:@"StartFormValues(Key='formOrder')" service:service]];
+	XCTAssertEqualObjects([startValues objectForKey:@"value"], (@{ @"orderId": [NSNull null] }), @"%@", startValues);
+
+	/* Started through its form: the business key is the field's. */
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:@"SubmitStartForm"
+	                                      body:@{ @"Key": @"formOrder", @"Values": @{} } service:service]]), (NSInteger)400);
+	NSDictionary *started = [self send:@"POST" path:@"SubmitStartForm"
+	                              body:@{ @"Key": @"formOrder", @"Values": @{ @"orderId": @"o-7", @"amount": @40 } }
+	                           service:service];
+	XCTAssertEqual([self statusOf:started], (NSInteger)200, @"%@", [started objectForKey:@"text"]);
+	XCTAssertEqualObjects([[self jsonOf:started] objectForKey:@"BusinessKey"], @"o-7");
+	NSString *pid = [[self jsonOf:started] objectForKey:@"ProcessInstanceId"];
+
+	/* The task's form, its fields in order, and its values. */
+	NSString *taskId = [self task:@"check" of:pid engine:engine].taskId;
+	NSString *task = [NSString stringWithFormat:@"Tasks('%@')", taskId];
+	NSDictionary *form = [self jsonOf:[self get:[task stringByAppendingString:@"/Form?$expand=Fields($orderby=Position)"]
+	                                     service:service]];
+	XCTAssertEqualObjects([form objectForKey:@"FormKey"], @"app:check", @"%@", form);
+	NSArray *fields = [form objectForKey:@"Fields"];
+	XCTAssertEqualObjects([fields valueForKey:@"FieldId"], (@[ @"amount", @"size", @"due" ]));
+	XCTAssertEqualObjects([fields valueForKey:@"Type"], (@[ @"long", @"enum", @"date" ]));
+	XCTAssertEqualObjects([[fields objectAtIndex:0] objectForKey:@"Required"], @YES);
+	XCTAssertEqualObjects([[fields objectAtIndex:0] objectForKey:@"Max"], @"100");
+	XCTAssertEqualObjects([[fields objectAtIndex:1] objectForKey:@"Values"],
+		(@[ @{ @"Id": @"s", @"Name": @"Small" }, @{ @"Id": @"m", @"Name": @"Medium" } ]));
+	XCTAssertEqualObjects([[fields objectAtIndex:1] objectForKey:@"Properties"], @{ @"widget": @"radio" });
+	NSDictionary *values = [[self jsonOf:[self get:[task stringByAppendingString:@"/WorkflowKit.FormValues()"]
+	                                         service:service]] objectForKey:@"value"];
+	XCTAssertEqualObjects(values, (@{ @"amount": @40, @"size": @"m", @"due": @"2030-01-02T00:00:00Z" }));
+	XCTAssertEqual([[[self jsonOf:[self get:@"FormFields" service:service]] objectForKey:@"value"] count], (NSUInteger)4);
+
+	/* Submitted: checked, then the task completes. */
+	NSString *submit = [task stringByAppendingString:@"/WorkflowKit.SubmitForm"];
+	NSDictionary *refused = [self send:@"POST" path:submit body:@{ @"Values": @{ @"amount": @500 } } service:service];
+	XCTAssertEqual([self statusOf:refused], (NSInteger)400);
+	XCTAssertTrue([[refused objectForKey:@"text"] rangeOfString:@"more than 100"].location != NSNotFound,
+		@"%@", [refused objectForKey:@"text"]);
+	XCTAssertNotNil([self task:@"check" of:pid engine:engine]);
+	NSDictionary *submitted = [self send:@"POST" path:submit
+	                                body:@{ @"Values": @{ @"amount": @"60", @"size": @"s" } } service:service];
+	XCTAssertEqual([self statusOf:submitted], (NSInteger)204, @"%@", [submitted objectForKey:@"text"]);
+	XCTAssertTrue([self ended:pid engine:engine]);
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"amount"], @60);
 }

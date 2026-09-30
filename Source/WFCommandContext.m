@@ -3257,6 +3257,13 @@ WFSameKind(WFFlowNode *a, WFFlowNode *b)
 		row.priority = 50;
 		row.execution = execution;
 		row.processInstance = [execution processInstance];
+		if (task.form != nil) {
+			row.form = [[self fetch:@"WFFormRecord"
+			              predicate:[NSPredicate predicateWithFormat:@"formId == %@",
+			                  [NSString stringWithFormat:@"%@:%@", execution.definitionId, task.elementId]]
+			                   sort:nil
+			                  limit:1] lastObject];
+		}
 		if (![self assign:task to:row]) {
 			return;
 		}

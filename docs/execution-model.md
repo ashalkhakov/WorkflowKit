@@ -50,8 +50,11 @@ activate or cancel an instance, set or remove its variables. Its types
 are static: a variable is an entity of its own, an instance's
 (`ProcessInstances(id)/Variables`), with its value in the property of its
 type, so tasks are filtered by variables as by any navigation
-(`ProcessInstance/Variables/any(v: ...)`). Data typed per task, as a
-form declares it, is for later.
+(`ProcessInstance/Variables/any(v: ...)`). A task's form is served as
+typed rows too: each deployed form, and its fields in order, are stored
+beside its definition at deployment (`Forms`, `FormFields`), a task
+links to its own, and the values it shows and takes come and go through
+the form service (`FormValues()`, `SubmitForm`, `SubmitStartForm`).
 
 ## Repository
 

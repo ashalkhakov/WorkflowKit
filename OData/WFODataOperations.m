@@ -4,7 +4,13 @@
 #import "WFTaskService.h"
 #import <ODataKit/ODataError.h>
 
+@protocol WFODataTaskFunctions <ODataFunctions>
+/* The form's values: each field's, as the task sees it. */
+- (NSDictionary *)formValues:(ODataReply *)reply;
+@end
+
 @protocol WFODataTaskActions <ODataActions>
+- (void)submitFormWithValues:(NSDictionary *)values reply:(ODataReply *)reply;
 - (void)completeWithVariables:(NSDictionary *)variables reply:(ODataReply *)reply;
 - (void)claimWithUserId:(NSString *)userId reply:(ODataReply *)reply;
 - (void)unclaim:(ODataReply *)reply;
@@ -29,6 +35,27 @@ WFODataFinish(ODataReply *reply, BOOL done, NSError *error)
 	} else {
 		[reply failWithError:WFODataError(error)];
 	}
+}
+
+/* A form's values as JSON: a date as its ISO-8601 text, data as base64. */
+static NSDictionary *
+WFODataJSONValues(NSDictionary *values)
+{
+	NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+	[formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
+	[formatter setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+	[formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss'Z'"];
+	NSMutableDictionary *json = [NSMutableDictionary dictionary];
+	for (NSString *name in values) {
+		id value = [values objectForKey:name];
+		if ([value isKindOfClass:[NSDate class]]) {
+			value = [formatter stringFromDate:value];
+		} else if ([value isKindOfClass:[NSData class]]) {
+			value = [value base64EncodedStringWithOptions:0];
+		}
+		[json setObject:value forKey:name];
+	}
+	return json;
 }
 
 /* NSNull, which a JSON null is, as no value. */
@@ -88,9 +115,38 @@ WFODataValue(id value)
 	WFODataFinish(reply, done, error);
 }
 
+- (WFExecutionEntity *)submitStartFormWithKey:(NSString *)key
+                                  businessKey:(NSString *)businessKey
+                                       values:(NSDictionary *)values
+                                        reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	WFProcessInstance *instance = [_engine.formService submitStartFormForKey:key businessKey:WFODataValue(businessKey)
+	                                                                   values:WFODataValue(values) ?: @{}
+	                                                                    error:&error];
+	if (instance == nil) {
+		[reply failWithError:WFODataError(error)];
+		return nil;
+	}
+	NSFetchRequest *fetch = [NSFetchRequest fetchRequestWithEntityName:@"WFExecution"];
+	[fetch setPredicate:[NSPredicate predicateWithFormat:@"executionId == %@", instance.processInstanceId]];
+	return [[reply.request.context executeFetchRequest:fetch error:NULL] firstObject];
+}
+
+- (NSDictionary *)startFormValuesWithKey:(NSString *)key reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	WFFormData *data = [_engine.formService startFormDataForKey:key error:&error];
+	if (data == nil) {
+		[reply failWithError:WFODataError(error)];
+		return nil;
+	}
+	return WFODataJSONValues(data.values);
+}
+
 @end
 
-@interface WFTaskEntity (WFOData) <WFODataTaskActions>
+@interface WFTaskEntity (WFOData) <WFODataTaskActions, WFODataTaskFunctions>
 @end
 
 @implementation WFTaskEntity (WFOData)
@@ -98,6 +154,27 @@ WFODataValue(id value)
 - (WFTaskService *)wf_taskServiceFor:(ODataReply *)reply
 {
 	return [WFODataOperations operationsOf:reply.request].engine.taskService;
+}
+
+- (NSDictionary *)formValues:(ODataReply *)reply
+{
+	NSError *error = nil;
+	WFFormData *data = [[WFODataOperations operationsOf:reply.request].engine.formService formDataForTask:self.taskId
+	                                                                                                 error:&error];
+	if (data == nil) {
+		[reply failWithError:WFODataError(error)];
+		return nil;
+	}
+	return WFODataJSONValues(data.values);
+}
+
+- (void)submitFormWithValues:(NSDictionary *)values reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[WFODataOperations operationsOf:reply.request].engine.formService submitTaskForm:self.taskId
+	                                                                                        values:WFODataValue(values) ?: @{}
+	                                                                                         error:&error];
+	WFODataFinish(reply, done, error);
 }
 
 - (void)completeWithVariables:(NSDictionary *)variables reply:(ODataReply *)reply

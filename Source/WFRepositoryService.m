@@ -40,6 +40,23 @@ WFIsDmnResource(NSString *name)
 @implementation WFDeployment
 @end
 
+/* The forms of a definition's nodes, and of the nodes of the
+ * subprocesses in it, by activity id. */
+static NSDictionary<NSString *, WFFormDefinition *> *
+WFFormsOf(WFProcessDefinition *definition)
+{
+	NSMutableDictionary *forms = [NSMutableDictionary dictionary];
+	for (WFFlowNode *node in [definition.nodes allValues]) {
+		if (node.form != nil) {
+			[forms setObject:node.form forKey:node.elementId];
+		}
+		if ([node isKindOfClass:[WFSubProcess class]]) {
+			[forms addEntriesFromDictionary:WFFormsOf([(WFSubProcess *)node innerDefinition])];
+		}
+	}
+	return forms;
+}
+
 @implementation WFRepositoryService
 {
 	WFStore *_store;
@@ -418,6 +435,8 @@ WFIsDmnResource(NSString *name)
 		record.name = definition.name;
 		record.resourceName = [pair objectAtIndex:1];
 		record.historyTimeToLive = definition.historyTimeToLive;
+		record.forms = WFFormsOf(definition);
+		record.startEventId = [[definition startEvent] elementId];
 		WFEvent *start = [definition startEvent];
 		if (start.trigger == WFEventTriggerMessage) {
 			record.messageStartName = start.messageName;

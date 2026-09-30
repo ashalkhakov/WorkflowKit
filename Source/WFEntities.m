@@ -186,7 +186,7 @@ WFIsIntegerNumber(NSNumber *number)
 @implementation WFTaskEntity
 @dynamic taskId, name, taskDefinitionKey, assignee, processInstanceId;
 @dynamic definitionId, activityInstanceId, createdAt, dueDate, followUpDate, priority, suspended;
-@dynamic execution, processInstance, identityLinks;
+@dynamic execution, processInstance, form, identityLinks;
 @end
 
 NSString * const WFIdentityLinkCandidate = @"candidate";

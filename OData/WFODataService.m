@@ -77,6 +77,8 @@ WFODataIsNil(NSString *key, BOOL isNil)
 	NSDictionary *entities = [service.model entitiesByName];
 	NSDictionary *sets = @{ @"Tasks": @"WFTask",
 	                        @"ProcessDefinitions": @"WFDefinitionRecord",
+	                        @"Forms": @"WFFormRecord",
+	                        @"FormFields": @"WFFormFieldRecord",
 	                        @"HistoricProcessInstances": @"WFHistoricProcessInstance",
 	                        @"HistoricTaskInstances": @"WFHistoricTaskInstance" };
 	for (NSString *set in sets) {

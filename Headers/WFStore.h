@@ -3,6 +3,7 @@
 @class NSManagedObjectModel;
 @class NSManagedObjectContext;
 @class NSPersistentStoreCoordinator;
+@class WFFormDefinition;
 
 /* A deployment: a named set of BPMN and DMN resources. */
 @interface WFDeploymentRecord : NSObject
@@ -31,6 +32,10 @@
 /* A timer start event, if any: its id, when it first fires, what of its
  * cycle repeats after that, and the attempts its job gets. */
 @property (nonatomic, strong) NSNumber *historyTimeToLive;
+/* The forms of its user tasks and start event, by activity id, stored
+ * beside it for what serves them; the start event's id. */
+@property (nonatomic, copy) NSDictionary<NSString *, WFFormDefinition *> *forms;
+@property (nonatomic, copy) NSString *startEventId;
 @property (nonatomic, copy) NSString *timerStartActivityId;
 @property (nonatomic, copy) NSDate *timerStartDue;
 @property (nonatomic, copy) NSString *timerStartRepeat;

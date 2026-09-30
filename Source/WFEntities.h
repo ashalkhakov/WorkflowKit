@@ -109,6 +109,8 @@ BOOL WFIsIntegerNumber(NSNumber *number);
 @property (nonatomic, strong) WFExecutionEntity *execution;
 /* The root of its process instance, whose variables a query asks about. */
 @property (nonatomic, strong) WFExecutionEntity *processInstance;
+/* Its form as deployed (a WFFormRecord); nil for a task without one. */
+@property (nonatomic, strong) NSManagedObject *form;
 @property (nonatomic, strong) NSSet *identityLinks;
 @end
 
