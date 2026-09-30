@@ -218,6 +218,9 @@
                     forElement:(NSString *)elementId;
 - (instancetype)setRetryTimeCycle:(NSString *)cycle forElement:(NSString *)elementId;
 - (instancetype)setTaskPriority:(NSInteger)priority forElement:(NSString *)elementId;
+/* A user task's or a start event's form. One that is not whole -- see
+ * -[WFFormDefinition problem] -- fails -build:. */
+- (instancetype)setForm:(WFFormDefinition *)form forElement:(NSString *)elementId;
 /* Makes an activity already added -- a task, subprocess or call activity
  * -- multi-instance. */
 - (instancetype)setMultiInstance:(WFMultiInstance *)multiInstance forElement:(NSString *)elementId;

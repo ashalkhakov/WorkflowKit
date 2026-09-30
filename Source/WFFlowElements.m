@@ -16,6 +16,7 @@ NSString * const WFErrorRefKey = @"WFErrorRef";
 @property (nonatomic, readwrite, strong) NSNumber *taskPriority;
 @property (nonatomic, readwrite, strong) WFMultiInstance *multiInstance;
 @property (nonatomic, readwrite, getter=isForCompensation) BOOL forCompensation;
+@property (nonatomic, readwrite, strong) WFFormDefinition *form;
 @property (nonatomic, strong) NSMutableArray<WFParameter *> *mutableInputParameters;
 @property (nonatomic, strong) NSMutableArray<WFParameter *> *mutableOutputParameters;
 @property (nonatomic, strong) NSMutableArray<WFListener *> *mutableExecutionListeners;

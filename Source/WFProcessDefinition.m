@@ -15,6 +15,7 @@
 - (void)setTaskPriority:(NSNumber *)priority;
 - (void)setMultiInstance:(WFMultiInstance *)multiInstance;
 - (void)setForCompensation:(BOOL)forCompensation;
+- (void)setForm:(WFFormDefinition *)form;
 - (void)addInputParameter:(WFParameter *)parameter;
 - (void)addOutputParameter:(WFParameter *)parameter;
 - (void)addExecutionListener:(WFListener *)listener;
@@ -908,6 +909,24 @@
 - (instancetype)setRetryTimeCycle:(NSString *)cycle forElement:(NSString *)elementId
 {
 	[[self.nodes objectForKey:elementId] setRetryTimeCycle:cycle];
+	return self;
+}
+
+- (instancetype)setForm:(WFFormDefinition *)form forElement:(NSString *)elementId
+{
+	WFFlowNode *node = [self.nodes objectForKey:elementId];
+	BOOL userTask = [node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindUser;
+	BOOL start = [node isKindOfClass:[WFEvent class]] && [(WFEvent *)node kind] == WFEventKindStart;
+	NSString *problem = !userTask && !start ? @"only a user task or a start event has a form"
+		: !start && form.businessKeyFieldId != nil ? @"only a start form sets the business key"
+		: [form problem];
+	if (problem != nil) {
+		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+			code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
+				[NSString stringWithFormat:@"%@: %@", elementId, problem] }];
+		return self;
+	}
+	[node setForm:form];
 	return self;
 }
 

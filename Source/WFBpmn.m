@@ -94,6 +94,20 @@ WFSet(NSXMLElement *element, NSString *name, NSString *value)
 	[element addAttribute:[NSXMLNode attributeWithName:name stringValue:value]];
 }
 
+/* The literal a form field's default value is written as. */
+static WFAttributeKind
+WFFormAttributeKind(WFFormFieldType type)
+{
+	switch (type) {
+	case WFFormFieldTypeLong:
+		return WFAttributeKindNumber;
+	case WFFormFieldTypeDate:
+		return WFAttributeKindDate;
+	default:
+		return WFAttributeKindString;
+	}
+}
+
 /* <bpmn:name xsi:type="bpmn:tFormalExpression">text</bpmn:name>: an
  * expression as BPMN holds one. */
 static NSXMLElement *
@@ -436,6 +450,52 @@ WFCaughtCode(NSString *code)
 	}
 }
 
+/* camunda:formData: the fields, each with its values, constraints and
+ * properties. */
++ (NSXMLElement *)formData:(WFFormDefinition *)form
+{
+	NSXMLElement *data = WFElement(@"camunda:formData");
+	WFSet(data, @"businessKey", form.businessKeyFieldId);
+	for (WFFormField *field in form.fields) {
+		NSXMLElement *element = WFElement(@"camunda:formField");
+		WFSet(element, @"id", field.fieldId);
+		WFSet(element, @"label", field.label);
+		WFSet(element, @"type", [WFFormField nameOfType:field.type]);
+		if (field.defaultValue != nil) {
+			WFSet(element, @"defaultValue", WFAttributeText(field.defaultValue, WFFormAttributeKind(field.type)));
+		}
+		if ([field.properties count] > 0) {
+			NSXMLElement *properties = WFElement(@"camunda:properties");
+			for (NSString *name in [[field.properties allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
+				NSXMLElement *property = WFElement(@"camunda:property");
+				WFSet(property, @"id", name);
+				[property addAttribute:[NSXMLNode attributeWithName:@"value"
+				                                        stringValue:[field.properties objectForKey:name]]];
+				[properties addChild:property];
+			}
+			[element addChild:properties];
+		}
+		if ([field.constraints count] > 0) {
+			NSXMLElement *validation = WFElement(@"camunda:validation");
+			for (WFFormConstraint *constraint in field.constraints) {
+				NSXMLElement *child = WFElement(@"camunda:constraint");
+				WFSet(child, @"name", constraint.name);
+				WFSet(child, @"config", constraint.configuration);
+				[validation addChild:child];
+			}
+			[element addChild:validation];
+		}
+		for (WFFormFieldValue *value in field.values) {
+			NSXMLElement *child = WFElement(@"camunda:value");
+			WFSet(child, @"id", value.valueId);
+			WFSet(child, @"name", value.name);
+			[element addChild:child];
+		}
+		[data addChild:element];
+	}
+	return data;
+}
+
 + (NSXMLElement *)listener:(WFListener *)listener named:(NSString *)name
 {
 	NSXMLElement *element = WFElement(name);
@@ -595,6 +655,7 @@ WFCaughtCode(NSString *code)
 		WFSet(element, @"camunda:exclusive", @"false");
 	}
 	WFSet(element, @"camunda:taskPriority", [node.taskPriority stringValue]);
+	WFSet(element, @"camunda:formKey", node.form.formKey);
 
 	/* BPMN puts extension elements, then incoming and outgoing, then an
 	 * activity's loop characteristics or an event's definition, before
@@ -614,6 +675,9 @@ WFCaughtCode(NSString *code)
 			[inputOutput addChild:[self parameter:parameter named:@"camunda:outputParameter"]];
 		}
 		[extensions addChild:inputOutput];
+	}
+	if ([node.form.fields count] > 0) {
+		[extensions addChild:[self formData:node.form]];
 	}
 	if ([node isKindOfClass:[WFTask class]]) {
 		WFTask *task = (WFTask *)node;
@@ -1085,6 +1149,96 @@ WFIgnoredElements(void)
 		}
 	}
 	[self readListenersOf:element id:elementId into:builder context:context];
+	[self readFormOf:element id:elementId into:builder context:context];
+}
+
+/* camunda:formKey and camunda:formData, on a user task or a start event
+ * (the builder refuses them elsewhere). */
++ (void)readFormOf:(NSXMLElement *)element
+                id:(NSString *)elementId
+              into:(WFDefinitionBuilder *)builder
+           context:(WFBpmnReadContext *)context
+{
+	for (NSString *refused in @[ @"formRef", @"formHandlerClass" ]) {
+		if ([self attr:refused namespace:WFCamundaNamespace of:element] != nil) {
+			[self fail:context error:WFBpmnError(@"%@: camunda:%@ is not supported", elementId, refused)];
+			return;
+		}
+	}
+	NSString *formKey = [self attr:@"formKey" namespace:WFCamundaNamespace of:element];
+	NSXMLElement *data = nil;
+	NSXMLElement *extensions = [self child:element named:@"extensionElements"];
+	for (NSXMLElement *extension in [self children:extensions of:WFCamundaNamespace]) {
+		if ([[extension localName] isEqualToString:@"formData"]) {
+			data = extension;
+		}
+	}
+	if (formKey == nil && data == nil) {
+		return;
+	}
+	NSMutableArray *fields = [NSMutableArray array];
+	for (NSXMLElement *fieldElement in [self children:data of:WFCamundaNamespace]) {
+		if (![[fieldElement localName] isEqualToString:@"formField"]) {
+			continue;
+		}
+		NSString *fieldId = [self attr:@"id" of:fieldElement] ?: @"";
+		NSString *typeName = [self attr:@"type" of:fieldElement] ?: @"string";
+		NSNumber *type = [WFFormField typeNamed:typeName];
+		if (type == nil) {
+			[self fail:context error:WFBpmnError(@"%@: form field %@: type \"%@\" is not supported",
+				elementId, fieldId, typeName)];
+			return;
+		}
+		if ([self attr:@"datePattern" of:fieldElement] != nil) {
+			[self fail:context error:WFBpmnError(
+				@"%@: form field %@: datePattern is not supported; dates are ISO-8601", elementId, fieldId)];
+			return;
+		}
+		WFFeelExpression *defaultValue = nil;
+		NSString *defaultText = [self attr:@"defaultValue" of:fieldElement];
+		if (defaultText != nil) {
+			NSError *error = nil;
+			defaultValue = WFAttributeExpression(defaultText, WFFormAttributeKind((WFFormFieldType)[type integerValue]),
+			                                     &error);
+			if (defaultValue == nil) {
+				[self fail:context error:WFBpmnError(@"%@: form field %@: defaultValue: %@",
+					elementId, fieldId, [error localizedDescription])];
+				return;
+			}
+		}
+		NSMutableArray *values = [NSMutableArray array];
+		NSMutableArray *constraints = [NSMutableArray array];
+		NSMutableDictionary *properties = [NSMutableDictionary dictionary];
+		for (NSXMLElement *part in [self children:fieldElement of:WFCamundaNamespace]) {
+			NSString *partName = [part localName];
+			if ([partName isEqualToString:@"value"]) {
+				[values addObject:[WFFormFieldValue valueWithId:[self attr:@"id" of:part] ?: @""
+				                                          name:[self attr:@"name" of:part]]];
+			} else if ([partName isEqualToString:@"validation"]) {
+				for (NSXMLElement *constraint in [self children:part of:WFCamundaNamespace]) {
+					[constraints addObject:[WFFormConstraint constraint:[self attr:@"name" of:constraint] ?: @""
+					                                      configuration:[self attr:@"config" of:constraint]]];
+				}
+			} else if ([partName isEqualToString:@"properties"]) {
+				for (NSXMLElement *property in [self children:part of:WFCamundaNamespace]) {
+					NSString *propertyId = [self attr:@"id" of:property];
+					if (propertyId != nil) {
+						[properties setObject:[self attr:@"value" of:property] ?: @"" forKey:propertyId];
+					}
+				}
+			}
+		}
+		[fields addObject:[WFFormField fieldWithId:fieldId
+		                                    label:[self attr:@"label" of:fieldElement]
+		                                     type:(WFFormFieldType)[type integerValue]
+		                             defaultValue:defaultValue
+		                                   values:values
+		                              constraints:constraints
+		                               properties:properties]];
+	}
+	[builder setForm:[WFFormDefinition formWithKey:formKey fields:fields
+	                            businessKeyFieldId:[self attr:@"businessKey" of:data]]
+	      forElement:elementId];
 }
 
 /* camunda:executionListener and camunda:taskListener in the element's

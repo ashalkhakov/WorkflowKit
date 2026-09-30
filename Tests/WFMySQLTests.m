@@ -199,6 +199,13 @@
 #include "WFTaskQueryTests.inc"
 @end
 
+@interface WFFormMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFFormMySQLTests
+#include "WFFormTests.inc"
+@end
+
 #ifdef WORKFLOWKIT_ODATA
 @interface WFODataMySQLTests : WFMySQLTestCase
 @end

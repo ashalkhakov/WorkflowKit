@@ -3,6 +3,7 @@
 #import "WFRepositoryService.h"
 #import "WFRuntimeService.h"
 #import "WFTaskService.h"
+#import "WFFormService.h"
 #import "WFHistoryService.h"
 #import "WFManagementService.h"
 #import "WFExternalTaskService.h"
@@ -41,6 +42,7 @@ processInstanceEnded:(WFProcessInstance *)instance;
 @property (nonatomic, readonly, strong) WFRepositoryService *repositoryService;
 @property (nonatomic, readonly, strong) WFRuntimeService *runtimeService;
 @property (nonatomic, readonly, strong) WFTaskService *taskService;
+@property (nonatomic, readonly, strong) WFFormService *formService;
 @property (nonatomic, readonly, strong) WFHistoryService *historyService;
 @property (nonatomic, readonly, strong) WFManagementService *managementService;
 @property (nonatomic, readonly, strong) WFExternalTaskService *externalTaskService;

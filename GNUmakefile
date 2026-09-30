@@ -34,6 +34,8 @@ WorkflowKit_OBJC_FILES = \
 	Source/WFCommandContext.m \
 	Source/WFServices.m \
 	Source/WFTaskQuery.m \
+	Source/WFForm.m \
+	Source/WFFormService.m \
 	Source/WFExternalTaskService.m \
 	Source/WFProcessEngine.m
 
@@ -52,6 +54,8 @@ WorkflowKit_HEADER_FILES = \
 	WFRepositoryService.h \
 	WFRuntimeService.h \
 	WFTaskQuery.h \
+	WFForm.h \
+	WFFormService.h \
 	WFTaskService.h \
 	WFHistoryService.h \
 	WFManagementService.h \

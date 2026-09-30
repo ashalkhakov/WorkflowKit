@@ -199,6 +199,13 @@
 #include "WFTaskQueryTests.inc"
 @end
 
+@interface WFFormSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFFormSQLiteTests
+#include "WFFormTests.inc"
+@end
+
 #ifdef WORKFLOWKIT_ODATA
 @interface WFODataSQLiteTests : WFSQLiteTestCase
 @end

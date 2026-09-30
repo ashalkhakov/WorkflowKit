@@ -307,6 +307,15 @@ as a real, a whole one exactly as well), a boolean, a date, data -- so a
 condition is typed by its value and compared in that column. The same predicate serves
 whatever else filters tasks by variables, such as an API.
 
+**Forms** are Camunda 7's: a user task or a start event has a form key,
+fields (`camunda:formData`), or both. The engine renders nothing. It
+keeps the form's definition, gives it with each field's value (the
+variable the task sees, else the field's default), and checks what is
+submitted -- converted to each field's type, held to its constraints --
+before completing the task or starting the process. An application
+resolves a form key to a form of its own, native or XForms, or generates
+one from the fields; either way the fields are the contract.
+
 **Input/output mappings** make an activity a scope: its inputs are its
 own variables, set as it is entered, and its outputs are evaluated in
 that scope when it completes normally -- a task or call activity as its

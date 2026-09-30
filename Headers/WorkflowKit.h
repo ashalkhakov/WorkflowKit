@@ -11,6 +11,8 @@
 #import "WFRuntimeService.h"
 #import "WFTaskQuery.h"
 #import "WFTaskService.h"
+#import "WFForm.h"
+#import "WFFormService.h"
 #import "WFHistoryService.h"
 #import "WFManagementService.h"
 #import "WFExternalTaskService.h"

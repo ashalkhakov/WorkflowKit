@@ -85,6 +85,10 @@
 - (instancetype)initWithProcessEngine:(WFProcessEngine *)engine;
 @end
 
+@interface WFFormService (WFInternal)
+- (instancetype)initWithProcessEngine:(WFProcessEngine *)engine;
+@end
+
 @interface WFHistoryService (WFInternal)
 - (instancetype)initWithProcessEngine:(WFProcessEngine *)engine;
 @end

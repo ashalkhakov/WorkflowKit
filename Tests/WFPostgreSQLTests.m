@@ -199,6 +199,13 @@
 #include "WFTaskQueryTests.inc"
 @end
 
+@interface WFFormPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFFormPostgreSQLTests
+#include "WFFormTests.inc"
+@end
+
 #ifdef WORKFLOWKIT_ODATA
 @interface WFODataPostgreSQLTests : WFPostgreSQLTestCase
 @end

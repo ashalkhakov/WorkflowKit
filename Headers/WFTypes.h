@@ -92,7 +92,10 @@ typedef NS_ENUM(NSInteger, WFErrorCode) {
 	WFErrorDecision,
 	/* A query condition the engine cannot evaluate: an operator the value
 	 * has no order for, a value of a type variables do not hold. */
-	WFErrorInvalidQuery
+	WFErrorInvalidQuery,
+	/* Values a form does not take: of another type, missing where
+	 * required, outside its constraints. */
+	WFErrorInvalidFormData
 };
 
 extern NSString * const WFErrorDomain;

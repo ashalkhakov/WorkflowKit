@@ -1,5 +1,6 @@
 #import "WFTypes.h"
 #import "WFDelegation.h"
+#import "WFForm.h"
 
 @class WFFeelExpression;
 @class WFMultiInstance;
@@ -49,6 +50,9 @@
 @property (nonatomic, readonly, copy) NSArray<WFParameter *> *outputParameters;
 /* camunda:executionListener: start and end listeners. */
 @property (nonatomic, readonly, copy) NSArray<WFListener *> *executionListeners;
+/* A user task's or a start event's form: camunda:formKey and
+ * camunda:formData. nil for none. */
+@property (nonatomic, readonly, strong) WFFormDefinition *form;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithElementId:(NSString *)elementId

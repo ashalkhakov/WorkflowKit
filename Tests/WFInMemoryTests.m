@@ -201,6 +201,13 @@
 #include "WFTaskQueryTests.inc"
 @end
 
+@interface WFFormInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFFormInMemoryTests
+#include "WFFormTests.inc"
+@end
+
 #ifdef WORKFLOWKIT_ODATA
 @interface WFODataInMemoryTests : WFInMemoryTestCase
 @end

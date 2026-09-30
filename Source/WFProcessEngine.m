@@ -68,6 +68,7 @@ WFIsConflict(NSError *error)
 	[_repositoryService wf_setEngine:self];
 	_runtimeService = [[WFRuntimeService alloc] initWithProcessEngine:self];
 	_taskService = [[WFTaskService alloc] initWithProcessEngine:self];
+	_formService = [[WFFormService alloc] initWithProcessEngine:self];
 	_historyService = [[WFHistoryService alloc] initWithProcessEngine:self];
 	_managementService = [[WFManagementService alloc] initWithProcessEngine:self];
 	_externalTaskService = [[WFExternalTaskService alloc] initWithProcessEngine:self];
