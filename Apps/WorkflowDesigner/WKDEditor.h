@@ -46,6 +46,23 @@
 /* Nodes with what they contain and the flows that touch them, and flows. */
 - (void)deleteElements:(NSArray<NSString *> *)elementIds;
 
+/* A change to one element -- the process, a node, a flow -- as one undo
+ * step named for it: the block gets the element and the document. NO when
+ * there is no element of that id. */
+- (BOOL)edit:(NSString *)elementId
+      action:(NSString *)action
+        with:(void (^)(NSXMLElement *element, NSXMLDocument *document))edit;
+/* A new id, and every reference to the old one with it: flows' ends,
+ * boundary events' activities, defaults, incoming and outgoing, the
+ * diagram. NO, with why, for an id that is taken or not an XML name. */
+- (BOOL)renameElement:(NSString *)elementId to:(NSString *)newId error:(NSString **)reason;
+/* An element of the document anywhere, by id. */
+- (NSXMLElement *)elementWithId:(NSString *)elementId;
+/* A top-level definition -- bpmn:message, signal, error, escalation --
+ * whose attribute (name, errorCode, escalationCode) has the value: its id,
+ * made with the value as its name too when there is none. For an edit. */
+- (NSString *)definitionOf:(NSString *)local key:(NSString *)key value:(NSString *)value;
+
 /* The flow's route between two shapes, as a modeller draws it: straight
  * where they face each other, with right-angle bends where they do not. */
 + (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary;

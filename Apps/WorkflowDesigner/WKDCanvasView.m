@@ -216,7 +216,9 @@ WKDResizeHandle(NSRect bounds)
 - (void)drawRect:(NSRect)dirty
 {
 	[WKDPaperColor() setFill];
-	NSRectFill(dirty);
+	/* Within the view: since macOS 14 views do not clip to their bounds,
+	 * and the rectangle to draw may reach past them -- over the tab bar. */
+	NSRectFill(NSIntersectionRect(dirty, [self bounds]));
 	for (WKDShape *shape in self.diagram.shapes) {
 		if (shape.hasBounds && NSIntersectsRect(NSInsetRect([self movedBounds:shape], -60, -40), dirty)) {
 			WKDDrawNode([self lookOf:shape], [self movedBounds:shape], YES);

@@ -7,4 +7,5 @@
 #import <AppKit/AppKit.h>
 
 #define NSCompositingOperationSourceOver NSCompositeSourceOver
+#define NSButtonTypeSwitch NSSwitchButton
 #endif

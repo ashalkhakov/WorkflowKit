@@ -18,8 +18,14 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDRenderer.m \
 	WKDCanvasView.m \
 	WKDPaletteView.m \
+	WKDProperties.m \
+	WKDPane.m \
+	WKDOutline.m \
+	WKDInspectorView.m \
 	WKDDocument.m \
-	WKDWindowController.m
+	WKDWindowController.m \
+	ThirdParty/DMTabBar/DMTabBar.m \
+	ThirdParty/DMTabBar/DMTabBarItem.m
 
 WorkflowDesigner_RESOURCE_FILES = \
 	Resources/MainMenu.xib \

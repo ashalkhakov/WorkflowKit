@@ -317,8 +317,11 @@ wt_sources = phase("PBXSourcesBuildPhase", "WorkflowDeskTests", "Sources", names
 wt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDeskTests", "Frameworks", names(
     [buildfile("WorkflowDeskTests", odatakit, "ODataKit.framework")]))
 
+# Vendored code (ThirdParty/) is compiled as it came, its warnings unheard.
 wg_sources = phase("PBXSourcesBuildPhase", "WorkflowDesigner", "Sources", names(
-    [buildfile("WorkflowDesigner", designer_refs[f], f) for f in DESIGNER_SOURCES]))
+    [buildfile("WorkflowDesigner", designer_refs[f], f,
+               '{COMPILER_FLAGS = "-w"; }' if f.startswith("ThirdParty/") else None)
+     for f in DESIGNER_SOURCES]))
 wg_resources = phase("PBXResourcesBuildPhase", "WorkflowDesigner", "Resources", names(
     [buildfile("WorkflowDesigner", designer_res_refs[r], os.path.basename(r)) for r in DESIGNER_RESOURCES]))
 wg_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesigner", "Frameworks", names(

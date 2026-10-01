@@ -150,6 +150,32 @@
                                     <action selector="actualSize:" target="-1" id="WKm-ac-052"/>
                                 </connections>
                             </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-vs-001"/>
+                            <menuItem title="Outline" keyEquivalent="1" id="WKm-vt-001">
+                                <connections>
+                                    <action selector="showOutline:" target="-1" id="WKm-va-001"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert" keyEquivalent="2" id="WKm-vt-002">
+                                <connections>
+                                    <action selector="showPalette:" target="-1" id="WKm-va-002"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Problems" keyEquivalent="3" id="WKm-vt-003">
+                                <connections>
+                                    <action selector="showProblems:" target="-1" id="WKm-va-003"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Element" keyEquivalent="4" id="WKm-vt-004">
+                                <connections>
+                                    <action selector="showElementInspector:" target="-1" id="WKm-va-004"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Process" keyEquivalent="5" id="WKm-vt-005">
+                                <connections>
+                                    <action selector="showProcessInspector:" target="-1" id="WKm-va-005"/>
+                                </connections>
+                            </menuItem>
                         </items>
                     </menu>
                 </menuItem>

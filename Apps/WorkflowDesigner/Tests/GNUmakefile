@@ -10,9 +10,11 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../WKDDiagram.m \
 	../WKDLayout.m \
 	../WKDEditor.m \
+	../WKDProperties.m \
 	WKDDiagramTests.m \
 	WKDEditorTests.m \
-	WKDLayoutTests.m
+	WKDLayoutTests.m \
+	WKDPropertiesTests.m
 
 WorkflowDesignerTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 WorkflowDesignerTests_INCLUDE_DIRS = -I.. -I../../../Headers

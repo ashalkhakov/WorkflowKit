@@ -50,14 +50,32 @@ WKDTools(void)
 	return YES;
 }
 
+/* As many columns as the pane is wide for. */
+- (NSInteger)columns
+{
+	return MAX(2, (NSInteger)((NSWidth([self bounds]) - 8) / WKDCell));
+}
+
 - (NSRect)cellAt:(NSInteger)index
 {
-	return NSMakeRect(4 + (index % 2) * WKDCell, 6 + (index / 2) * WKDCell, WKDCell, WKDCell);
+	NSInteger columns = [self columns];
+	return NSMakeRect(4 + (index % columns) * WKDCell, 6 + (index / columns) * WKDCell, WKDCell, WKDCell);
+}
+
+- (void)setFrameSize:(NSSize)size
+{
+	[super setFrameSize:size];
+	[self updateToolTips];
 }
 
 - (void)viewDidMoveToWindow
 {
 	[super viewDidMoveToWindow];
+	[self updateToolTips];
+}
+
+- (void)updateToolTips
+{
 	[self removeAllToolTips];
 	NSArray *tools = WKDTools();
 	for (NSUInteger i = 0; i < [tools count]; i++) {
@@ -106,7 +124,9 @@ WKDTools(void)
 - (void)drawRect:(NSRect)dirty
 {
 	[[NSColor windowBackgroundColor] setFill];
-	NSRectFill(dirty);
+	/* Within the view: since macOS 14 views do not clip to their bounds,
+	 * and the rectangle to draw may reach past them -- over the tab bar. */
+	NSRectFill(NSIntersectionRect(dirty, [self bounds]));
 	NSArray *tools = WKDTools();
 	for (NSUInteger i = 0; i < [tools count]; i++) {
 		NSRect cell = [self cellAt:i];

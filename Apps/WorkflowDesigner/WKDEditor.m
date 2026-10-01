@@ -694,6 +694,124 @@ WKDOnEdge(NSRect host, NSPoint point)
 	}];
 }
 
+#pragma mark Properties
+
+- (NSXMLElement *)elementWithId:(NSString *)elementId
+{
+	return WKDElementWithId(_document, elementId);
+}
+
+- (BOOL)edit:(NSString *)elementId
+      action:(NSString *)action
+        with:(void (^)(NSXMLElement *element, NSXMLDocument *document))edit
+{
+	if ([self elementWithId:elementId] == nil) {
+		return NO;
+	}
+	[self change:action with:^{
+		edit([self elementWithId:elementId], self->_document);
+	}];
+	return YES;
+}
+
+- (NSString *)definitionOf:(NSString *)local key:(NSString *)key value:(NSString *)value
+{
+	NSXMLElement *root = [_document rootElement];
+	for (NSXMLElement *definition in WKDChildren(root, WKDBpmnNamespace, local)) {
+		if ([WKDAttribute(definition, key) isEqualToString:value]) {
+			return WKDAttribute(definition, @"id");
+		}
+	}
+	NSString *prefix = [[local substringToIndex:1] uppercaseString];
+	prefix = [prefix stringByAppendingString:[local substringFromIndex:1]];
+	NSXMLElement *definition = WKDNewElement(_document, WKDBpmnNamespace, local);
+	NSString *definitionId = [self freshId:prefix];
+	WKDSetAttribute(definition, @"id", definitionId);
+	WKDSetAttribute(definition, @"name", value);
+	if (![key isEqualToString:@"name"]) {
+		WKDSetAttribute(definition, key, value);
+	}
+	/* Before the processes, as modellers put them. */
+	NSUInteger index = 0;
+	NSArray *children = [root children];
+	for (NSUInteger i = 0; i < [children count]; i++) {
+		if (WKDIs([children objectAtIndex:i], WKDBpmnNamespace, @"process")) {
+			index = i;
+			break;
+		}
+		index = i + 1;
+	}
+	[root insertChild:definition atIndex:index];
+	return definitionId;
+}
+
+/* An XML name, as an id must be: a letter or underscore, then letters,
+ * digits, '-', '_' and '.'. */
+static BOOL
+WKDIsName(NSString *name)
+{
+	if ([name length] == 0) {
+		return NO;
+	}
+	NSMutableCharacterSet *first = [NSMutableCharacterSet letterCharacterSet];
+	[first addCharactersInString:@"_"];
+	NSMutableCharacterSet *rest = [first mutableCopy];
+	[rest formUnionWithCharacterSet:[NSCharacterSet decimalDigitCharacterSet]];
+	[rest addCharactersInString:@"-."];
+	if (![first characterIsMember:[name characterAtIndex:0]]) {
+		return NO;
+	}
+	return [name rangeOfCharacterFromSet:[rest invertedSet]].location == NSNotFound;
+}
+
+- (BOOL)renameElement:(NSString *)elementId to:(NSString *)newId error:(NSString **)reason
+{
+	NSString *refusal = nil;
+	if ([newId isEqualToString:elementId]) {
+		return YES;
+	}
+	if (!WKDIsName(newId)) {
+		refusal = @"An id is a letter or _, then letters, digits, -, _ and dots.";
+	} else if ([self elementWithId:newId] != nil) {
+		refusal = [NSString stringWithFormat:@"%@ is the id of another element.", newId];
+	} else if ([self elementWithId:elementId] == nil) {
+		refusal = @"There is no such element.";
+	}
+	if (refusal != nil) {
+		if (reason != NULL) {
+			*reason = refusal;
+		}
+		return NO;
+	}
+	[self change:@"Rename" with:^{
+		NSArray *references = @[ @"sourceRef", @"targetRef", @"attachedToRef", @"default", @"bpmnElement",
+		                         @"processRef", @"activityRef" ];
+		NSMutableArray *pending = [NSMutableArray arrayWithObject:[self->_document rootElement]];
+		while ([pending count] > 0) {
+			NSXMLElement *element = [pending lastObject];
+			[pending removeLastObject];
+			if ([WKDAttribute(element, @"id") isEqualToString:elementId]) {
+				WKDSetAttribute(element, @"id", newId);
+			}
+			for (NSString *reference in references) {
+				if ([WKDAttribute(element, reference) isEqualToString:elementId]) {
+					WKDSetAttribute(element, reference, newId);
+				}
+			}
+			if ((WKDIs(element, WKDBpmnNamespace, @"incoming") || WKDIs(element, WKDBpmnNamespace, @"outgoing"))
+			    && [[element stringValue] isEqualToString:elementId]) {
+				[element setStringValue:newId];
+			}
+			for (NSXMLNode *child in [element children]) {
+				if ([child kind] == NSXMLElementKind) {
+					[pending addObject:child];
+				}
+			}
+		}
+	}];
+	return YES;
+}
+
 #pragma mark Deleting
 
 - (void)deleteElements:(NSArray<NSString *> *)elementIds

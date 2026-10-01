@@ -8,68 +8,181 @@
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="WKDWindowController">
             <connections>
-                <outlet property="window" destination="WKw-wn-001" id="WKw-ol-001"/>
-                <outlet property="canvas" destination="WKw-cv-001" id="WKw-ol-002"/>
-                <outlet property="palette" destination="WKw-pv-001" id="WKw-ol-003"/>
+                <outlet property="window" destination="WKDw-window" id="WKDw-o-window"/>
+                <outlet property="canvas" destination="WKDw-canvas" id="WKDw-o-canvas"/>
+                <outlet property="palette" destination="WKDw-palette" id="WKDw-o-palette"/>
+                <outlet property="split" destination="WKDw-split" id="WKDw-o-split"/>
+                <outlet property="leftTabBar" destination="WKDw-leftbar" id="WKDw-o-leftTabBar"/>
+                <outlet property="leftTabView" destination="WKDw-lefttabs" id="WKDw-o-leftTabView"/>
+                <outlet property="rightTabBar" destination="WKDw-rightbar" id="WKDw-o-rightTabBar"/>
+                <outlet property="rightTabView" destination="WKDw-righttabs" id="WKDw-o-rightTabView"/>
+                <outlet property="outlineHost" destination="WKDw-outlinehost" id="WKDw-o-outlineHost"/>
+                <outlet property="problemsHost" destination="WKDw-problemshost" id="WKDw-o-problemsHost"/>
+                <outlet property="inspectorHost" destination="WKDw-inspectorhost" id="WKDw-o-inspectorHost"/>
+                <outlet property="processHost" destination="WKDw-processhost" id="WKDw-o-processHost"/>
             </connections>
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <window title="Process" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" id="WKw-wn-001">
+        <window title="Process" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" id="WKDw-window">
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
             <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
-            <rect key="contentRect" x="160" y="120" width="1100" height="720"/>
+            <rect key="contentRect" x="100" y="80" width="1280" height="780"/>
             <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1055"/>
-            <value key="minSize" type="size" width="600" height="400"/>
-            <view key="contentView" id="WKw-ct-001">
-                <rect key="frame" x="0.0" y="0.0" width="1100" height="720"/>
+            <value key="minSize" type="size" width="900" height="500"/>
+            <view key="contentView" id="WKDw-content">
+                <rect key="frame" x="0" y="0" width="1280" height="780"/>
                 <autoresizingMask key="autoresizingMask"/>
                 <subviews>
-                    <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKw-pv-001" customClass="WKDPaletteView">
-                        <rect key="frame" x="0.0" y="28" width="96" height="692"/>
-                        <autoresizingMask key="autoresizingMask" heightSizable="YES"/>
-                    </customView>
-                    <scrollView fixedFrame="YES" borderType="none" autohidesScrollers="NO" horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" hasHorizontalScroller="YES" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="WKw-sv-001">
-                        <rect key="frame" x="96" y="28" width="1004" height="692"/>
+                    <splitView fixedFrame="YES" arrangesAllSubviews="NO" dividerStyle="thin" vertical="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-split">
+                        <rect key="frame" x="0" y="28" width="1280" height="752"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                        <clipView key="contentView" id="WKw-cl-001">
-                            <rect key="frame" x="0.0" y="0.0" width="1004" height="692"/>
-                            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                            <subviews>
-                                <customView id="WKw-cv-001" customClass="WKDCanvasView">
-                                    <rect key="frame" x="0.0" y="0.0" width="2000" height="2000"/>
+                        <subviews>
+                            <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-left">
+                                <rect key="frame" x="0" y="0" width="230" height="752"/>
+                                <autoresizingMask key="autoresizingMask" heightSizable="YES"/>
+                                <subviews>
+                                    <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-leftbar" customClass="DMTabBar">
+                                        <rect key="frame" x="0" y="726" width="230" height="26"/>
+                                        <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
+                                    </customView>
+                                    <tabView fixedFrame="YES" type="noTabsNoBorder" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-lefttabs">
+                                        <rect key="frame" x="0" y="0" width="230" height="726"/>
+                                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                        <font key="font" metaFont="system"/>
+                                        <tabViewItems>
+                                            <tabViewItem label="Outline" identifier="outline" id="WKDw-lefttabs-outline">
+                                                <view key="view" id="WKDw-lefttabs-outline-v">
+                                                    <rect key="frame" x="0" y="0" width="230" height="726"/>
+                                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                    <subviews>
+                                                        <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-outlinehost">
+                                                            <rect key="frame" x="0" y="0" width="230" height="726"/>
+                                                            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                        </customView>
+                                                    </subviews>
+                                                </view>
+                                            </tabViewItem>
+                                            <tabViewItem label="Insert" identifier="insert" id="WKDw-lefttabs-insert">
+                                                <view key="view" id="WKDw-lefttabs-insert-v">
+                                                    <rect key="frame" x="0" y="0" width="230" height="726"/>
+                                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                    <subviews>
+                                                        <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-palette" customClass="WKDPaletteView">
+                                                            <rect key="frame" x="0" y="0" width="230" height="726"/>
+                                                            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                        </customView>
+                                                    </subviews>
+                                                </view>
+                                            </tabViewItem>
+                                            <tabViewItem label="Problems" identifier="problems" id="WKDw-lefttabs-problems">
+                                                <view key="view" id="WKDw-lefttabs-problems-v">
+                                                    <rect key="frame" x="0" y="0" width="230" height="726"/>
+                                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                    <subviews>
+                                                        <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-problemshost">
+                                                            <rect key="frame" x="0" y="0" width="230" height="726"/>
+                                                            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                        </customView>
+                                                    </subviews>
+                                                </view>
+                                            </tabViewItem>
+                                        </tabViewItems>
+                                    </tabView>
+                                </subviews>
+                            </customView>
+                            <scrollView fixedFrame="YES" borderType="none" autohidesScrollers="NO" horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" hasHorizontalScroller="YES" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-canvasscroll">
+                                <rect key="frame" x="231" y="0" width="748" height="752"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                <clipView key="contentView" id="WKDw-clip">
+                                    <rect key="frame" x="0" y="0" width="748" height="752"/>
+                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                    <subviews>
+                                        <customView id="WKDw-canvas" customClass="WKDCanvasView">
+                                            <rect key="frame" x="0" y="0" width="2000" height="2000"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                        </customView>
+                                    </subviews>
+                                </clipView>
+                                <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="WKDw-hs">
+                                    <rect key="frame" x="0" y="737" width="748" height="15"/>
                                     <autoresizingMask key="autoresizingMask"/>
-                                </customView>
-                            </subviews>
-                        </clipView>
-                        <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="WKw-sr-001">
-                            <rect key="frame" x="0.0" y="677" width="1004" height="15"/>
-                            <autoresizingMask key="autoresizingMask"/>
-                        </scroller>
-                        <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="WKw-sr-002">
-                            <rect key="frame" x="989" y="0.0" width="15" height="692"/>
-                            <autoresizingMask key="autoresizingMask"/>
-                        </scroller>
+                                </scroller>
+                                <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="WKDw-vs">
+                                    <rect key="frame" x="733" y="0" width="15" height="752"/>
+                                    <autoresizingMask key="autoresizingMask"/>
+                                </scroller>
+                                <connections>
+                                    <outlet property="documentView" destination="WKDw-canvas" id="WKDw-o-doc"/>
+                                </connections>
+                            </scrollView>
+                            <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-right">
+                                <rect key="frame" x="980" y="0" width="300" height="752"/>
+                                <autoresizingMask key="autoresizingMask" heightSizable="YES"/>
+                                <subviews>
+                                    <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-rightbar" customClass="DMTabBar">
+                                        <rect key="frame" x="0" y="726" width="300" height="26"/>
+                                        <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
+                                    </customView>
+                                    <tabView fixedFrame="YES" type="noTabsNoBorder" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-righttabs">
+                                        <rect key="frame" x="0" y="0" width="300" height="726"/>
+                                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                        <font key="font" metaFont="system"/>
+                                        <tabViewItems>
+                                            <tabViewItem label="Element" identifier="element" id="WKDw-righttabs-element">
+                                                <view key="view" id="WKDw-righttabs-element-v">
+                                                    <rect key="frame" x="0" y="0" width="300" height="726"/>
+                                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                    <subviews>
+                                                        <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-inspectorhost">
+                                                            <rect key="frame" x="0" y="0" width="300" height="726"/>
+                                                            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                        </customView>
+                                                    </subviews>
+                                                </view>
+                                            </tabViewItem>
+                                            <tabViewItem label="Process" identifier="process" id="WKDw-righttabs-process">
+                                                <view key="view" id="WKDw-righttabs-process-v">
+                                                    <rect key="frame" x="0" y="0" width="300" height="726"/>
+                                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                    <subviews>
+                                                        <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-processhost">
+                                                            <rect key="frame" x="0" y="0" width="300" height="726"/>
+                                                            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                        </customView>
+                                                    </subviews>
+                                                </view>
+                                            </tabViewItem>
+                                        </tabViewItems>
+                                    </tabView>
+                                </subviews>
+                            </customView>
+                        </subviews>
+                        <holdingPriorities>
+                            <real value="250"/>
+                            <real value="250"/>
+                            <real value="250"/>
+                        </holdingPriorities>
                         <connections>
-                            <outlet property="documentView" destination="WKw-cv-001" id="WKw-ol-004"/>
+                            <outlet property="delegate" destination="-2" id="WKDw-o-splitdelegate"/>
                         </connections>
-                    </scrollView>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKw-st-001">
-                        <rect key="frame" x="10" y="6" width="1080" height="17"/>
+                    </splitView>
+                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-status">
+                        <rect key="frame" x="10" y="6" width="1260" height="17"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
-                        <textFieldCell key="cell" lineBreakMode="truncatingTail" truncatesLastVisibleLine="YES" sendsActionOnEndEditing="YES" alignment="left" title="" id="WKw-st-002">
+                        <textFieldCell key="cell" lineBreakMode="truncatingTail" truncatesLastVisibleLine="YES" sendsActionOnEndEditing="YES" alignment="left" title="" id="WKDw-statuscell">
                             <font key="font" metaFont="smallSystem"/>
                             <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
                         <connections>
-                            <binding destination="-2" name="value" keyPath="status" id="WKw-bd-001"/>
+                            <binding destination="-2" name="value" keyPath="status" id="WKDw-b-status"/>
                         </connections>
                     </textField>
                 </subviews>
             </view>
             <connections>
-                <outlet property="delegate" destination="-2" id="WKw-ol-005"/>
+                <outlet property="delegate" destination="-2" id="WKDw-o-windowdelegate"/>
             </connections>
         </window>
     </objects>

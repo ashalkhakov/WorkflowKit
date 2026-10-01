@@ -14,9 +14,65 @@ status line says either that the engine runs it, or why it doesn't: "service
 tasks are external tasks (camunda:type="external" with a camunda:topic) or
 run a delegate", for instance.
 
+## The window
+
+Three panes, as RDLKit's and XFormsKit's designers have them:
+
+- **Left**, behind three tabs:
+  - **Outline:** the process with its nodes, a subprocess's contents and an
+    activity's boundary events beneath them, and each node's outgoing flows.
+  - **Insert:** the palette.
+  - **Problems:** what the engine says about the process.
+- **Centre:** the canvas.
+- **Right**, behind two tabs:
+  - **Element:** the inspector for what is selected.
+  - **Process:** the process's own settings.
+
+The outline, the canvas and the inspector share one selection. View ▸
+Outline, Insert, Problems, Element and Process (⌘1 to ⌘5) bring each tab
+forward.
+
+## The inspector
+
+The inspector shows an element's properties in sections, according to what
+the element is:
+
+- **Every element:** General (id, name, documentation).
+- **User task:** Assignment (assignee, candidate users and groups, due and
+  follow-up dates, priority) and Form (form key, form handler).
+- **Service or send task:** Implementation: an external task on a topic,
+  or a delegate by class or expression.
+- **Business rule task:** Decision (decision, binding, version, result
+  variable, how the result maps).
+- **Script task:** Action (`wf:action`).
+- **Call activity:** Called Process (process key, binding, version).
+- **Event:** its definition's details: a timer's kind and value; a message
+  or signal by name; an error or escalation by its code; a condition. A
+  boundary event can also be made non-interrupting.
+- **Activity:** Multi-instance (parallel or sequential, collection, element
+  variable, cardinality, completion condition).
+- **Every node:** Continuation (asynchronous before and after, exclusive,
+  and for activities the retry cycle).
+- **Sequence flow:** its condition, and whether it is its source's default.
+- **Process:** id, name, executable, starter groups and users, history
+  days, task priority.
+
+A field writes when you leave it or press Return. A check box or pop-up
+writes when used. Each write is one undoable change.
+
+- **Ids:** changing an id updates every reference to it.
+- **References:** naming a message, signal, error or escalation makes its
+  definition at the top of the file, or reuses the one already there.
+- **Names:** values are written under the attribute and element names the
+  engine reads.
+
+The properties are declared once each in `WKDProperties`, which says where
+each value lives in the XML. Their tests check the engine reads what they
+write.
+
 ## Using it
 
-- **Palette:** click a tool, then click the canvas to place it. Events,
+- **Palette** (the Insert tab): click a tool, then click the canvas to place it. Events,
   tasks, a subprocess, gateways and boundary events are all there. A node
   placed inside a subprocess belongs to it. A boundary event placed near a
   task's or subprocess's edge attaches to it there.
@@ -39,8 +95,6 @@ run a delegate", for instance.
   out like this when it opens.
 - **Undo and Redo** cover every change. **View** zooms in and out.
 
-Names and the other properties come with the inspector, the next milestone.
-
 ## Building
 
 **On GNUstep**, build the engine library at the top of the repository with
@@ -60,4 +114,6 @@ Names and the other properties come with the inspector, the next milestone.
 | `WKDDiagram` | What the canvas draws, read from the XML: shapes with their bounds, subprocess and boundary host, and flows with their waypoints. It is read again after every change. |
 | `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. |
 | `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's. |
+| `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it. |
+| `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with its DMTabBar (`ThirdParty/`). |
 | `WKDCanvasView`, `WKDPaletteView`, `WKDRenderer` | Drawing and editing, adapted from CoreWF's graph view. BPMN notation is drawn with `NSBezierPath`, with no images. |

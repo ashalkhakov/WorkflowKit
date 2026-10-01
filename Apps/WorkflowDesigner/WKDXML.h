@@ -25,3 +25,26 @@ NSString *WKDFormat(double value);
 /* A new element of the namespace, with the prefix the document gives it,
  * declared on the root under the usual one when the document has none. */
 NSXMLElement *WKDNewElement(NSXMLDocument *document, NSString *uri, NSString *local);
+
+extern NSString * const WKDCamundaNamespace;
+extern NSString * const WKDExtensionNamespace;
+extern NSString * const WKDXSINamespace;
+
+/* An attribute in a namespace -- camunda:assignee -- by the prefix the
+ * document gives the namespace; nil when it has none. */
+NSString *WKDQualifiedAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *uri, NSString *local);
+/* Sets it, declaring the namespace on the root when the document has not;
+ * nil or empty removes it. */
+void WKDSetQualifiedAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *uri, NSString *local,
+                              NSString *value);
+/* The child, made where BPMN's schema puts it when there is none:
+ * documentation first, then extensions, incoming, outgoing, the rest, and
+ * loop characteristics last. */
+NSXMLElement *WKDEnsureChild(NSXMLDocument *document, NSXMLElement *parent, NSString *uri, NSString *local);
+/* The child's text; nil when there is no such child. */
+NSString *WKDChildText(NSXMLElement *parent, NSString *uri, NSString *local);
+/* Sets the child's text, making the child; nil or empty removes it. */
+NSXMLElement *WKDSetChildText(NSXMLDocument *document, NSXMLElement *parent, NSString *uri, NSString *local,
+                              NSString *text);
+/* Every element of the document with the id. */
+NSXMLElement *WKDElementWithId(NSXMLDocument *document, NSString *elementId);
