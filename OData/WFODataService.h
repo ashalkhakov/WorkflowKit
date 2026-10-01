@@ -65,9 +65,28 @@
  *
  * and a scope of the principal's lifts each limit, for whoever operates
  * the engine: WFODataScopeReadAllTasks, WFODataScopeAssignTasks,
- * WFODataScopeReadAllDefinitions, WFODataScopeStartAny. Without an
- * authenticator, or a principal, nothing is limited.
+ * WFODataScopeReadAllDefinitions, WFODataScopeStartAny.
+ *
+ * What a caller may do at all is the scopes its identity provider grants
+ * it, each naming what it allows, as $metadata says (Capabilities
+ * restrictions' Permissions; ODataKit checks them before anything runs):
+ *
+ *   Tasks.Work          the task list: Tasks, Forms, the ProcessDefinitions
+ *                       one may start; claiming, completing, submitting
+ *                       forms; starting what one may
+ *   Operations.Read     every other set, a definition's Bpmn(), an
+ *                       instance's ActiveActivities()
+ *   Operations.Manage   the rest of the actions: on instances, jobs and
+ *                       definitions, CorrelateMessage
+ *   Deployments.Create  Deploy
+ *
+ * The service requires a signed-in caller: without an authenticator, or a
+ * principal, a request is answered 401.
  */
+FOUNDATION_EXPORT NSString * const WFODataScopeWork;                /* Tasks.Work */
+FOUNDATION_EXPORT NSString * const WFODataScopeOperationsRead;      /* Operations.Read */
+FOUNDATION_EXPORT NSString * const WFODataScopeOperationsManage;    /* Operations.Manage */
+FOUNDATION_EXPORT NSString * const WFODataScopeDeploy;              /* Deployments.Create */
 FOUNDATION_EXPORT NSString * const WFODataScopeReadAllTasks;        /* Tasks.ReadAll */
 FOUNDATION_EXPORT NSString * const WFODataScopeAssignTasks;         /* Tasks.Assign */
 FOUNDATION_EXPORT NSString * const WFODataScopeReadAllDefinitions;  /* ProcessDefinitions.ReadAll */

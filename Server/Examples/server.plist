@@ -3,4 +3,6 @@
     Deployments = Examples/deployments;
     HistoryLevel = full;
     Port = 8080;
+    DevelopmentUser = developer;
+    DevelopmentGroups = (managers);
 }

@@ -8,7 +8,7 @@ serve=$1
 port=${WF_CHECK_PORT:-18089}
 root="http://127.0.0.1:$port/api"
 log=$(mktemp)
-"$serve" -StoreType InMemory -Deployments Examples/deployments -Port "$port" 2>"$log" &
+"$serve" -StoreType InMemory -Deployments Examples/deployments -Port "$port" -DevelopmentUser checker 2>"$log" &
 pid=$!
 trap 'kill $pid 2>/dev/null || true; rm -f "$log"' EXIT
 

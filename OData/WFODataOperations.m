@@ -116,6 +116,16 @@ WFODataValue(id value)
 
 @implementation WFODataOperations
 
++ (NSDictionary *)ODataOperationScopes
+{
+	NSArray *start = @[ WFODataScopeWork, WFODataScopeStartAny ];
+	return @{ @"startProcessInstanceWithKey:businessKey:variables:reply:": start,
+	          @"submitStartFormWithKey:businessKey:instance:reply:": start,
+	          @"startFormInstanceWithKey:reply:": start,
+	          @"correlateMessageWithName:businessKey:processInstanceId:variables:reply:": @[ WFODataScopeOperationsManage ],
+	          @"deployWithName:resources:reply:": @[ WFODataScopeDeploy ] };
+}
+
 - (instancetype)initWithEngine:(WFProcessEngine *)engine
 {
 	if ((self = [super init])) {
@@ -229,6 +239,14 @@ WFODataValue(id value)
 
 @implementation WFTaskEntity (WFOData)
 
++ (NSDictionary *)ODataOperationScopes
+{
+	NSArray *work = @[ WFODataScopeWork, WFODataScopeAssignTasks ];
+	return @{ @"formInstance:": work, @"submitFormWithInstance:reply:": work,
+	          @"completeWithVariables:reply:": work, @"claimWithUserId:reply:": work,
+	          @"unclaim:": work, @"assignWithUserId:reply:": work };
+}
+
 - (WFTaskService *)wf_taskServiceFor:(ODataReply *)reply
 {
 	return [WFODataOperations operationsOf:reply.request].engine.taskService;
@@ -311,6 +329,14 @@ WFODataValue(id value)
 	          @"activeActivities:": @"Collection(Edm.String)" };
 }
 
++ (NSDictionary *)ODataOperationScopes
+{
+	NSArray *manage = @[ WFODataScopeOperationsManage ];
+	return @{ @"suspend:": manage, @"activate:": manage, @"cancelWithReason:reply:": manage,
+	          @"setVariablesWithVariables:reply:": manage, @"removeVariablesWithNames:reply:": manage,
+	          @"activeActivities:": @[ WFODataScopeOperationsRead ] };
+}
+
 - (WFRuntimeService *)wf_runtimeServiceFor:(ODataReply *)reply
 {
 	return [WFODataOperations operationsOf:reply.request].engine.runtimeService;
@@ -376,6 +402,11 @@ WFODataValue(id value)
 
 @implementation WFJobEntity (WFOData)
 
++ (NSDictionary *)ODataOperationScopes
+{
+	return @{ @"execute:": @[ WFODataScopeOperationsManage ], @"setRetriesWithRetries:reply:": @[ WFODataScopeOperationsManage ] };
+}
+
 - (WFManagementService *)wf_managementServiceFor:(ODataReply *)reply
 {
 	return [WFODataOperations operationsOf:reply.request].engine.managementService;
@@ -401,6 +432,13 @@ WFODataValue(id value)
 @end
 
 @implementation WFDefinitionRecordEntity (WFOData)
+
++ (NSDictionary *)ODataOperationScopes
+{
+	NSArray *manage = @[ WFODataScopeOperationsManage ];
+	return @{ @"suspendWithIncludeInstances:reply:": manage, @"activateWithIncludeInstances:reply:": manage,
+	          @"bpmn:": @[ WFODataScopeOperationsRead, WFODataScopeWork ] };
+}
 
 - (WFRepositoryService *)wf_repositoryServiceFor:(ODataReply *)reply
 {

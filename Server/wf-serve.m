@@ -35,6 +35,11 @@
  *   GroupsClaim   the claim a principal's groups are in (default groups):
  *                 what candidate groups name; any other claim is matched
  *                 by a candidate group name:value
+ *   DevelopmentUser, DevelopmentGroups
+ *                 for working without an identity provider: every request
+ *                 is this user's, in these groups (an array, or text
+ *                 separated by commas), with every scope the API has. Never
+ *                 where anyone else can reach the port.
  *   TrustedUserHeader, ProxySecretHeader, ProxySecretEnvironment,
  *   JWTIssuer, JWTAudience, AllowAnonymous
  *                 who is asking, as ois-serve has them (ODataAuthentication.h)
@@ -55,6 +60,25 @@
 #ifdef WF_SERVE_MYSQL
 #import <CDMySQLStore/CDMySQLStore.h>
 #endif
+
+/* Everyone is one developer, who may do everything. */
+@interface WFDevelopmentAuthenticator : NSObject <ODataAuthenticator>
+@property (nonatomic, copy) NSString *user;
+@property (nonatomic, copy) NSArray<NSString *> *groups;
+@end
+
+@implementation WFDevelopmentAuthenticator
+
+- (void)authenticateRequest:(ODataRequest *)request reply:(ODataReply *)reply
+{
+	NSString *every = [@[ WFODataScopeWork, WFODataScopeOperationsRead, WFODataScopeOperationsManage,
+	                      WFODataScopeDeploy, WFODataScopeReadAllTasks, WFODataScopeAssignTasks,
+	                      WFODataScopeReadAllDefinitions, WFODataScopeStartAny ] componentsJoinedByString:@" "];
+	[reply finishWithResult:[[ODataPrincipal alloc] initWithSubject:self.user
+	                                                         claims:@{ @"groups": self.groups ?: @[], @"scope": every }]];
+}
+
+@end
 
 static void
 WFFail(NSString *message)
@@ -165,6 +189,17 @@ WFDeploy(WFProcessEngine *engine, NSString *directory)
 static void
 WFAuthenticate(ODataService *service, NSDictionary *settings)
 {
+	NSString *developer = [settings objectForKey:@"DevelopmentUser"];
+	if ([developer length] > 0) {
+		WFDevelopmentAuthenticator *development = [[WFDevelopmentAuthenticator alloc] init];
+		development.user = developer;
+		id groups = [settings objectForKey:@"DevelopmentGroups"];
+		development.groups = [groups isKindOfClass:[NSString class]] ? [groups componentsSeparatedByString:@","] : groups;
+		service.authenticator = development;
+		fprintf(stderr, "wf-serve: warning: every request is %s's, who may do everything: for development only\n",
+		        [developer UTF8String]);
+		return;
+	}
 	NSString *userHeader = [settings objectForKey:@"TrustedUserHeader"];
 	NSString *secretHeader = [settings objectForKey:@"ProxySecretHeader"];
 	NSString *issuer = [settings objectForKey:@"JWTIssuer"];

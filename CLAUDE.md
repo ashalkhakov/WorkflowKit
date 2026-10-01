@@ -99,6 +99,11 @@ of `Server/wf-serve.m`). It needs ODataKit's `Server/` built too; with
 On macOS it is the `wf-serve` scheme, which compiles ODataKit's HTTP
 adapter and the GCDWebServer sources it vendors from `../ODataKit`.
 
+The API requires a signed-in caller with the scopes its sets and actions
+declare (`OData/WFODataService.h`). Without an identity provider,
+`-DevelopmentUser` signs every request in as one user with every scope:
+the example config and the check use it; never expose such a server.
+
 ## macOS
 
 `WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`

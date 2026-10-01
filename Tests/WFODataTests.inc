@@ -73,9 +73,14 @@
 	return [response objectForKey:@"json"];
 }
 
+/* The service, signed into as a tester with every scope unless a request
+ * says otherwise (WFHeaderAuthenticator). */
 - (ODataService *)serviceFor:(WFProcessEngine *)engine
 {
-	return [WFODataService serviceForEngine:engine serviceRoot:[NSURL URLWithString:@"http://example.test/api/"]];
+	ODataService *service = [WFODataService serviceForEngine:engine
+	                                             serviceRoot:[NSURL URLWithString:@"http://example.test/api/"]];
+	service.authenticator = [[WFHeaderAuthenticator alloc] init];
+	return service;
 }
 
 /* Two orders: a for Acme over 1000, b for Beta. */
@@ -533,7 +538,6 @@
 {
 	WFProcessEngine *engine = [self engineWithHandler:nil];
 	ODataService *service = [self serviceFor:engine];
-	service.authenticator = [[WFHeaderAuthenticator alloc] init];
 	NSString *a = [self run:[self claimedPurchase] engine:engine variables:nil];
 	[self run:[self claimedPurchase] engine:engine variables:nil];
 	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"open"];
@@ -542,19 +546,24 @@
 	NSError *error = nil;
 	[self run:[b build:&error] engine:engine variables:nil];
 
-	NSDictionary *ann = @{ @"X-User": @"ann", @"X-Groups": @"sales" };
-	NSDictionary *bob = @{ @"X-User": @"bob", @"X-Department": @"purchasing" };
-	NSDictionary *eve = @{ @"X-User": @"eve", @"X-Groups": @"staff" };
-	NSDictionary *operator = @{ @"X-User": @"oz", @"X-Scopes": @"Tasks.ReadAll Tasks.Assign ProcessDefinitions.ReadAll ProcessInstances.StartAny" };
+	NSDictionary *ann = @{ @"X-User": @"ann", @"X-Groups": @"sales", @"X-Scopes": @"Tasks.Work" };
+	NSDictionary *bob = @{ @"X-User": @"bob", @"X-Department": @"purchasing", @"X-Scopes": @"Tasks.Work" };
+	NSDictionary *eve = @{ @"X-User": @"eve", @"X-Groups": @"staff", @"X-Scopes": @"Tasks.Work" };
+	NSDictionary *operator = @{ @"X-User": @"oz", @"X-Scopes": @"Operations.Read Tasks.ReadAll Tasks.Assign ProcessDefinitions.ReadAll ProcessInstances.StartAny" };
 	NSUInteger (^count)(NSString *, NSDictionary *) = ^NSUInteger(NSString *path, NSDictionary *who) {
 		NSDictionary *response = [self send:@"GET" path:path body:nil headers:who service:service];
 		XCTAssertEqual([self statusOf:response], (NSInteger)200, @"%@: %@", path, [response objectForKey:@"text"]);
 		return [[[self jsonOf:response] objectForKey:@"value"] count];
 	};
-	XCTAssertEqual([self statusOf:[self send:@"GET" path:@"Tasks" body:nil service:service]], (NSInteger)401);
+	XCTAssertEqual(([self statusOf:[self send:@"GET" path:@"Tasks" body:nil headers:@{ @"X-User": @"" } service:service]]),
+		(NSInteger)401);
+	XCTAssertEqual(([self statusOf:[self send:@"GET" path:@"Tasks" body:nil headers:@{ @"X-User": @"ann" } service:service]]),
+		(NSInteger)403, @"signed in, but not to work on tasks");
+	XCTAssertEqual(([self statusOf:[self send:@"GET" path:@"ProcessInstances" body:nil headers:ann service:service]]),
+		(NSInteger)403, @"an operator's");
+	XCTAssertEqual(count(@"Tasks", @{ @"X-User": @"dan", @"X-Scopes": @"Tasks.Work" }), (NSUInteger)1, @"his own");
 	XCTAssertEqual(count(@"Tasks", ann), (NSUInteger)2, @"offered to sales");
 	XCTAssertEqual(count(@"Tasks", bob), (NSUInteger)2, @"offered to purchasing, a claim");
-	XCTAssertEqual(count(@"Tasks", @{ @"X-User": @"dan" }), (NSUInteger)1, @"his own");
 	XCTAssertEqual(count(@"Tasks", eve), (NSUInteger)0);
 	XCTAssertEqual(count(@"Tasks", operator), (NSUInteger)3);
 

@@ -55,6 +55,15 @@ served as a row with its XForms document (`Forms`), a task linking to its
 own, and its instance comes and goes as XML through the form's handler
 (`FormInstance()`, `SubmitForm`, `SubmitStartForm`).
 
+Who may use the API is twofold. What a caller may do at all is the OAuth
+scopes its identity provider grants, named for what they allow
+(`Tasks.Work`, `Operations.Read`, `Operations.Manage`,
+`Deployments.Create`), declared on the sets and operations and checked by
+ODataKit before anything runs. Which rows it sees is the processes': a
+person's tasks and those offered to them, and the definitions they may
+start, matched by user, group or claim; a few scopes lift those limits for
+operators. The service requires a signed-in caller.
+
 ## Repository
 
 A **deployment** is a named set of resources: the BPMN XML files. Deploying

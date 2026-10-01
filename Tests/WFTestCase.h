@@ -58,7 +58,8 @@
 #ifdef WORKFLOWKIT_ODATA
 /* Who is asking, from headers: X-User the subject, X-Groups (comma
  * separated) the groups claim, X-Department a department claim, X-Scopes
- * the scope claim. No X-User: no one. */
+ * the scope claim. An empty X-User: no one; none: a tester with every
+ * scope the API has. */
 @interface WFHeaderAuthenticator : NSObject <ODataAuthenticator>
 @end
 #endif

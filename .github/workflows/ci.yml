@@ -43,10 +43,11 @@ jobs:
       # PostgreSQL store has one connection), and #53's optimistic locking,
       # which the engine's joins rely on.
       FREECOREDATA_REF: c0404dbea20eb74fc2c278e24680098d9e354690
-      # ODataKit, for the OData API (WorkflowKitOData): #3, which leaves
-      # what the engine keeps for itself out of what it serves
-      # (OData.served NO). Built in its checkout, not installed.
-      ODATAKIT_REF: d37586bcf9d28f5ab261dc838a4b6e43f45f0566
+      # ODataKit, for the OData API (WorkflowKitOData): #4, the scopes a
+      # set's methods and an operation need, on #3, which leaves what the
+      # engine keeps for itself out of what it serves (OData.served NO).
+      # Built in its checkout, not installed.
+      ODATAKIT_REF: 64d31735511c4341c2653da4918ba7de126dc84e
       ODATAKIT: ${{ github.workspace }}/ODataKit
     defaults:
       run:

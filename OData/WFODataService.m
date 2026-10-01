@@ -4,26 +4,19 @@
 #import "WFIdentity+Internal.h"
 #import "WFTaskQuery+Internal.h"
 
+NSString * const WFODataScopeWork = @"Tasks.Work";
+NSString * const WFODataScopeOperationsRead = @"Operations.Read";
+NSString * const WFODataScopeOperationsManage = @"Operations.Manage";
+NSString * const WFODataScopeDeploy = @"Deployments.Create";
 NSString * const WFODataScopeReadAllTasks = @"Tasks.ReadAll";
 NSString * const WFODataScopeAssignTasks = @"Tasks.Assign";
 NSString * const WFODataScopeReadAllDefinitions = @"ProcessDefinitions.ReadAll";
 NSString * const WFODataScopeStartAny = @"ProcessInstances.StartAny";
 
-/* What a principal may do: OAuth's scope claim (text) or scp (a list). */
-static NSSet *
-WFODataScopes(ODataPrincipal *principal)
-{
-	id scope = [principal.claims objectForKey:@"scope"] ?: [principal.claims objectForKey:@"scp"];
-	if ([scope isKindOfClass:[NSString class]]) {
-		return [NSSet setWithArray:[scope componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
-	}
-	return [scope isKindOfClass:[NSArray class]] ? [NSSet setWithArray:scope] : [NSSet set];
-}
-
 BOOL
 WFODataHasScope(ODataRequest *request, NSString *scope)
 {
-	return request.principal == nil || [WFODataScopes(request.principal) containsObject:scope];
+	return request.principal == nil || [request.principal.scopes containsObject:scope];
 }
 
 WFIdentity *
@@ -173,10 +166,14 @@ WFODataIsNil(NSString *key, BOOL isNil)
 	operations.groupsClaim = groupsClaim;
 	service.serviceOperations = operations;
 	NSDictionary *entities = [service.model entitiesByName];
-	[service setHandler:[[WFODataTasksHandler alloc] initWithEntity:[entities objectForKey:@"WFTask"]]
-	       forEntitySet:@"Tasks"];
-	[service setHandler:[[WFODataDefinitionsHandler alloc] initWithEntity:[entities objectForKey:@"WFDefinitionRecord"]]
-	       forEntitySet:@"ProcessDefinitions"];
+	NSSet *working = [NSSet setWithObjects:WFODataScopeWork, WFODataScopeOperationsRead, nil];
+	NSSet *operating = [NSSet setWithObject:WFODataScopeOperationsRead];
+	WFODataHandler *tasks = [[WFODataTasksHandler alloc] initWithEntity:[entities objectForKey:@"WFTask"]];
+	tasks.readScopes = [NSSet setWithObjects:WFODataScopeWork, WFODataScopeReadAllTasks, nil];
+	[service setHandler:tasks forEntitySet:@"Tasks"];
+	WFODataHandler *definitions = [[WFODataDefinitionsHandler alloc] initWithEntity:[entities objectForKey:@"WFDefinitionRecord"]];
+	definitions.readScopes = working;
+	[service setHandler:definitions forEntitySet:@"ProcessDefinitions"];
 	NSDictionary *sets = @{ @"Forms": @"WFFormRecord",
 	                        @"Deployments": @"WFDeployment",
 	                        @"Resources": @"WFResource",
@@ -192,19 +189,22 @@ WFODataIsNil(NSString *key, BOOL isNil)
 	                        @"HistoricProcessInstances": @"WFHistoricProcessInstance",
 	                        @"HistoricTaskInstances": @"WFHistoricTaskInstance" };
 	for (NSString *set in sets) {
-		[service setHandler:[[WFODataHandler alloc] initWithEntity:[entities objectForKey:[sets objectForKey:set]]]
-		       forEntitySet:set];
+		WFODataHandler *handler = [[WFODataHandler alloc] initWithEntity:[entities objectForKey:[sets objectForKey:set]]];
+		handler.readScopes = [set isEqualToString:@"Forms"] ? working : operating;
+		[service setHandler:handler forEntitySet:set];
 	}
 	/* A process instance is the root of its execution tree, and its
 	 * variables are the root's own, not a scope's inside it. */
 	WFODataFilteredHandler *instances =
 		[[WFODataFilteredHandler alloc] initWithEntity:[entities objectForKey:@"WFExecution"]];
 	instances.visible = WFODataIsNil(@"parent", YES);
+	instances.readScopes = operating;
 	[service setHandler:instances forEntitySet:@"ProcessInstances"];
 	WFODataFilteredHandler *variables =
 		[[WFODataFilteredHandler alloc] initWithEntity:[entities objectForKey:@"WFVariable"]];
 	variables.visible = [NSCompoundPredicate andPredicateWithSubpredicates:@[
 		WFODataIsNil(@"execution", NO), WFODataIsNil(@"execution.parent", YES) ]];
+	variables.readScopes = operating;
 	[service setHandler:variables forEntitySet:@"Variables"];
 	return service;
 }
