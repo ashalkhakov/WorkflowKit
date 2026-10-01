@@ -1,9 +1,5 @@
 #import <Foundation/Foundation.h>
-#if __has_include(<ODataIncrementalStore/ODataConfiguration.h>)
 #import <ODataIncrementalStore/ODataConfiguration.h>
-#else
-#import "ODataConfiguration.h"
-#endif
 
 @protocol ODataTransport;
 
