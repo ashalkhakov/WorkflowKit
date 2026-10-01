@@ -1284,12 +1284,12 @@ processInstanceId:(NSString *)processInstanceId
 			}
 			id ttl = [ttls objectForKey:instance.definitionId];
 			if (ttl == nil) {
-				NSManagedObject *record = [[command fetch:@"WFDefinitionRecord"
+				WFDefinitionRecordEntity *record = [[command fetch:@"WFDefinitionRecord"
 				                                predicate:[NSPredicate predicateWithFormat:
 				                                    @"definitionId == %@", instance.definitionId]
 				                                     sort:nil
 				                                    limit:1] lastObject];
-				ttl = [record valueForKey:@"historyTimeToLive"] ?: [NSNull null];
+				ttl = record.historyTimeToLive ?: (id)[NSNull null];
 				[ttls setObject:ttl forKey:instance.definitionId];
 			}
 			if (ttl == [NSNull null]
@@ -1320,20 +1320,20 @@ processInstanceId:(NSString *)processInstanceId
 	NSMutableArray *values = [NSMutableArray array];
 	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
-		for (NSManagedObject *row in [command fetch:@"WFHistoricDecisionInstance"
+		for (WFHistoricDecisionInstanceEntity *row in [command fetch:@"WFHistoricDecisionInstance"
 		                                  predicate:predicate
 		                                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"sequence" ascending:YES] ]
 		                                      limit:0]) {
 			WFHistoricDecisionInstance *value = [[WFHistoricDecisionInstance alloc] init];
-			value.decisionInstanceId = [row valueForKey:@"decisionInstanceId"];
-			value.decisionDefinitionId = [row valueForKey:@"decisionDefinitionId"];
-			value.decisionKey = [row valueForKey:@"decisionKey"];
-			value.processInstanceId = [row valueForKey:@"processInstanceId"];
-			value.activityId = [row valueForKey:@"activityId"];
-			value.activityInstanceId = [row valueForKey:@"activityInstanceId"];
-			value.evaluationTime = [row valueForKey:@"evaluationTime"];
-			NSData *inputs = [row valueForKey:@"inputs"];
-			NSData *outputs = [row valueForKey:@"outputs"];
+			value.decisionInstanceId = row.decisionInstanceId;
+			value.decisionDefinitionId = row.decisionDefinitionId;
+			value.decisionKey = row.decisionKey;
+			value.processInstanceId = row.processInstanceId;
+			value.activityId = row.activityId;
+			value.activityInstanceId = row.activityInstanceId;
+			value.evaluationTime = row.evaluationTime;
+			NSData *inputs = row.inputs;
+			NSData *outputs = row.outputs;
 			value.inputs = inputs != nil ? [NSJSONSerialization JSONObjectWithData:inputs options:0 error:NULL] : @{};
 			value.outputs = outputs != nil ? [NSJSONSerialization JSONObjectWithData:outputs options:0 error:NULL] : @[];
 			[values addObject:value];

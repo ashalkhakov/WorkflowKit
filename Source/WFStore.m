@@ -3,11 +3,11 @@
 #import "WFForm.h"
 #import <CoreData/CoreData.h>
 
-static NSString * const WFDeploymentEntity = @"WFDeployment";
-static NSString * const WFResourceEntity = @"WFResource";
-static NSString * const WFDefinitionEntity = @"WFDefinitionRecord";
-static NSString * const WFDecisionEntity = @"WFDecisionRecord";
-static NSString * const WFSubscriptionEntity = @"WFEventSubscription";
+static NSString * const WFDeploymentEntityName = @"WFDeployment";
+static NSString * const WFResourceEntityName = @"WFResource";
+static NSString * const WFDefinitionEntityName = @"WFDefinitionRecord";
+static NSString * const WFDecisionEntityName = @"WFDecisionRecord";
+static NSString * const WFSubscriptionEntityName = @"WFEventSubscription";
 static NSString * const WFJobEntityName = @"WFJob";
 
 @implementation WFDeploymentRecord
@@ -149,54 +149,53 @@ static NSString * const WFJobEntityName = @"WFJob";
 	return ok;
 }
 
-- (WFDeploymentRecord *)deploymentRecordFromRow:(NSManagedObject *)row
+- (WFDeploymentRecord *)deploymentRecordFromRow:(WFDeploymentEntity *)row
 {
 	if (row == nil) {
 		return nil;
 	}
 	WFDeploymentRecord *record = [[WFDeploymentRecord alloc] init];
-	record.deploymentId = [row valueForKey:@"deploymentId"];
-	record.name = [row valueForKey:@"name"];
-	record.deployedAt = [row valueForKey:@"deployedAt"];
+	record.deploymentId = row.deploymentId;
+	record.name = row.name;
+	record.deployedAt = row.deployedAt;
 	NSMutableDictionary *resources = [NSMutableDictionary dictionary];
-	for (NSManagedObject *resource in [row valueForKey:@"resources"]) {
-		[resources setObject:[resource valueForKey:@"bytes"]
-		              forKey:[resource valueForKey:@"name"]];
+	for (WFResourceEntity *resource in row.resources) {
+		[resources setObject:resource.bytes forKey:resource.name];
 	}
 	record.resources = resources;
 	return record;
 }
 
-- (WFDefinitionRecord *)definitionRecordFromRow:(NSManagedObject *)row
+- (WFDefinitionRecord *)definitionRecordFromRow:(WFDefinitionRecordEntity *)row
 {
 	if (row == nil) {
 		return nil;
 	}
 	WFDefinitionRecord *record = [[WFDefinitionRecord alloc] init];
-	record.definitionId = [row valueForKey:@"definitionId"];
-	record.key = [row valueForKey:@"key"];
-	record.name = [row valueForKey:@"name"];
-	record.version = [[row valueForKey:@"version"] integerValue];
-	record.deploymentId = [[row valueForKey:@"deployment"] valueForKey:@"deploymentId"];
-	record.resourceName = [row valueForKey:@"resourceName"];
-	record.suspended = [[row valueForKey:@"suspended"] boolValue];
-	record.historyTimeToLive = [row valueForKey:@"historyTimeToLive"];
+	record.definitionId = row.definitionId;
+	record.key = row.key;
+	record.name = row.name;
+	record.version = (NSInteger)row.version;
+	record.deploymentId = row.deployment.deploymentId;
+	record.resourceName = row.resourceName;
+	record.suspended = row.suspended;
+	record.historyTimeToLive = row.historyTimeToLive;
 	return record;
 }
 
-- (WFDecisionRecord *)decisionRecordFromRow:(NSManagedObject *)row
+- (WFDecisionRecord *)decisionRecordFromRow:(WFDecisionRecordEntity *)row
 {
 	if (row == nil) {
 		return nil;
 	}
 	WFDecisionRecord *record = [[WFDecisionRecord alloc] init];
-	record.definitionId = [row valueForKey:@"definitionId"];
-	record.key = [row valueForKey:@"key"];
-	record.name = [row valueForKey:@"name"];
-	record.version = [[row valueForKey:@"version"] integerValue];
-	record.versionTag = [row valueForKey:@"versionTag"];
-	record.deploymentId = [[row valueForKey:@"deployment"] valueForKey:@"deploymentId"];
-	record.resourceName = [row valueForKey:@"resourceName"];
+	record.definitionId = row.definitionId;
+	record.key = row.key;
+	record.name = row.name;
+	record.version = (NSInteger)row.version;
+	record.versionTag = row.versionTag;
+	record.deploymentId = row.deployment.deploymentId;
+	record.resourceName = row.resourceName;
 	return record;
 }
 
@@ -204,19 +203,18 @@ static NSString * const WFJobEntityName = @"WFJob";
 - (void)insertForm:(WFFormDefinition *)form
                 of:(NSString *)activityId
           document:(NSString *)document
-        definition:(NSManagedObject *)definitionRow
+        definition:(WFDefinitionRecordEntity *)definitionRow
              start:(BOOL)start
 {
-	NSString *definitionId = [definitionRow valueForKey:@"definitionId"];
-	NSManagedObject *formRow = [NSEntityDescription insertNewObjectForEntityForName:@"WFFormRecord"
-	                                                         inManagedObjectContext:_context];
-	[formRow setValue:[NSString stringWithFormat:@"%@:%@", definitionId, activityId] forKey:@"formId"];
-	[formRow setValue:definitionId forKey:@"definitionId"];
-	[formRow setValue:activityId forKey:@"activityId"];
-	[formRow setValue:form.formKey forKey:@"formKey"];
-	[formRow setValue:document forKey:@"document"];
-	[formRow setValue:[NSNumber numberWithBool:start] forKey:@"startForm"];
-	[formRow setValue:definitionRow forKey:@"definition"];
+	WFFormRecordEntity *formRow = [NSEntityDescription insertNewObjectForEntityForName:@"WFFormRecord"
+	                                                            inManagedObjectContext:_context];
+	formRow.formId = [NSString stringWithFormat:@"%@:%@", definitionRow.definitionId, activityId];
+	formRow.definitionId = definitionRow.definitionId;
+	formRow.activityId = activityId;
+	formRow.formKey = form.formKey;
+	formRow.document = document;
+	formRow.startForm = start;
+	formRow.definition = definitionRow;
 }
 
 - (NSArray<WFDefinitionRecord *> *)insertDeployment:(WFDeploymentRecord *)deployment
@@ -228,27 +226,27 @@ static NSString * const WFJobEntityName = @"WFJob";
 	__block NSError *localError = nil;
 	NSMutableArray *stored = [NSMutableArray array];
 	[_context performBlockAndWait:^{
-		NSManagedObject *row = [NSEntityDescription
-			insertNewObjectForEntityForName:WFDeploymentEntity
+		WFDeploymentEntity *row = [NSEntityDescription
+			insertNewObjectForEntityForName:WFDeploymentEntityName
 			         inManagedObjectContext:self->_context];
-		[row setValue:deployment.deploymentId forKey:@"deploymentId"];
-		[row setValue:deployment.name forKey:@"name"];
-		[row setValue:deployment.deployedAt forKey:@"deployedAt"];
+		row.deploymentId = deployment.deploymentId;
+		row.name = deployment.name;
+		row.deployedAt = deployment.deployedAt;
 		for (NSString *name in deployment.resources) {
-			NSManagedObject *resource = [NSEntityDescription
-				insertNewObjectForEntityForName:WFResourceEntity
+			WFResourceEntity *resource = [NSEntityDescription
+				insertNewObjectForEntityForName:WFResourceEntityName
 				         inManagedObjectContext:self->_context];
-			[resource setValue:name forKey:@"name"];
-			[resource setValue:[NSString stringWithFormat:@"%@:%@", deployment.deploymentId, name] forKey:@"resourceId"];
-			[resource setValue:[deployment.resources objectForKey:name] forKey:@"bytes"];
-			[resource setValue:row forKey:@"deployment"];
+			resource.name = name;
+			resource.resourceId = [NSString stringWithFormat:@"%@:%@", deployment.deploymentId, name];
+			resource.bytes = [deployment.resources objectForKey:name];
+			resource.deployment = row;
 		}
 		/* Two definitions of one key in one deployment count on from each
 		 * other, not both from the stored latest. */
 		NSMutableDictionary *next = [NSMutableDictionary dictionary];
 		for (WFDefinitionRecord *definition in definitions) {
 			if (definition.messageStartName != nil) {
-				for (WFEventSubscriptionEntity *start in [self fetch:WFSubscriptionEntity
+				for (WFEventSubscriptionEntity *start in [self fetch:WFSubscriptionEntityName
 				         predicate:[NSPredicate predicateWithFormat:
 				             @"execution == nil AND eventType == %@ AND eventName == %@",
 				             WFEventTypeMessage, definition.messageStartName]
@@ -267,15 +265,14 @@ static NSString * const WFJobEntityName = @"WFJob";
 			}
 			NSNumber *version = [next objectForKey:definition.key];
 			if (version == nil) {
-				NSManagedObject *latest = [[self fetch:WFDefinitionEntity
+				WFDefinitionRecordEntity *latest = [[self fetch:WFDefinitionEntityName
 				                             predicate:[NSPredicate predicateWithFormat:
 				                                 @"key == %@", definition.key]
 				                                  sort:@[ [NSSortDescriptor
 				                                      sortDescriptorWithKey:@"version"
 				                                                  ascending:NO] ]
 				                                 limit:1] lastObject];
-				version = [NSNumber numberWithInteger:
-					[[latest valueForKey:@"version"] integerValue] + 1];
+				version = [NSNumber numberWithLongLong:latest.version + 1];
 			}
 			[next setObject:[NSNumber numberWithInteger:[version integerValue] + 1]
 			         forKey:definition.key];
@@ -286,16 +283,16 @@ static NSString * const WFJobEntityName = @"WFJob";
 			record.version = [version integerValue];
 			record.deploymentId = deployment.deploymentId;
 			record.resourceName = definition.resourceName;
-			NSManagedObject *definitionRow = [NSEntityDescription
-				insertNewObjectForEntityForName:WFDefinitionEntity
+			WFDefinitionRecordEntity *definitionRow = [NSEntityDescription
+				insertNewObjectForEntityForName:WFDefinitionEntityName
 				         inManagedObjectContext:self->_context];
-			[definitionRow setValue:record.definitionId forKey:@"definitionId"];
-			[definitionRow setValue:record.key forKey:@"key"];
-			[definitionRow setValue:record.name forKey:@"name"];
-			[definitionRow setValue:version forKey:@"version"];
-			[definitionRow setValue:record.resourceName forKey:@"resourceName"];
-			[definitionRow setValue:definition.historyTimeToLive forKey:@"historyTimeToLive"];
-			[definitionRow setValue:row forKey:@"deployment"];
+			definitionRow.definitionId = record.definitionId;
+			definitionRow.key = record.key;
+			definitionRow.name = record.name;
+			definitionRow.version = [version longLongValue];
+			definitionRow.resourceName = record.resourceName;
+			definitionRow.historyTimeToLive = definition.historyTimeToLive;
+			definitionRow.deployment = row;
 			for (NSString *activityId in definition.forms) {
 				[self insertForm:[definition.forms objectForKey:activityId] of:activityId
 				        document:[definition.formDocuments objectForKey:activityId]
@@ -303,14 +300,14 @@ static NSString * const WFJobEntityName = @"WFJob";
 			}
 			[stored addObject:record];
 			/* The latest version starts on the message; earlier ones stop. */
-			for (WFEventSubscriptionEntity *old in [self fetch:WFSubscriptionEntity
+			for (WFEventSubscriptionEntity *old in [self fetch:WFSubscriptionEntityName
 			         predicate:[NSPredicate predicateWithFormat:
 			             @"execution == nil AND activityId == %@", definition.key]
 			              sort:nil
 			             limit:0]) {
 				[self->_context deleteObject:old];
 			}
-			NSArray *versions = [[self fetch:WFDefinitionEntity
+			NSArray *versions = [[self fetch:WFDefinitionEntityName
 			                      predicate:[NSPredicate predicateWithFormat:@"key == %@",
 			                          definition.key]
 			                           sort:nil
@@ -341,7 +338,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 			}
 			if (definition.signalStartName != nil) {
 				WFEventSubscriptionEntity *start = [NSEntityDescription
-					insertNewObjectForEntityForName:WFSubscriptionEntity
+					insertNewObjectForEntityForName:WFSubscriptionEntityName
 					         inManagedObjectContext:self->_context];
 				start.subscriptionId = [[NSUUID UUID] UUIDString];
 				start.eventType = WFEventTypeSignal;
@@ -352,7 +349,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 			}
 			if (definition.conditionalStart) {
 				WFEventSubscriptionEntity *start = [NSEntityDescription
-					insertNewObjectForEntityForName:WFSubscriptionEntity
+					insertNewObjectForEntityForName:WFSubscriptionEntityName
 					         inManagedObjectContext:self->_context];
 				start.subscriptionId = [[NSUUID UUID] UUIDString];
 				start.eventType = WFEventTypeConditional;
@@ -363,7 +360,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 			}
 			if (definition.messageStartName != nil) {
 				WFEventSubscriptionEntity *start = [NSEntityDescription
-					insertNewObjectForEntityForName:WFSubscriptionEntity
+					insertNewObjectForEntityForName:WFSubscriptionEntityName
 					         inManagedObjectContext:self->_context];
 				start.subscriptionId = [[NSUUID UUID] UUIDString];
 				start.eventType = WFEventTypeMessage;
@@ -378,27 +375,27 @@ static NSString * const WFJobEntityName = @"WFJob";
 		for (WFDecisionRecord *decision in decisions) {
 			NSNumber *version = [nextDecision objectForKey:decision.key];
 			if (version == nil) {
-				NSManagedObject *latest = [[self fetch:WFDecisionEntity
+				WFDecisionRecordEntity *latest = [[self fetch:WFDecisionEntityName
 				                             predicate:[NSPredicate predicateWithFormat:@"key == %@", decision.key]
 				                                  sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"version"
 				                                                                        ascending:NO] ]
 				                                 limit:1] lastObject];
-				version = [NSNumber numberWithInteger:[[latest valueForKey:@"version"] integerValue] + 1];
+				version = [NSNumber numberWithLongLong:latest.version + 1];
 			}
 			[nextDecision setObject:[NSNumber numberWithInteger:[version integerValue] + 1] forKey:decision.key];
 			decision.definitionId = [[NSUUID UUID] UUIDString];
 			decision.version = [version integerValue];
 			decision.deploymentId = deployment.deploymentId;
-			NSManagedObject *decisionRow = [NSEntityDescription
-				insertNewObjectForEntityForName:WFDecisionEntity
+			WFDecisionRecordEntity *decisionRow = [NSEntityDescription
+				insertNewObjectForEntityForName:WFDecisionEntityName
 				         inManagedObjectContext:self->_context];
-			[decisionRow setValue:decision.definitionId forKey:@"definitionId"];
-			[decisionRow setValue:decision.key forKey:@"key"];
-			[decisionRow setValue:decision.name forKey:@"name"];
-			[decisionRow setValue:version forKey:@"version"];
-			[decisionRow setValue:decision.versionTag forKey:@"versionTag"];
-			[decisionRow setValue:decision.resourceName forKey:@"resourceName"];
-			[decisionRow setValue:row forKey:@"deployment"];
+			decisionRow.definitionId = decision.definitionId;
+			decisionRow.key = decision.key;
+			decisionRow.name = decision.name;
+			decisionRow.version = [version longLongValue];
+			decisionRow.versionTag = decision.versionTag;
+			decisionRow.resourceName = decision.resourceName;
+			decisionRow.deployment = row;
 		}
 		if (localError != nil) {
 			[self->_context rollback];
@@ -420,7 +417,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 {
 	__block WFDeploymentRecord *record = nil;
 	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:WFDeploymentEntity
+		NSArray *rows = [self fetch:WFDeploymentEntityName
 		                  predicate:[NSPredicate predicateWithFormat:@"name == %@", name]
 		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"deployedAt"
 		                                                             ascending:NO] ]
@@ -435,7 +432,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 {
 	__block WFDeploymentRecord *record = nil;
 	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:WFDeploymentEntity
+		NSArray *rows = [self fetch:WFDeploymentEntityName
 		                  predicate:[NSPredicate predicateWithFormat:
 		                      @"deploymentId == %@", deploymentId]
 		                       sort:nil
@@ -450,7 +447,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 {
 	NSMutableArray *records = [NSMutableArray array];
 	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:WFDefinitionEntity
+		NSArray *rows = [self fetch:WFDefinitionEntityName
 		                  predicate:[NSPredicate predicateWithFormat:
 		                      @"deployment.deploymentId == %@", deploymentId]
 		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"key"
@@ -472,7 +469,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 		: [NSPredicate predicateWithFormat:@"key == %@", key];
 	__block WFDefinitionRecord *record = nil;
 	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:WFDefinitionEntity
+		NSArray *rows = [self fetch:WFDefinitionEntityName
 		                  predicate:predicate
 		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"version"
 		                                                             ascending:NO] ]
@@ -487,7 +484,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 {
 	__block WFDefinitionRecord *record = nil;
 	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:WFDefinitionEntity
+		NSArray *rows = [self fetch:WFDefinitionEntityName
 		                  predicate:[NSPredicate predicateWithFormat:
 		                      @"definitionId == %@", definitionId]
 		                       sort:nil
@@ -502,7 +499,7 @@ static NSString * const WFJobEntityName = @"WFJob";
 {
 	NSMutableArray *records = [NSMutableArray array];
 	[_context performBlockAndWait:^{
-		NSArray *rows = [self fetch:WFDecisionEntity
+		NSArray *rows = [self fetch:WFDecisionEntityName
 		                  predicate:predicate
 		                       sort:@[ [NSSortDescriptor sortDescriptorWithKey:@"key" ascending:YES],
 		                               [NSSortDescriptor sortDescriptorWithKey:@"version" ascending:NO] ]

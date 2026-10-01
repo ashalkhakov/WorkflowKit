@@ -299,12 +299,18 @@ FW = {
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks")',
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKit",
     "SKIP_INSTALL": "YES",
-    "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
+    # Source/ too: the generated WFExecutionEntity+CoreDataProperties.h
+    # imports its class's header, WFExecutionEntity.h, from there.
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/Source")',
 }
+# Where Xcode generates the WorkflowKit target's entity classes, which the
+# other targets that read the engine's rows import (Source/WFEntities.h).
+GENERATED = ('"$(PROJECT_TEMP_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/WorkflowKit.build/'
+             'DerivedSources/CoreDataGenerated/WorkflowKit"')
 ODATA_FW = dict(FW, **{
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKitOData",
     # The engine's own headers too: the API reads its rows.
-    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData")',
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData", %s)' % GENERATED,
 })
 TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKitTests",
@@ -469,7 +475,10 @@ def scheme(name, build, test=None, run=None, directory=None, arguments=None):
 
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
            '<Scheme LastUpgradeVersion = "1600" version = "1.7">'
-           '<BuildAction parallelizeBuildables = "YES" buildImplicitDependencies = "YES">'
+           # One target after another: Xcode would start the targets that
+           # read the engine's rows before WorkflowKit has generated its
+           # entities' classes, which it does in its Sources step.
+           '<BuildAction parallelizeBuildables = "NO" buildImplicitDependencies = "YES">'
            '<BuildActionEntries>%s</BuildActionEntries></BuildAction>'
            '<TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" '
            'selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES">'

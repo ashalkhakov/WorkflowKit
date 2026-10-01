@@ -18,12 +18,6 @@ NSString * const WFHistoricStateInternallyTerminated = @"INTERNALLY_TERMINATED";
 NSString * const WFHistoricStateExternallyTerminated = @"EXTERNALLY_TERMINATED";
 
 @implementation WFExecutionEntity
-@dynamic executionId, processInstanceId, definitionId, businessKey;
-@dynamic activityId, activityInstanceId, isActive, isConcurrent, isScope;
-@dynamic suspended, lockRevision, parent, children, variables, tasks;
-@dynamic eventSubscriptions, jobs, externalTasks, incidents;
-@dynamic superProcessInstanceId, superExecution, subProcessInstance, isMultiInstanceBody;
-@dynamic isCompensation;
 
 - (BOOL)isProcessInstance
 {
@@ -178,78 +172,5 @@ WFIsIntegerNumber(NSNumber *number)
 
 @end
 
-@implementation WFVariableEntity
-@dynamic variableId, name, processInstanceId, type, textValue, jsonText, wholeNumber;
-@dynamic realNumber, truthValue, dateTime, bytesValue, execution;
-@end
-
-@implementation WFTaskEntity
-@dynamic taskId, name, taskDefinitionKey, assignee, processInstanceId;
-@dynamic definitionId, activityInstanceId, createdAt, dueDate, followUpDate, priority, suspended;
-@dynamic execution, processInstance, form, identityLinks;
-@end
-
 NSString * const WFIdentityLinkCandidate = @"candidate";
 
-@implementation WFDefinitionRecordEntity
-@dynamic definitionId, resourceName, deployment;
-@end
-
-@implementation WFIdentityLinkEntity
-@dynamic type, userId, groupId, processInstanceId, task;
-@end
-
-@implementation WFEventSubscriptionEntity
-@dynamic subscriptionId, eventType, eventName, activityId, processInstanceId;
-@dynamic definitionId, createdAt, sequence, execution;
-@end
-
-@implementation WFJobEntity
-@dynamic jobId, jobType, activityId, processInstanceId, definitionId, dueDate, createdAt;
-@dynamic lockOwner, lockExpiration, retries, exclusive, priority;
-@dynamic exceptionMessage, repeat, suspended, execution;
-@end
-
-@implementation WFExternalTaskEntity
-@dynamic externalTaskId, topic, activityId, activityInstanceId, processInstanceId;
-@dynamic workerId, lockExpiration, retries, errorMessage, priority, createdAt, suspended, execution;
-@end
-
-@implementation WFIncidentEntity
-@dynamic incidentId, incidentType, message, activityId, processInstanceId;
-@dynamic configuration, createdAt, execution;
-@end
-
-@implementation WFHistoricProcessInstanceEntity
-@dynamic processInstanceId, businessKey, definitionId, definitionKey;
-@dynamic startTime, endTime, state, superProcessInstanceId, deleteReason;
-@end
-
-@implementation WFHistoricVariableEntity
-@dynamic variableId, name, processInstanceId, scopeIsProcessInstance, type;
-@dynamic textValue, jsonText, wholeNumber, realNumber, truthValue, dateTime, bytesValue, updatedAt;
-@end
-
-@implementation WFHistoricActivityInstanceEntity
-@dynamic activityInstanceId, activityId, activityName, activityType;
-@dynamic processInstanceId, startTime, endTime, canceled, sequence, calledProcessInstanceId;
-@end
-
-@implementation WFHistoricTaskInstanceEntity
-@dynamic taskId, name, taskDefinitionKey, assignee, processInstanceId;
-@dynamic startTime, endTime, deleteReason;
-@end
-
-@implementation WFHistoricVariableUpdateEntity
-@dynamic updateId, variableId, name, processInstanceId, time, sequence;
-@end
-
-@implementation WFHistoricIncidentEntity
-@dynamic incidentId, incidentType, message, activityId, processInstanceId;
-@dynamic configuration, createdAt, endTime, state;
-@end
-
-@implementation WFHistoricJobLogEntity
-@dynamic logId, jobId, jobType, activityId, processInstanceId, timestamp, state;
-@dynamic exceptionMessage, retries, sequence;
-@end

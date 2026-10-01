@@ -6,52 +6,37 @@
  * The runtime and history rows of Model/WorkflowKit.xcdatamodeld, as the
  * engine works on them inside a command's context. Internal: the public
  * API hands out value objects instead.
+ *
+ * Their classes are generated from the model as the library builds
+ * (Codegen Class Definition: WFTaskEntity+CoreDataClass.h and its
+ * properties), but for WFExecution's, which has behaviour of its own:
+ * written here, its properties generated (Category/Extension).
  */
 
-@class WFVariableEntity;
+#import "WFExecutionEntity.h"
+#import "WFExecutionEntity+CoreDataProperties.h"
 
-@interface WFExecutionEntity : NSManagedObject
-@property (nonatomic, copy) NSString *executionId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSString *definitionId;
-@property (nonatomic, copy) NSString *businessKey;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *activityInstanceId;
-/* On a process instance started by a call activity: the calling
- * instance, and the execution at the call activity. */
-@property (nonatomic, copy) NSString *superProcessInstanceId;
-@property (nonatomic, strong) WFExecutionEntity *superExecution;
-/* On the execution at a call activity: the instance it called. */
-@property (nonatomic, strong) WFExecutionEntity *subProcessInstance;
-@property (nonatomic) BOOL isActive;
-@property (nonatomic) BOOL isConcurrent;
-@property (nonatomic) BOOL isScope;
-/* The scope a multi-instance activity's instances run under: its
- * activity is the multi-instance activity, and its children are the
- * instances. */
-@property (nonatomic) BOOL isMultiInstanceBody;
-/* Runs one compensation handler for the compensation throw its parent
- * waits at. */
-@property (nonatomic) BOOL isCompensation;
-@property (nonatomic) BOOL suspended;
-/* Bumped to make concurrent commands that both touch a scope conflict. */
-@property (nonatomic) int64_t lockRevision;
-@property (nonatomic, strong) WFExecutionEntity *parent;
-@property (nonatomic, strong) NSSet *children;
-@property (nonatomic, strong) NSSet *variables;
-@property (nonatomic, strong) NSSet *tasks;
-@property (nonatomic, strong) NSSet *eventSubscriptions;
-@property (nonatomic, strong) NSSet *jobs;
-@property (nonatomic, strong) NSSet *externalTasks;
-@property (nonatomic, strong) NSSet *incidents;
-
-- (BOOL)isProcessInstance;
-- (WFExecutionEntity *)processInstance;
-/* This execution if it is a scope, else the nearest scope above it. */
-- (WFExecutionEntity *)scopeExecution;
-- (NSArray<WFExecutionEntity *> *)concurrentChildren;
-- (WFVariableEntity *)localVariableNamed:(NSString *)name;
-@end
+#import "WFDecisionRecordEntity+CoreDataClass.h"
+#import "WFDefinitionRecordEntity+CoreDataClass.h"
+#import "WFDeploymentEntity+CoreDataClass.h"
+#import "WFEventSubscriptionEntity+CoreDataClass.h"
+#import "WFExternalTaskEntity+CoreDataClass.h"
+#import "WFFormRecordEntity+CoreDataClass.h"
+#import "WFHistoricActivityInstanceEntity+CoreDataClass.h"
+#import "WFHistoricDecisionInstanceEntity+CoreDataClass.h"
+#import "WFHistoricIncidentEntity+CoreDataClass.h"
+#import "WFHistoricJobLogEntity+CoreDataClass.h"
+#import "WFHistoricProcessInstanceEntity+CoreDataClass.h"
+#import "WFHistoricTaskInstanceEntity+CoreDataClass.h"
+#import "WFHistoricVariableEntity+CoreDataClass.h"
+#import "WFHistoricVariableUpdateEntity+CoreDataClass.h"
+#import "WFIdentityLinkEntity+CoreDataClass.h"
+#import "WFIncidentEntity+CoreDataClass.h"
+#import "WFJobEntity+CoreDataClass.h"
+#import "WFPropertyEntity+CoreDataClass.h"
+#import "WFResourceEntity+CoreDataClass.h"
+#import "WFTaskEntity+CoreDataClass.h"
+#import "WFVariableEntity+CoreDataClass.h"
 
 typedef NS_ENUM(int16_t, WFVariableType) {
 	WFVariableTypeNull = 0,
@@ -75,62 +60,7 @@ BOOL WFIsIntegerNumber(NSNumber *number);
 - (BOOL)wf_setValue:(id)value;
 @end
 
-@interface WFVariableEntity : NSManagedObject
-@property (nonatomic, copy) NSString *variableId;
-@property (nonatomic, copy) NSString *name;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic) int16_t type;
-/* The value, in the column of its type: a string's text, JSON's text,
- * every number as a real number (and a whole number exactly as well), a
- * boolean, a date, data. */
-@property (nonatomic, copy) NSString *textValue;
-@property (nonatomic, copy) NSString *jsonText;
-@property (nonatomic, strong) NSNumber *wholeNumber;
-@property (nonatomic, strong) NSNumber *realNumber;
-@property (nonatomic, strong) NSNumber *truthValue;
-@property (nonatomic, copy) NSDate *dateTime;
-@property (nonatomic, copy) NSData *bytesValue;
-@property (nonatomic, strong) WFExecutionEntity *execution;
-@end
-
-@interface WFTaskEntity : NSManagedObject
-@property (nonatomic, copy) NSString *taskId;
-@property (nonatomic, copy) NSString *name;
-@property (nonatomic, copy) NSString *taskDefinitionKey;
-@property (nonatomic, copy) NSString *assignee;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSString *definitionId;
-@property (nonatomic, copy) NSString *activityInstanceId;
-@property (nonatomic, copy) NSDate *createdAt;
-@property (nonatomic, copy) NSDate *dueDate;
-@property (nonatomic, copy) NSDate *followUpDate;
-@property (nonatomic) int32_t priority;
-@property (nonatomic) BOOL suspended;
-@property (nonatomic, strong) WFExecutionEntity *execution;
-/* The root of its process instance, whose variables a query asks about. */
-@property (nonatomic, strong) WFExecutionEntity *processInstance;
-/* Its form as deployed (a WFFormRecord); nil for a task without one. */
-@property (nonatomic, strong) NSManagedObject *form;
-@property (nonatomic, strong) NSSet *identityLinks;
-@end
-
 extern NSString * const WFIdentityLinkCandidate;
-
-/* A deployed process definition's row, which the store reads by key. */
-@interface WFDefinitionRecordEntity : NSManagedObject
-@property (nonatomic, copy) NSString *definitionId;
-@property (nonatomic, copy) NSString *resourceName;
-@property (nonatomic, strong) NSManagedObject *deployment;
-@end
-
-/* A user or group a task is offered to. */
-@interface WFIdentityLinkEntity : NSManagedObject
-@property (nonatomic, copy) NSString *type;
-@property (nonatomic, copy) NSString *userId;
-@property (nonatomic, copy) NSString *groupId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, strong) WFTaskEntity *task;
-@end
 
 extern NSString * const WFEventTypeMessage;
 extern NSString * const WFEventTypeSignal;
@@ -144,170 +74,17 @@ extern NSString * const WFEventTypeCompensate;
 /* The same, queued on a compensation throw that works through them. */
 extern NSString * const WFEventTypeCompensating;
 
-@interface WFEventSubscriptionEntity : NSManagedObject
-@property (nonatomic, copy) NSString *subscriptionId;
-@property (nonatomic, copy) NSString *eventType;
-@property (nonatomic, copy) NSString *eventName;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *processInstanceId;
-/* Set on a start event's subscription, which has no execution. */
-@property (nonatomic, copy) NSString *definitionId;
-@property (nonatomic, copy) NSDate *createdAt;
-/* Orders subscriptions made in the same instant: compensation runs the
- * newest first. */
-@property (nonatomic) int64_t sequence;
-@property (nonatomic, strong) WFExecutionEntity *execution;
-@end
-
 #define WFJobTypeTimer WFJobTypeTimerName
 /* A timer start event's job: it has a definition, not an execution. */
 #define WFJobTypeTimerStart WFJobTypeTimerStartName
 #define WFJobTypeAsyncBefore WFJobTypeAsyncBeforeName
 #define WFJobTypeAsyncAfter WFJobTypeAsyncAfterName
 
-@interface WFJobEntity : NSManagedObject
-@property (nonatomic, copy) NSString *jobId;
-@property (nonatomic, copy) NSString *jobType;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSString *definitionId;
-@property (nonatomic, copy) NSDate *dueDate;
-@property (nonatomic, copy) NSDate *createdAt;
-@property (nonatomic, copy) NSString *lockOwner;
-@property (nonatomic, copy) NSDate *lockExpiration;
-@property (nonatomic) int32_t retries;
-@property (nonatomic) BOOL exclusive;
-@property (nonatomic) int64_t priority;
-@property (nonatomic, copy) NSString *exceptionMessage;
-/* A timer cycle's rest after this firing: R2/PT10M, R/PT1H; nil for a
- * timer that fires once. */
-@property (nonatomic, copy) NSString *repeat;
-@property (nonatomic) BOOL suspended;
-@property (nonatomic, strong) WFExecutionEntity *execution;
-@end
-
-@interface WFExternalTaskEntity : NSManagedObject
-@property (nonatomic, copy) NSString *externalTaskId;
-@property (nonatomic, copy) NSString *topic;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *activityInstanceId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSString *workerId;
-@property (nonatomic, copy) NSDate *lockExpiration;
-@property (nonatomic, strong) NSNumber *retries;
-@property (nonatomic, copy) NSString *errorMessage;
-@property (nonatomic) int64_t priority;
-@property (nonatomic, copy) NSDate *createdAt;
-@property (nonatomic) BOOL suspended;
-@property (nonatomic, strong) WFExecutionEntity *execution;
-@end
-
 #define WFIncidentTypeFailedJob WFIncidentTypeFailedJobName
 #define WFIncidentTypeFailedExternalTask WFIncidentTypeFailedExternalTaskName
-
-/* A job or external task that ran out of retries. configuration is its id. */
-@interface WFIncidentEntity : NSManagedObject
-@property (nonatomic, copy) NSString *incidentId;
-@property (nonatomic, copy) NSString *incidentType;
-@property (nonatomic, copy) NSString *message;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSString *configuration;
-@property (nonatomic, copy) NSDate *createdAt;
-@property (nonatomic, strong) WFExecutionEntity *execution;
-@end
 
 extern NSString * const WFHistoricStateActive;
 extern NSString * const WFHistoricStateCompleted;
 extern NSString * const WFHistoricStateInternallyTerminated;
 extern NSString * const WFHistoricStateExternallyTerminated;
 
-@interface WFHistoricProcessInstanceEntity : NSManagedObject
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSString *businessKey;
-@property (nonatomic, copy) NSString *definitionId;
-@property (nonatomic, copy) NSString *definitionKey;
-@property (nonatomic, copy) NSDate *startTime;
-@property (nonatomic, copy) NSDate *endTime;
-@property (nonatomic, copy) NSString *state;
-@property (nonatomic, copy) NSString *superProcessInstanceId;
-@property (nonatomic, copy) NSString *deleteReason;
-@end
-
-@interface WFHistoricVariableEntity : NSManagedObject
-@property (nonatomic, copy) NSString *variableId;
-@property (nonatomic, copy) NSString *name;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic) BOOL scopeIsProcessInstance;
-@property (nonatomic) int16_t type;
-/* The value, in the column of its type: a string's text, JSON's text,
- * every number as a real number (and a whole number exactly as well), a
- * boolean, a date, data. */
-@property (nonatomic, copy) NSString *textValue;
-@property (nonatomic, copy) NSString *jsonText;
-@property (nonatomic, strong) NSNumber *wholeNumber;
-@property (nonatomic, strong) NSNumber *realNumber;
-@property (nonatomic, strong) NSNumber *truthValue;
-@property (nonatomic, copy) NSDate *dateTime;
-@property (nonatomic, copy) NSData *bytesValue;
-@property (nonatomic, copy) NSDate *updatedAt;
-@end
-
-@interface WFHistoricActivityInstanceEntity : NSManagedObject
-@property (nonatomic, copy) NSString *activityInstanceId;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *activityName;
-@property (nonatomic, copy) NSString *activityType;
-/* For a call activity: the instance it started. */
-@property (nonatomic, copy) NSString *calledProcessInstanceId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSDate *startTime;
-@property (nonatomic, copy) NSDate *endTime;
-@property (nonatomic) BOOL canceled;
-@property (nonatomic) int64_t sequence;
-@end
-
-@interface WFHistoricTaskInstanceEntity : NSManagedObject
-@property (nonatomic, copy) NSString *taskId;
-@property (nonatomic, copy) NSString *name;
-@property (nonatomic, copy) NSString *taskDefinitionKey;
-@property (nonatomic, copy) NSString *assignee;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSDate *startTime;
-@property (nonatomic, copy) NSDate *endTime;
-@property (nonatomic, copy) NSString *deleteReason;
-@end
-
-@interface WFHistoricVariableUpdateEntity : NSManagedObject
-@property (nonatomic, copy) NSString *updateId;
-@property (nonatomic, copy) NSString *variableId;
-@property (nonatomic, copy) NSString *name;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSDate *time;
-@property (nonatomic) int64_t sequence;
-@end
-
-@interface WFHistoricIncidentEntity : NSManagedObject
-@property (nonatomic, copy) NSString *incidentId;
-@property (nonatomic, copy) NSString *incidentType;
-@property (nonatomic, copy) NSString *message;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSString *configuration;
-@property (nonatomic, copy) NSDate *createdAt;
-@property (nonatomic, copy) NSDate *endTime;
-@property (nonatomic, copy) NSString *state;
-@end
-
-@interface WFHistoricJobLogEntity : NSManagedObject
-@property (nonatomic, copy) NSString *logId;
-@property (nonatomic, copy) NSString *jobId;
-@property (nonatomic, copy) NSString *jobType;
-@property (nonatomic, copy) NSString *activityId;
-@property (nonatomic, copy) NSString *processInstanceId;
-@property (nonatomic, copy) NSDate *timestamp;
-@property (nonatomic, copy) NSString *state;
-@property (nonatomic, copy) NSString *exceptionMessage;
-@property (nonatomic) int32_t retries;
-@property (nonatomic) int64_t sequence;
-@end

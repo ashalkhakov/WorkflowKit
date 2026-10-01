@@ -2258,11 +2258,11 @@ static NSString * const WFLoopCounter = @"loopCounter";
 	if (definitionId == nil) {
 		return NO;
 	}
-	NSManagedObject *record = [[self fetch:WFDefinitionRecordName
-	                             predicate:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId]
-	                                  sort:nil
-	                                 limit:1] lastObject];
-	return [[record valueForKey:@"suspended"] boolValue];
+	WFDefinitionRecordEntity *record = [[self fetch:WFDefinitionRecordName
+	                                      predicate:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId]
+	                                           sort:nil
+	                                          limit:1] lastObject];
+	return record.suspended;
 }
 
 /* The instance and the instances its call activities started, and theirs:
@@ -2286,16 +2286,16 @@ static NSString * const WFLoopCounter = @"loopCounter";
 
 - (void)setSuspended:(BOOL)suspended definition:(NSString *)definitionId includeInstances:(BOOL)instances
 {
-	NSManagedObject *record = [[self fetch:WFDefinitionRecordName
-	                             predicate:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId]
-	                                  sort:nil
-	                                 limit:1] lastObject];
+	WFDefinitionRecordEntity *record = [[self fetch:WFDefinitionRecordName
+	                                      predicate:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId]
+	                                           sort:nil
+	                                          limit:1] lastObject];
 	if (record == nil) {
 		[self fail:WFCommandError(WFErrorUnknownElement,
 			[NSString stringWithFormat:@"no definition %@", definitionId])];
 		return;
 	}
-	[record setValue:[NSNumber numberWithBool:suspended] forKey:@"suspended"];
+	record.suspended = suspended;
 	/* Its timer start event waits too. */
 	for (WFJobEntity *job in [self fetch:WFJobName
 	                           predicate:[NSPredicate predicateWithFormat:
@@ -3347,19 +3347,17 @@ WFJSONValue(id value)
 		return nil;
 	}
 	if ([self records:WFHistoryLevelFull]) {
-		NSManagedObject *row = [self insert:@"WFHistoricDecisionInstance"];
-		[row setValue:[WFCommandContext newId] forKey:@"decisionInstanceId"];
-		[row setValue:decision.definitionId forKey:@"decisionDefinitionId"];
-		[row setValue:decision.key forKey:@"decisionKey"];
-		[row setValue:execution.processInstanceId forKey:@"processInstanceId"];
-		[row setValue:execution.activityId forKey:@"activityId"];
-		[row setValue:execution.activityInstanceId forKey:@"activityInstanceId"];
-		[row setValue:[NSDate date] forKey:@"evaluationTime"];
-		[row setValue:[NSNumber numberWithLongLong:[self.engine wf_nextSequence]] forKey:@"sequence"];
-		[row setValue:[NSJSONSerialization dataWithJSONObject:WFJSONValue(inputs) options:0 error:NULL]
-		       forKey:@"inputs"];
-		[row setValue:[NSJSONSerialization dataWithJSONObject:WFJSONValue(result.resultList) options:0 error:NULL]
-		       forKey:@"outputs"];
+		WFHistoricDecisionInstanceEntity *row = [self insert:@"WFHistoricDecisionInstance"];
+		row.decisionInstanceId = [WFCommandContext newId];
+		row.decisionDefinitionId = decision.definitionId;
+		row.decisionKey = decision.key;
+		row.processInstanceId = execution.processInstanceId;
+		row.activityId = execution.activityId;
+		row.activityInstanceId = execution.activityInstanceId;
+		row.evaluationTime = [NSDate date];
+		row.sequence = [self.engine wf_nextSequence];
+		row.inputs = [NSJSONSerialization dataWithJSONObject:WFJSONValue(inputs) options:0 error:NULL];
+		row.outputs = [NSJSONSerialization dataWithJSONObject:WFJSONValue(result.resultList) options:0 error:NULL];
 	}
 	return result;
 }

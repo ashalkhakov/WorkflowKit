@@ -768,18 +768,18 @@ WFIsConflict(NSError *error)
 {
 	NSString *mine = [NSString stringWithFormat:@"%ld", (long)self.historyLevel];
 	return [self wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
-		NSManagedObject *property = [[command fetch:@"WFProperty"
+		WFPropertyEntity *property = [[command fetch:@"WFProperty"
 		                                  predicate:[NSPredicate predicateWithFormat:
 		                                      @"name == %@", @"historyLevel"]
 		                                       sort:nil
 		                                      limit:1] lastObject];
 		if (property == nil) {
 			property = [command insert:@"WFProperty"];
-			[property setValue:@"historyLevel" forKey:@"name"];
-			[property setValue:mine forKey:@"value"];
+			property.name = @"historyLevel";
+			property.value = mine;
 			return YES;
 		}
-		if ([[property valueForKey:@"value"] isEqualToString:mine]) {
+		if ([property.value isEqualToString:mine]) {
 			return YES;
 		}
 		if (commandError != NULL) {
@@ -788,7 +788,7 @@ WFIsConflict(NSError *error)
 			                                userInfo:@{ NSLocalizedDescriptionKey:
 				[NSString stringWithFormat:
 					@"the store records history level %@, the engine is set to %@",
-					[property valueForKey:@"value"], mine] }];
+					property.value, mine] }];
 		}
 		return NO;
 	} error:error];

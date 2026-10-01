@@ -378,9 +378,9 @@ WFODataValue(id value)
 
 - (NSString *)bpmn:(ODataReply *)reply
 {
-	for (NSManagedObject *resource in [self.deployment valueForKey:@"resources"]) {
-		if ([[resource valueForKey:@"name"] isEqualToString:self.resourceName]) {
-			return [[NSString alloc] initWithData:[resource valueForKey:@"bytes"] encoding:NSUTF8StringEncoding];
+	for (WFResourceEntity *resource in self.deployment.resources) {
+		if ([resource.name isEqualToString:self.resourceName]) {
+			return [[NSString alloc] initWithData:resource.bytes encoding:NSUTF8StringEncoding];
 		}
 	}
 	[reply failWithError:ODataServiceError(404, [NSString stringWithFormat:@"%@ is not deployed", self.resourceName])];

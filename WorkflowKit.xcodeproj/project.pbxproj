@@ -824,7 +824,7 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData");
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData", "$(PROJECT_TEMP_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/WorkflowKit.build/DerivedSources/CoreDataGenerated/WorkflowKit");
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks");
 				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKitOData;
@@ -867,7 +867,7 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source");
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks");
 				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKit;
@@ -913,7 +913,7 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData");
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source", "$(SRCROOT)/OData", "$(PROJECT_TEMP_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/WorkflowKit.build/DerivedSources/CoreDataGenerated/WorkflowKit");
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks");
 				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKitOData;
@@ -939,7 +939,7 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
+				HEADER_SEARCH_PATHS = ("$(SRCROOT)/Headers", "$(SRCROOT)/Source");
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/Frameworks");
 				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowKit;

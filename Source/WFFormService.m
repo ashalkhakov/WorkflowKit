@@ -127,8 +127,10 @@
 	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		NSString *formId = [NSString stringWithFormat:@"%@:%@", context.definitionId, context.activityId];
-		text = [[[command fetch:@"WFFormRecord" predicate:[NSPredicate predicateWithFormat:@"formId == %@", formId]
-		                   sort:nil limit:1] lastObject] valueForKey:@"document"];
+		WFFormRecordEntity *record = [[command fetch:@"WFFormRecord"
+		                                   predicate:[NSPredicate predicateWithFormat:@"formId == %@", formId]
+		                                        sort:nil limit:1] lastObject];
+		text = record.document;
 		return YES;
 	} error:NULL];
 	return text != nil ? [[NSXMLDocument alloc] initWithXMLString:text options:0 error:NULL] : nil;

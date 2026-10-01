@@ -44,7 +44,12 @@ roots the gnustep layout knows.
 The store is Core Data: FreeCoreData on GNUstep (installed in `ois-dev`,
 built from the pinned `FREECOREDATA_REF` in CI), Apple's on macOS. Its model
 is `Model/WorkflowKit.xcdatamodeld`, compiled by `momc`; edit it there, never
-build a model in code. Uninstalled, the library finds the model through
+build a model in code. Its entities' classes are generated from it as the
+library builds -- by Xcode, and on GNUstep by FreeCoreData's
+`coredata-model.make` (`WorkflowKit_COREDATA_CODEGEN`) -- so use their typed
+properties, not `valueForKey:`. Every entity is Codegen Class Definition but
+`WFExecution`, Category/Extension: its class, with behaviour of its own, is
+`Source/WFExecutionEntity.h`. `Source/WFEntities.h` imports them all. Uninstalled, the library finds the model through
 `WORKFLOWKIT_MODEL` (`make -C Examples run` sets it) or a copy in the calling
 bundle (the test bundle carries one).
 

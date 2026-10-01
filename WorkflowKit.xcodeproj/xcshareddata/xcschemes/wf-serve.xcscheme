@@ -1,2 +1,75 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Scheme LastUpgradeVersion = "1600" version = "1.7"><BuildAction parallelizeBuildables = "YES" buildImplicitDependencies = "YES"><BuildActionEntries><BuildActionEntry buildForTesting = "YES" buildForRunning = "YES" buildForProfiling = "YES" buildForArchiving = "YES" buildForAnalyzing = "YES"><BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "E57B7BFE7D24FF6EB4C69CBF" BuildableName = "wf-serve" BlueprintName = "wf-serve" ReferencedContainer = "container:WorkflowKit.xcodeproj"></BuildableReference></BuildActionEntry></BuildActionEntries></BuildAction><TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES"><Testables></Testables></TestAction><LaunchAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" useCustomWorkingDirectory = "YES" customWorkingDirectory = "$(PROJECT_DIR)/Server" ignoresPersistentStateOnLaunch = "NO" debugDocumentVersioning = "YES" debugServiceExtension = "internal" allowLocationSimulation = "YES"><BuildableProductRunnable runnableDebuggingMode = "0"><BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "E57B7BFE7D24FF6EB4C69CBF" BuildableName = "wf-serve" BlueprintName = "wf-serve" ReferencedContainer = "container:WorkflowKit.xcodeproj"></BuildableReference></BuildableProductRunnable><CommandLineArguments><CommandLineArgument argument = "-Config Examples/server.plist" isEnabled = "YES"></CommandLineArgument></CommandLineArguments></LaunchAction><ProfileAction buildConfiguration = "Release" shouldUseLaunchSchemeArgsEnv = "YES" savedToolIdentifier = "" useCustomWorkingDirectory = "NO" debugDocumentVersioning = "YES"></ProfileAction><AnalyzeAction buildConfiguration = "Debug"></AnalyzeAction><ArchiveAction buildConfiguration = "Release" revealArchiveInOrganizer = "YES"></ArchiveAction></Scheme>
+<Scheme
+   LastUpgradeVersion = "1600"
+   version = "1.3">
+   <BuildAction
+      parallelizeBuildables = "NO"
+      buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "E57B7BFE7D24FF6EB4C69CBF"
+               BuildableName = "wf-serve"
+               BlueprintName = "wf-serve"
+               ReferencedContainer = "container:WorkflowKit.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+      </Testables>
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "YES"
+      customWorkingDirectory = "$(PROJECT_DIR)/Server"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "E57B7BFE7D24FF6EB4C69CBF"
+            BuildableName = "wf-serve"
+            BlueprintName = "wf-serve"
+            ReferencedContainer = "container:WorkflowKit.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+      <CommandLineArguments>
+         <CommandLineArgument
+            argument = "-Config Examples/server.plist"
+            isEnabled = "YES">
+         </CommandLineArgument>
+      </CommandLineArguments>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>

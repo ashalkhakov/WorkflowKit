@@ -65,7 +65,7 @@ WorkflowKit_HEADER_FILES = \
 	WFBpmn.h \
 	WorkflowKit.h
 
-WorkflowKit_INCLUDE_DIRS = -IHeaders
+WorkflowKit_INCLUDE_DIRS = -IHeaders -ISource
 WorkflowKit_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
 WorkflowKit_LIBRARIES_DEPEND_UPON += -lCoreData -ldispatch $(FND_LIBS) $(OBJC_LIBS)
 
@@ -74,6 +74,9 @@ WorkflowKit_LIBRARIES_DEPEND_UPON += -lCoreData -ldispatch $(FND_LIBS) $(OBJC_LI
 # +[NSBundle bundleForClass:] finds it. Uninstalled, the test bundle and
 # the examples carry their own copy.
 WorkflowKit_XCDATAMODELD_FILES = Model/WorkflowKit.xcdatamodeld
+# Its entities' classes too, generated from the model as it builds
+# (obj/CoreDataGenerated/WorkflowKit): Source/WFEntities.h imports them.
+WorkflowKit_COREDATA_CODEGEN = yes
 WorkflowKit_HAS_RESOURCE_BUNDLE = yes
 
 # The OData API (OData/, WorkflowKitOData) over ODataKit's server, built
@@ -99,7 +102,7 @@ ifneq ($(ODATAKIT),)
 WorkflowKitOData_INCLUDE_DIRS = -I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataService/include
 WorkflowKitOData_LIB_DIRS = -L$(ODATAKIT)/obj
 endif
-WorkflowKitOData_INCLUDE_DIRS += -IHeaders -ISource -IOData
+WorkflowKitOData_INCLUDE_DIRS += -IHeaders -ISource -IOData -I$(GNUSTEP_OBJ_DIR)/CoreDataGenerated/WorkflowKit
 WorkflowKitOData_LIB_DIRS += -L./$(GNUSTEP_OBJ_DIR)
 WorkflowKitOData_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
 WorkflowKitOData_LIBRARIES_DEPEND_UPON += -lWorkflowKit -lODataService -lODataKit -lCoreData -ldispatch \

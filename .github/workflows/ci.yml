@@ -37,11 +37,12 @@ jobs:
       # A commit, not a branch: it decides the recipe hash the stack is
       # cached under. The same pin as ODataStore.
       GNUSTEP_PATCHES_REF: 0211d2cda98a8a71648204e1dd35bc46572b46eb
-      # FreeCoreData, pinned to a commit like the stack: #55, which
-      # serializes every store round trip (the PostgreSQL store has one
-      # connection) and installs the backends' headers where they import,
-      # on top of #53's optimistic locking, which the engine's joins rely on.
-      FREECOREDATA_REF: 36645cfad092584fd2b6458805a85882f6462852
+      # FreeCoreData, pinned to a commit like the stack: #57, whose
+      # coredata-model.make generates the entities' classes as the library
+      # builds, on top of #55, which serializes every store round trip (the
+      # PostgreSQL store has one connection), and #53's optimistic locking,
+      # which the engine's joins rely on.
+      FREECOREDATA_REF: c0404dbea20eb74fc2c278e24680098d9e354690
       # ODataKit, for the OData API (WorkflowKitOData): #3, which leaves
       # what the engine keeps for itself out of what it serves
       # (OData.served NO). Built in its checkout, not installed.
