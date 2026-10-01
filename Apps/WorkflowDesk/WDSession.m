@@ -152,9 +152,10 @@ WDModel(void)
 		}
 		return result;
 	} completion:^(id result, NSError *error) {
-		if (error == nil && objectID != nil) {
-			[self->_viewContext refreshObject:[self->_viewContext objectWithID:objectID] mergeChanges:NO];
-		}
+		/* The bound object is left as it was, not refreshed: an action may
+		 * have ended it (a task completed), and a window drawing it before
+		 * it reads its list again would fault it from a server that no
+		 * longer has it. The windows read again on the notification. */
 		if ([result isKindOfClass:[NSManagedObjectID class]]) {
 			result = [[self viewObjectsWithIDs:@[ result ]] firstObject];
 		}

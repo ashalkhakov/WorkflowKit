@@ -35,7 +35,8 @@
      completion:(void (^)(id result, NSError *error))completion;
 
 /* An action or function bound to the object, or unbound with object nil.
- * The bound object is read again afterwards: an action may change it. */
+ * An action posts WDSessionDidChangeNotification once it is done, and the
+ * windows read what it changed then. */
 - (void)invoke:(NSString *)operation
             on:(NSManagedObject *)object
     parameters:(NSDictionary *)parameters
