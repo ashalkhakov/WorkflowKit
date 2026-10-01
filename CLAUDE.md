@@ -1,8 +1,9 @@
 # WorkflowKit
 
 A BPMN 2.0 workflow engine in Objective-C (ARC, libdispatch) for GNUstep and
-Cocoa. `Headers/` and `Source/` are the engine library, `Examples/` the demo
-tools, `Tests/` the XCTest suite. `WorkflowKit-BPMN-Subset.md` is the scope:
+Cocoa. `Headers/` and `Source/` are the engine library, `OData/` its API,
+`Server/` `wf-serve`, `Apps/` the desktop apps, `Examples/` the demo tools,
+`Tests/` the XCTest suite. `WorkflowKit-BPMN-Subset.md` is the scope:
 what the engine loads, persists and fires, and what it rejects.
 
 ## Build against the patched GNUstep, never a distro one
@@ -10,9 +11,10 @@ what the engine loads, persists and fires, and what it rejects.
 The stack comes from `../gnustep-patches`, which this machine's GNUstep
 projects share, built by its `Scripts/build-gnustep.sh`. CI checks that
 repository out at the commit pinned by `GNUSTEP_PATCHES_REF` in
-`.github/workflows/ci.yml` and builds only what the engine needs:
-`libobjc2 libdispatch tools-make libs-base tools-xctest`. The designer will
-add `libs-gui libs-back eau` when it exists.
+`.github/workflows/ci.yml` and builds what the engine and WorkflowDesk need:
+`libobjc2 libdispatch tools-make libs-base libs-gui libs-back libs-corebase
+libs-opal tools-xctest` (CoreBase and Opal for XFormsKit). `ois-dev` has
+them all.
 
 If a bug here turns out to be GNUstep's, work in that repository and read its
 `CLAUDE.md` first: reproduce in the docker container, fix, turn the
@@ -104,15 +106,41 @@ declare (`OData/WFODataService.h`). Without an identity provider,
 `-DevelopmentUser` signs every request in as one user with every scope:
 the example config and the check use it; never expose such a server.
 
+## Apps
+
+`Apps/WorkflowDesk` is the task list and operations app (see its README).
+It is a client of `wf-serve` and nothing else. It opens the engine's own model
+on its `API` configuration over ODataIncrementalStore, with plain managed
+objects in place of the engine's classes, and it never links the engine.
+Its windows are XIBs with Cocoa Bindings, and its forms are XFormsKit's.
+
+- It builds with `make ODATAKIT=... XFORMSKIT=...`, and `make check` runs its
+  tests, which need no display.
+- To see it on GNUstep, run it in `ois-dev` under `Xvfb` and drive it with
+  `xdotool`; never take screenshots of the host's screen. On GNUstep the
+  command key is Alt, so select-all is `alt+a`.
+- gnustep-gui differs from AppKit in ways the app already allows for:
+  - it ends a window's sheet only through `-[NSApp endSheet:]`;
+  - it has no `NSAlert` accessory view;
+  - it shows a stopped progress indicator;
+  - it does not select an array controller's first row;
+  - it quits the app the moment the last window closes, even between
+    one window and the next.
+
+XFormsKit's framework carries no headers on either platform, so its users
+include them from `../XFormsKit/Sources`. On GNUstep it needs libs-corebase
+and libs-opal in the stack.
+
 ## macOS
 
 `WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`
 framework, the `WorkflowKitOData` framework, the `WorkflowKitTests` bundle
-(the OData API's tests included) and the `PurchaseRequestDemo` tool, with
-shared settings in `Xcode/Configs` (the same as ODataKit's). It also holds
-`../ODataKit/ODataKit.xcodeproj`, the ODataKit checkout beside this one,
-whose `ODataKit` and `ODataService` frameworks the OData API links and Xcode
-builds first. The project
+(the OData API's tests included), the `PurchaseRequestDemo` and `wf-serve`
+tools, and the `WorkflowDesk` app with its tests, with shared settings in
+`Xcode/Configs` (the same as ODataKit's). It also holds
+`../ODataKit/ODataKit.xcodeproj` and `../XFormsKit/XFormsKit.xcodeproj`, the
+checkouts beside this one, whose frameworks the OData API and the app link
+and Xcode builds first. The project
 is generated from the GNUmakefiles' source lists, so after adding a file run
 `python3 .tools/genxcodeproj.py` rather than editing `project.pbxproj`.
 

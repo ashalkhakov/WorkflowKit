@@ -1,0 +1,10 @@
+{
+    ApplicationDescription = "A WorkflowKit server's tasks and operations";
+    ApplicationName = WorkflowDesk;
+    ApplicationRelease = "0.1";
+    FullVersionID = "0.1";
+    NSExecutable = WorkflowDesk;
+    NSMainNibFile = "MainMenu.xib";
+    NSPrincipalClass = NSApplication;
+    NSRole = Application;
+}

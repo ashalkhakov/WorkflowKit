@@ -15,10 +15,10 @@ jobs:
   # Built against the patched stack from gnustep-patches, by that
   # repository's own Scripts/build-gnustep.sh -- the shape ODataStore uses --
   # never a distro GNUstep. The engine needs Foundation and, for its store,
-  # FreeCoreData; the designer will add libs-gui and libs-back when it
-  # lands. The tests run on every store the engine can use: in memory,
-  # SQLite, and FreeCoreData's PostgreSQL and MySQL stores against the
-  # servers below.
+  # FreeCoreData; WorkflowDesk (Apps/) needs libs-gui and libs-back, and
+  # XFormsKit's form view, which draws through Opal and so CoreBase. The
+  # tests run on every store the engine can use: in memory, SQLite, and
+  # FreeCoreData's PostgreSQL and MySQL stores against the servers below.
   gnustep:
     name: Ubuntu (GNUstep, FreeCoreData, clang, gnustep-2.0)
     runs-on: ubuntu-24.04
@@ -30,7 +30,7 @@ jobs:
       CXX: clang++
       LIBRARY_COMBO: ng-gnu-gnu
       RUNTIME_VERSION: gnustep-2.0
-      COMPONENTS: libobjc2 libdispatch tools-make libs-base tools-xctest
+      COMPONENTS: libobjc2 libdispatch tools-make libs-base libs-gui libs-back libs-corebase libs-opal tools-xctest
       # libobjc2 and libdispatch land in the prefix's plain lib/, which the
       # gnustep layout does not treat as a library root.
       LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
@@ -43,12 +43,18 @@ jobs:
       # PostgreSQL store has one connection), and #53's optimistic locking,
       # which the engine's joins rely on.
       FREECOREDATA_REF: c0404dbea20eb74fc2c278e24680098d9e354690
-      # ODataKit, for the OData API (WorkflowKitOData): #4, the scopes a
-      # set's methods and an operation need, on #3, which leaves what the
-      # engine keeps for itself out of what it serves (OData.served NO).
-      # Built in its checkout, not installed.
-      ODATAKIT_REF: 64d31735511c4341c2653da4918ba7de126dc84e
+      # ODataKit, for the OData API (WorkflowKitOData) and WorkflowDesk's
+      # client: #5, whose client asks for no to-one the service does not
+      # serve and reads a key segment of several tokens (a form's
+      # definition:activity), on #4, the scopes a set's methods and an
+      # operation need, and #3, which leaves what the engine keeps for
+      # itself out of what it serves (OData.served NO). Built in its
+      # checkout, not installed.
+      ODATAKIT_REF: 51e4ec3a50c6930a24dc06ed33520f230971b926
       ODATAKIT: ${{ github.workspace }}/ODataKit
+      # XFormsKit, for WorkflowDesk's forms: built in its checkout.
+      XFORMSKIT_REF: 30d4fd054d57c1878d2f9b016ad0e6aae02f3849
+      XFORMSKIT: ${{ github.workspace }}/XFormsKit
     defaults:
       run:
         working-directory: ${{ github.workspace }}/source
@@ -102,16 +108,28 @@ jobs:
           ref: ${{ env.ODATAKIT_REF }}
           path: ODataKit
 
+      - uses: actions/checkout@v4
+        with:
+          repository: ashalkhakov/XFormsKit
+          ref: ${{ env.XFORMSKIT_REF }}
+          path: XFormsKit
+
       - name: Install packages
         run: |
           ./.github/scripts/apt-update.sh
           sudo apt-get -q -y install \
             pkg-config libgnutls28-dev libffi-dev libicu-dev libxml2-dev libxslt1-dev \
             libssl-dev zlib1g-dev libcurl4-gnutls-dev libsqlite3-dev \
-            libpq-dev libmariadb-dev
-          # The last three are FreeCoreData's: NSSQLitePersistentStore links
-          # libsqlite3, its PostgreSQL store libpq, and its MySQL store
-          # MariaDB Connector/C, which speaks to MySQL servers too.
+            libpq-dev libmariadb-dev \
+            libcairo2-dev libjpeg-dev libtiff-dev libpng-dev libfreetype-dev libfontconfig1-dev \
+            libxrender-dev liblcms2-dev libxt-dev libxmu-dev libxft-dev libxrandr-dev \
+            libxfixes-dev libxcursor-dev
+          # libsqlite3, libpq and MariaDB Connector/C are FreeCoreData's:
+          # NSSQLitePersistentStore links the first, its PostgreSQL store
+          # the second, and its MySQL store the third, which speaks to MySQL
+          # servers too. Cairo and the X libraries are libs-back's; cairo,
+          # freetype, fontconfig, Xrender, lcms2 and the image libraries
+          # Opal's, as XFormsKit's CI has them.
           # The gnustep-2.0 runtime needs ld.gold or lld; ld.gold is gone
           # from binutils on 24.04.
           if [ -x /usr/bin/ld.gold ]; then
@@ -197,6 +215,20 @@ jobs:
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make server postgresql=yes mysql=yes
           make -C Server check
+
+      # WorkflowDesk, over XFormsKit's framework: built, and its tests --
+      # signing in, and forms -- run, which need no window server.
+      - name: Build XFormsKit
+        working-directory: ${{ github.workspace }}/XFormsKit
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make -j"$(nproc)"
+
+      - name: WorkflowDesk
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make -C Apps/WorkflowDesk
+          make -C Apps/WorkflowDesk check
 
       - name: Purchase request demo
         run: |

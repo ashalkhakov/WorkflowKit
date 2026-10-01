@@ -44,6 +44,16 @@ ODATAKIT = "../ODataKit"
 GCD = [f.replace("$(GCDWebServer_DIR)", ODATAKIT + "/ThirdParty/GCDWebServer")
        for f in make_list(ODATAKIT + "/ThirdParty/GCDWebServer/GCDWebServer.make", "GCDWebServer_OBJC_FILES")]
 SERVE_EXTERNAL = [ODATAKIT + "/Server/ODataHTTPServer.m"] + GCD
+# WorkflowDesk (Apps/WorkflowDesk), over ODataKit's client and XFormsKit's
+# form view, whose frameworks the workspace builds from their projects.
+DESK = "Apps/WorkflowDesk/"
+DESK_SOURCES = make_list(DESK + "GNUmakefile", "WorkflowDesk_OBJC_FILES")             # X.m
+DESK_RESOURCES = make_list(DESK + "GNUmakefile", "WorkflowDesk_RESOURCE_FILES")       # Resources/X.xib
+DESK_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESK, "*.h")))
+DESK_TESTS = [t for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
+              if not t.startswith("../")]                                             # Tests/X.m
+DESK_TESTED = [os.path.basename(t) for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
+               if t.startswith("../")]                                                # X.m, the app's
 ODATA_OTHERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "OData", "*.h"))
                       if os.path.basename(p) not in ODATA_HEADERS)
 DOCS = ["CLAUDE.md", "WorkflowKit-BPMN-Subset.md", "GNUmakefile"]
@@ -89,6 +99,9 @@ cfg_refs = {c: fileref("Xcode/Configs/" + c, c, "text.xcconfig") for c in CONFIG
 odata_refs = {o: fileref(o, os.path.basename(o), ftype(o)) for o in ODATA_SOURCES}
 odata_hdr_refs = {h: fileref("OData/" + h, h, ftype(h)) for h in ODATA_HEADERS + ODATA_OTHERS}
 serve_refs = {s: fileref("Server/" + s, s, ftype(s)) for s in SERVE}
+desk_refs = {f: fileref(DESK + f, f, ftype(f)) for f in DESK_SOURCES + DESK_HEADERS + ["WorkflowDesk-Info.plist"]}
+desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), "file.xib") for r in DESK_RESOURCES}
+desk_test_refs = {t: fileref(DESK + "Tests/" + t, t, ftype(t)) for t in DESK_TESTS}
 
 
 # A file of another checkout, by its path from this one.
@@ -133,6 +146,9 @@ def built_framework(name):
 
 odatakit = built_framework("ODataKit")
 odataservice = built_framework("ODataService")
+odatastore = built_framework("ODataIncrementalStore")
+xformskit = built_framework("XFormsKit")
+appkit = sdk_framework("AppKit")
 
 
 # A data model is a version group holding one .xcdatamodel per version; the
@@ -170,6 +186,8 @@ p_odata = product("WorkflowKitOData", ".framework", "wrapper.framework")
 p_tests = product("WorkflowKitTests", ".xctest", "wrapper.cfbundle")
 p_demo = product("PurchaseRequestDemo", "", '"compiled.mach-o.executable"')
 p_serve = product("wf-serve", "", '"compiled.mach-o.executable"')
+p_desk = product("WorkflowDesk", ".app", "wrapper.application")
+p_desk_tests = product("WorkflowDeskTests", ".xctest", "wrapper.cfbundle")
 
 
 # ---------------------------------------------------------------- build files
@@ -240,6 +258,49 @@ d_sources = phase("PBXSourcesBuildPhase", "PurchaseRequestDemo", "Sources", name
 d_frameworks = phase("PBXFrameworksBuildPhase", "PurchaseRequestDemo", "Frameworks", names(
     [buildfile("PurchaseRequestDemo", p_fw, "WorkflowKit.framework")]))
 
+DESK_FRAMEWORKS = [(odatakit, "ODataKit.framework"), (odatastore, "ODataIncrementalStore.framework"),
+                   (xformskit, "XFormsKit.framework")]
+w_sources = phase("PBXSourcesBuildPhase", "WorkflowDesk", "Sources", names(
+    [buildfile("WorkflowDesk", desk_refs[f], f) for f in DESK_SOURCES]))
+w_resources = phase("PBXResourcesBuildPhase", "WorkflowDesk", "Resources", names(
+    [buildfile("WorkflowDesk", desk_res_refs[r], os.path.basename(r)) for r in DESK_RESOURCES]))
+w_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesk", "Frameworks", names(
+    [buildfile("WorkflowDesk", ref, name) for ref, name in DESK_FRAMEWORKS] +
+    [buildfile("WorkflowDesk", appkit, "AppKit.framework"),
+     buildfile("WorkflowDesk", coredata, "CoreData.framework")]))
+w_embed = add(oid("phase", "WorkflowDesk", "Embed Frameworks"), "Embed Frameworks", [
+    ("isa", "PBXCopyFilesBuildPhase"),
+    ("buildActionMask", "2147483647"),
+    ("dstPath", '""'),
+    ("dstSubfolderSpec", "10"),
+    ("files", names([buildfile("WorkflowDesk.embed", ref, name,
+                               "{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }")
+                     for ref, name in DESK_FRAMEWORKS])),
+    ("name", q("Embed Frameworks")),
+    ("runOnlyForDeploymentPostprocessing", "0"),
+])
+# The engine's model, compiled into the app without the engine's classes:
+# in the Sources phase Xcode would generate them too.
+w_model = add(oid("phase", "WorkflowDesk", "Compile Model"), "Compile Model", [
+    ("isa", "PBXShellScriptBuildPhase"),
+    ("buildActionMask", "2147483647"),
+    ("files", []),
+    ("inputPaths", ['"$(SRCROOT)/Model/WorkflowKit.xcdatamodeld"']),
+    ("name", q("Compile Model")),
+    ("outputPaths", ['"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/WorkflowKit.momd"']),
+    ("runOnlyForDeploymentPostprocessing", "0"),
+    ("shellPath", "/bin/sh"),
+    ("shellScript", q('xcrun momc --macosx-deployment-target "$MACOSX_DEPLOYMENT_TARGET" '
+                      '"$SRCROOT/Model/WorkflowKit.xcdatamodeld" '
+                      '"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/WorkflowKit.momd"\n')),
+])
+
+wt_sources = phase("PBXSourcesBuildPhase", "WorkflowDeskTests", "Sources", names(
+    [buildfile("WorkflowDeskTests", desk_test_refs[t], t) for t in DESK_TESTS] +
+    [buildfile("WorkflowDeskTests", desk_refs[f], f) for f in DESK_TESTED]))
+wt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDeskTests", "Frameworks", names(
+    [buildfile("WorkflowDeskTests", odatakit, "ODataKit.framework")]))
+
 
 # ---------------------------------------------------------------- groups
 def group(key, name, children, path=None):
@@ -261,11 +322,18 @@ g_examples = group("Examples", "Examples", [demo_refs[d] for d in DEMO], "Exampl
 g_server = group("Server", "Server", [serve_refs[s] for s in SERVE], "Server")
 g_odatakit = group("ODataKitServer", "ODataKit Server", [external_refs[e] for e in SERVE_EXTERNAL])
 g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
+g_desk_res = group("WorkflowDeskResources", "Resources", [desk_res_refs[r] for r in DESK_RESOURCES], "Resources")
+g_desk_tests = group("WorkflowDeskTests", "Tests", [desk_test_refs[t] for t in DESK_TESTS], "Tests")
+g_desk = group("WorkflowDesk", "WorkflowDesk",
+               [desk_refs[f] for f in sorted(DESK_HEADERS + DESK_SOURCES, key=lambda n: (n[:-2], n[-1:]))] +
+               [desk_refs["WorkflowDesk-Info.plist"], g_desk_res, g_desk_tests], "WorkflowDesk")
+g_apps = group("Apps", "Apps", [g_desk], "Apps")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
-g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve])
-g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, odatakit, odataservice])
+g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_desk, p_desk_tests])
+g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
+                                                  xformskit])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
-               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_odatakit, g_configs,
+               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_odatakit, g_apps, g_configs,
                 g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
@@ -335,6 +403,26 @@ DEMO_S = {
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
 }
+DESK_S = {
+    "INFOPLIST_FILE": '"Apps/WorkflowDesk/WorkflowDesk-Info.plist"',
+    "GENERATE_INFOPLIST_FILE": "NO",
+    "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesk",
+    # XFormsKit's.
+    "MACOSX_DEPLOYMENT_TARGET": "11.0",
+    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
+    # The model's compiling script writes into the app.
+    "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
+    # XFormsKit's framework carries no headers: its apps, like this one on
+    # GNUstep, include them from its tree.
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/../XFormsKit/Sources", "$(SRCROOT)/../XFormsKit/Sources/XFormsKit")',
+}
+DESK_TESTS_S = {
+    "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDeskTests",
+    "GENERATE_INFOPLIST_FILE": "YES",
+    "MACOSX_DEPLOYMENT_TARGET": "11.0",
+    "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Apps/WorkflowDesk"',
+    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
+}
 
 
 def settings(d):
@@ -347,6 +435,8 @@ cl_odata = configs("WorkflowKitOData", settings(ODATA_FW), settings(ODATA_FW))
 cl_tests = configs("WorkflowKitTests", settings(TESTS_S), settings(TESTS_S))
 cl_demo = configs("PurchaseRequestDemo", settings(DEMO_S), settings(DEMO_S))
 cl_serve = configs("wf-serve", settings(SERVE_S), settings(SERVE_S))
+cl_desk = configs("WorkflowDesk", settings(DESK_S), settings(DESK_S))
+cl_desk_tests = configs("WorkflowDeskTests", settings(DESK_TESTS_S), settings(DESK_TESTS_S))
 
 project_id = oid("project")
 
@@ -397,6 +487,10 @@ t_demo = target("PurchaseRequestDemo", cl_demo, [d_sources, d_frameworks],
 t_serve = target("wf-serve", cl_serve, [s_sources, s_frameworks],
                  [dependency("wf-serve", t_fw, "WorkflowKit"), dependency("wf-serve", t_odata, "WorkflowKitOData")],
                  p_serve, "com.apple.product-type.tool")
+t_desk = target("WorkflowDesk", cl_desk, [w_model, w_sources, w_resources, w_frameworks, w_embed], [],
+                p_desk, "com.apple.product-type.application")
+t_desk_tests = target("WorkflowDeskTests", cl_desk_tests, [wt_sources, wt_frameworks], [],
+                      p_desk_tests, "com.apple.product-type.bundle.unit-test")
 
 add(project_id, "Project object", [
     ("isa", "PBXProject"),
@@ -410,7 +504,7 @@ add(project_id, "Project object", [
     ("productRefGroup", "%s /* Products */" % g_products),
     ("projectDirPath", '""'),
     ("projectRoot", '""'),
-    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve])),
+    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve, t_desk, t_desk_tests])),
 ])
 
 
@@ -506,4 +600,7 @@ scheme("PurchaseRequestDemo", [demo_ref], run=demo_ref)
 # Run from Server/, on the example deployment, as `make -C Server run` does.
 scheme("wf-serve", [serve_ref], run=serve_ref, directory="$(PROJECT_DIR)/Server",
        arguments=["-Config Examples/server.plist"])
+desk_ref = ref(t_desk, "WorkflowDesk", "WorkflowDesk.app")
+desk_tests_ref = ref(t_desk_tests, "WorkflowDeskTests", "WorkflowDeskTests.xctest")
+scheme("WorkflowDesk", [desk_ref], test=desk_tests_ref, run=desk_ref)
 print("wrote", proj)
