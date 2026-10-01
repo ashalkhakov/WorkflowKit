@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24127" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24127"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSApplication"/>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <menu title="Main Menu" systemMenu="main" id="WKm-mm-001">
+            <items>
+                <menuItem title="WorkflowDesigner" id="WKm-mt-013">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="WorkflowDesigner" systemMenu="apple" id="WKm-mn-014">
+                        <items>
+                            <menuItem title="About WorkflowDesigner" id="WKm-mi-001">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="orderFrontStandardAboutPanel:" target="-1" id="WKm-ac-002"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-sp-003"/>
+                            <menuItem title="Hide WorkflowDesigner" keyEquivalent="h" id="WKm-mi-004">
+                                <connections>
+                                    <action selector="hide:" target="-1" id="WKm-ac-005"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Hide Others" keyEquivalent="h" id="WKm-mi-006">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="hideOtherApplications:" target="-1" id="WKm-ac-007"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Show All" id="WKm-mi-008">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="unhideAllApplications:" target="-1" id="WKm-ac-009"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-sp-010"/>
+                            <menuItem title="Quit WorkflowDesigner" keyEquivalent="q" id="WKm-mi-011">
+                                <connections>
+                                    <action selector="terminate:" target="-1" id="WKm-ac-012"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="File" id="WKm-mt-028">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="File" id="WKm-mn-029">
+                        <items>
+                            <menuItem title="New" keyEquivalent="n" id="WKm-mi-015">
+                                <connections>
+                                    <action selector="newDocument:" target="-1" id="WKm-ac-016"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Open…" keyEquivalent="o" id="WKm-mi-017">
+                                <connections>
+                                    <action selector="openDocument:" target="-1" id="WKm-ac-018"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-sp-019"/>
+                            <menuItem title="Close" keyEquivalent="w" id="WKm-mi-020">
+                                <connections>
+                                    <action selector="performClose:" target="-1" id="WKm-ac-021"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Save" keyEquivalent="s" id="WKm-mi-022">
+                                <connections>
+                                    <action selector="saveDocument:" target="-1" id="WKm-ac-023"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Save As…" keyEquivalent="S" id="WKm-mi-024">
+                                <connections>
+                                    <action selector="saveDocumentAs:" target="-1" id="WKm-ac-025"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Revert to Saved" id="WKm-mi-026">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="revertDocumentToSaved:" target="-1" id="WKm-ac-027"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Edit" id="WKm-mt-045">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="Edit" id="WKm-mn-046">
+                        <items>
+                            <menuItem title="Undo" keyEquivalent="z" id="WKm-mi-030">
+                                <connections>
+                                    <action selector="undo:" target="-1" id="WKm-ac-031"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Redo" keyEquivalent="Z" id="WKm-mi-032">
+                                <connections>
+                                    <action selector="redo:" target="-1" id="WKm-ac-033"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-sp-034"/>
+                            <menuItem title="Cut" keyEquivalent="x" id="WKm-mi-035">
+                                <connections>
+                                    <action selector="cut:" target="-1" id="WKm-ac-036"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Copy" keyEquivalent="c" id="WKm-mi-037">
+                                <connections>
+                                    <action selector="copy:" target="-1" id="WKm-ac-038"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Paste" keyEquivalent="v" id="WKm-mi-039">
+                                <connections>
+                                    <action selector="paste:" target="-1" id="WKm-ac-040"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Delete" id="WKm-mi-041">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="delete:" target="-1" id="WKm-ac-042"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Select All" keyEquivalent="a" id="WKm-mi-043">
+                                <connections>
+                                    <action selector="selectAll:" target="-1" id="WKm-ac-044"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="View" id="WKm-mt-053">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="View" id="WKm-mn-054">
+                        <items>
+                            <menuItem title="Zoom In" keyEquivalent="=" id="WKm-mi-047">
+                                <connections>
+                                    <action selector="zoomIn:" target="-1" id="WKm-ac-048"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Zoom Out" keyEquivalent="-" id="WKm-mi-049">
+                                <connections>
+                                    <action selector="zoomOut:" target="-1" id="WKm-ac-050"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Actual Size" keyEquivalent="0" id="WKm-mi-051">
+                                <connections>
+                                    <action selector="actualSize:" target="-1" id="WKm-ac-052"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Diagram" id="WKm-mt-057">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="Diagram" id="WKm-mn-058">
+                        <items>
+                            <menuItem title="Arrange" keyEquivalent="l" id="WKm-mi-055">
+                                <connections>
+                                    <action selector="arrange:" target="-1" id="WKm-ac-056"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Window" id="WKm-mt-063">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="Window" systemMenu="window" id="WKm-mn-064">
+                        <items>
+                            <menuItem title="Minimize" keyEquivalent="m" id="WKm-mi-059">
+                                <connections>
+                                    <action selector="performMiniaturize:" target="-1" id="WKm-ac-060"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Bring All to Front" id="WKm-mi-061">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="arrangeInFront:" target="-1" id="WKm-ac-062"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+            </items>
+        </menu>
+    </objects>
+</document>

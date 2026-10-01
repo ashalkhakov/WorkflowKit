@@ -1,0 +1,92 @@
+#import <Foundation/Foundation.h>
+
+/* A file as Camunda Modeler writes one: a diagram, a subprocess, a boundary
+ * timer, a default flow and a condition, and what the engine ignores but a
+ * designer must keep -- documentation, extension elements, an annotation. */
+static NSString * const WKDModellerFile =
+	@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+	@"<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" "
+	@"xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" "
+	@"xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" "
+	@"xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">"
+	@"<bpmn:process id=\"order\" name=\"Order\" isExecutable=\"true\">"
+	@"<bpmn:documentation>Orders, reviewed and shipped.</bpmn:documentation>"
+	@"<bpmn:startEvent id=\"start\" name=\"Ordered\"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>"
+	@"<bpmn:userTask id=\"review\" name=\"Review\" camunda:candidateGroups=\"clerks\">"
+	@"<bpmn:extensionElements><camunda:inputOutput><camunda:inputParameter name=\"x\">1</camunda:inputParameter>"
+	@"</camunda:inputOutput></bpmn:extensionElements>"
+	@"<bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:userTask>"
+	@"<bpmn:boundaryEvent id=\"late\" attachedToRef=\"review\" cancelActivity=\"false\">"
+	@"<bpmn:outgoing>f5</bpmn:outgoing>"
+	@"<bpmn:timerEventDefinition id=\"t1\"><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition>"
+	@"</bpmn:boundaryEvent>"
+	@"<bpmn:exclusiveGateway id=\"ok\" name=\"OK?\" default=\"f4\"><bpmn:incoming>f2</bpmn:incoming>"
+	@"<bpmn:outgoing>f3</bpmn:outgoing><bpmn:outgoing>f4</bpmn:outgoing></bpmn:exclusiveGateway>"
+	@"<bpmn:subProcess id=\"ship\" name=\"Ship\"><bpmn:incoming>f3</bpmn:incoming><bpmn:outgoing>f6</bpmn:outgoing>"
+	@"<bpmn:startEvent id=\"shipStart\"><bpmn:outgoing>s1</bpmn:outgoing></bpmn:startEvent>"
+	@"<bpmn:task id=\"pack\" name=\"Pack\"><bpmn:incoming>s1</bpmn:incoming><bpmn:outgoing>s2</bpmn:outgoing></bpmn:task>"
+	@"<bpmn:endEvent id=\"shipEnd\"><bpmn:incoming>s2</bpmn:incoming></bpmn:endEvent>"
+	@"<bpmn:sequenceFlow id=\"s1\" sourceRef=\"shipStart\" targetRef=\"pack\"/>"
+	@"<bpmn:sequenceFlow id=\"s2\" sourceRef=\"pack\" targetRef=\"shipEnd\"/>"
+	@"</bpmn:subProcess>"
+	@"<bpmn:endEvent id=\"done\"><bpmn:incoming>f6</bpmn:incoming></bpmn:endEvent>"
+	@"<bpmn:endEvent id=\"refused\"><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>"
+	@"<bpmn:endEvent id=\"chased\"><bpmn:incoming>f5</bpmn:incoming></bpmn:endEvent>"
+	@"<bpmn:sequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"review\"/>"
+	@"<bpmn:sequenceFlow id=\"f2\" sourceRef=\"review\" targetRef=\"ok\"/>"
+	@"<bpmn:sequenceFlow id=\"f3\" sourceRef=\"ok\" targetRef=\"ship\">"
+	@"<bpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\">=fine</bpmn:conditionExpression></bpmn:sequenceFlow>"
+	@"<bpmn:sequenceFlow id=\"f4\" sourceRef=\"ok\" targetRef=\"refused\"/>"
+	@"<bpmn:sequenceFlow id=\"f5\" sourceRef=\"late\" targetRef=\"chased\"/>"
+	@"<bpmn:sequenceFlow id=\"f6\" sourceRef=\"ship\" targetRef=\"done\"/>"
+	@"<bpmn:textAnnotation id=\"note\"><bpmn:text>Ask the warehouse</bpmn:text></bpmn:textAnnotation>"
+	@"</bpmn:process>"
+	@"<bpmndi:BPMNDiagram id=\"d\"><bpmndi:BPMNPlane id=\"p\" bpmnElement=\"order\">"
+	@"<bpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"><dc:Bounds x=\"100\" y=\"100\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"review_di\" bpmnElement=\"review\"><dc:Bounds x=\"200\" y=\"78\" width=\"100\" height=\"80\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"late_di\" bpmnElement=\"late\"><dc:Bounds x=\"232\" y=\"140\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"ok_di\" bpmnElement=\"ok\" isMarkerVisible=\"true\"><dc:Bounds x=\"360\" y=\"93\" width=\"50\" height=\"50\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"ship_di\" bpmnElement=\"ship\" isExpanded=\"true\"><dc:Bounds x=\"470\" y=\"20\" width=\"350\" height=\"200\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"shipStart_di\" bpmnElement=\"shipStart\"><dc:Bounds x=\"500\" y=\"100\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"pack_di\" bpmnElement=\"pack\"><dc:Bounds x=\"590\" y=\"78\" width=\"100\" height=\"80\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"shipEnd_di\" bpmnElement=\"shipEnd\"><dc:Bounds x=\"750\" y=\"100\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"done_di\" bpmnElement=\"done\"><dc:Bounds x=\"880\" y=\"100\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"refused_di\" bpmnElement=\"refused\"><dc:Bounds x=\"367\" y=\"230\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"chased_di\" bpmnElement=\"chased\"><dc:Bounds x=\"300\" y=\"300\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"note_di\" bpmnElement=\"note\"><dc:Bounds x=\"600\" y=\"300\" width=\"100\" height=\"30\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNEdge id=\"f1_di\" bpmnElement=\"f1\"><di:waypoint x=\"136\" y=\"118\"/><di:waypoint x=\"200\" y=\"118\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"f2_di\" bpmnElement=\"f2\"><di:waypoint x=\"300\" y=\"118\"/><di:waypoint x=\"360\" y=\"118\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"f3_di\" bpmnElement=\"f3\"><di:waypoint x=\"410\" y=\"118\"/><di:waypoint x=\"470\" y=\"118\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"f4_di\" bpmnElement=\"f4\"><di:waypoint x=\"385\" y=\"143\"/><di:waypoint x=\"385\" y=\"230\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"f5_di\" bpmnElement=\"f5\"><di:waypoint x=\"250\" y=\"176\"/><di:waypoint x=\"250\" y=\"318\"/><di:waypoint x=\"300\" y=\"318\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"f6_di\" bpmnElement=\"f6\"><di:waypoint x=\"820\" y=\"118\"/><di:waypoint x=\"880\" y=\"118\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"s1_di\" bpmnElement=\"s1\"><di:waypoint x=\"536\" y=\"118\"/><di:waypoint x=\"590\" y=\"118\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"s2_di\" bpmnElement=\"s2\"><di:waypoint x=\"690\" y=\"118\"/><di:waypoint x=\"750\" y=\"118\"/></bpmndi:BPMNEdge>"
+	@"</bpmndi:BPMNPlane></bpmndi:BPMNDiagram></bpmn:definitions>";
+
+/* The example deployment's shape: a process with no diagram at all. */
+static NSString * const WKDUndrawnFile =
+	@"<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" "
+	@"xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" id=\"defs\" targetNamespace=\"http://example.com\">"
+	@"<bpmn:process id=\"purchase\" isExecutable=\"true\">"
+	@"<bpmn:startEvent id=\"request\"/>"
+	@"<bpmn:userTask id=\"approve\" camunda:candidateGroups=\"managers\"/>"
+	@"<bpmn:exclusiveGateway id=\"decision\" default=\"no\"/>"
+	@"<bpmn:userTask id=\"fix\"/>"
+	@"<bpmn:endEvent id=\"ordered\"/>"
+	@"<bpmn:endEvent id=\"rejected\"/>"
+	@"<bpmn:sequenceFlow id=\"a\" sourceRef=\"request\" targetRef=\"approve\"/>"
+	@"<bpmn:sequenceFlow id=\"b\" sourceRef=\"approve\" targetRef=\"decision\"/>"
+	@"<bpmn:sequenceFlow id=\"yes\" sourceRef=\"decision\" targetRef=\"ordered\">"
+	@"<bpmn:conditionExpression>=approved</bpmn:conditionExpression></bpmn:sequenceFlow>"
+	@"<bpmn:sequenceFlow id=\"no\" sourceRef=\"decision\" targetRef=\"rejected\"/>"
+	@"<bpmn:sequenceFlow id=\"again\" sourceRef=\"decision\" targetRef=\"fix\">"
+	@"<bpmn:conditionExpression>=fixable</bpmn:conditionExpression></bpmn:sequenceFlow>"
+	@"<bpmn:sequenceFlow id=\"back\" sourceRef=\"fix\" targetRef=\"approve\"/>"
+	@"</bpmn:process></bpmn:definitions>";
+
+static inline NSXMLDocument *
+WKDParse(NSString *xml)
+{
+	return [[NSXMLDocument alloc] initWithXMLString:xml options:0 error:NULL];
+}

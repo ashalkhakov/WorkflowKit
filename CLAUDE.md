@@ -127,6 +127,14 @@ Its windows are XIBs with Cocoa Bindings, and its forms are XFormsKit's.
   - it quits the app the moment the last window closes, even between
     one window and the next.
 
+`Apps/WorkflowDesigner` is the BPMN designer (see its README): a document
+app whose document is the BPMN XML, edited in place through `WKDEditor`,
+with the engine's `WFBpmnReader` saying after each change whether it runs.
+It links the engine. Its document model and editor are Foundation only, and
+its tests (`make check`) need no display. A diagram's shapes link to one
+another weakly, so keep the diagram they came from while using them: Apple
+frees it at once, GNUstep later.
+
 XFormsKit's framework carries no headers on either platform, so its users
 include them from `../XFormsKit/Sources`. On GNUstep it needs libs-corebase
 and libs-opal in the stack.

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleName</key>
+	<string>WorkflowDesigner</string>
+	<key>CFBundleExecutable</key>
+	<string>WorkflowDesigner</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.workflowkit.WorkflowDesigner</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>BPMN Process</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.omg.bpmn</string>
+			</array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>bpmn</string>
+			</array>
+			<key>NSDocumentClass</key>
+			<string>WKDDocument</string>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.omg.bpmn</string>
+			<key>UTTypeDescription</key>
+			<string>BPMN Process</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bpmn</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<!-- GNUstep reads this same file, merged into the Info-gnustep.plist
+	     gnustep-make writes; what follows is for it. -->
+	<key>ApplicationName</key>
+	<string>WorkflowDesigner</string>
+	<key>ApplicationDescription</key>
+	<string>BPMN process designer for WorkflowKit</string>
+	<key>ApplicationRelease</key>
+	<string>0.1</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
+</dict>
+</plist>

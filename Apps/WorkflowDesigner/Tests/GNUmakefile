@@ -1,0 +1,31 @@
+# WorkflowDesigner's tests: the document model and its edits, the layout,
+# and that the engine takes what the designer writes. No window; run with
+# `make check` one level up.
+include $(GNUSTEP_MAKEFILES)/common.make
+
+BUNDLE_NAME = WorkflowDesignerTests
+
+WorkflowDesignerTests_OBJC_FILES = \
+	../WKDXML.m \
+	../WKDDiagram.m \
+	../WKDLayout.m \
+	../WKDEditor.m \
+	WKDDiagramTests.m \
+	WKDEditorTests.m \
+	WKDLayoutTests.m
+
+WorkflowDesignerTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
+WorkflowDesignerTests_INCLUDE_DIRS = -I.. -I../../../Headers
+ADDITIONAL_LIB_DIRS += -L../../../$(GNUSTEP_OBJ_DIR)
+WorkflowDesignerTests_BUNDLE_LIBS += -lWorkflowKit -lCoreData -lXCTest -ldispatch
+WorkflowDesignerTests_NEEDS_GUI = no
+
+include $(GNUSTEP_MAKEFILES)/bundle.make
+
+XCTEST ?= xctest
+TEST_TIMEOUT ?= 120
+
+.PHONY: run-tests
+run-tests: all
+	LD_LIBRARY_PATH="$(CURDIR)/../../../$(GNUSTEP_OBJ_DIR):$$LD_LIBRARY_PATH" \
+	  timeout -s ABRT $(TEST_TIMEOUT) $(XCTEST) $(BUNDLE_NAME).bundle

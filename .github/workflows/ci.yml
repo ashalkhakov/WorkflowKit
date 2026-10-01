@@ -231,6 +231,14 @@ jobs:
           make -C Apps/WorkflowDesk
           make -C Apps/WorkflowDesk check
 
+      # The BPMN designer: built, and its tests -- the document model, its
+      # edits and layout, and that the engine reads what it writes -- run.
+      - name: WorkflowDesigner
+        run: |
+          . $PREFIX/System/Library/Makefiles/GNUstep.sh
+          make -C Apps/WorkflowDesigner
+          make -C Apps/WorkflowDesigner check
+
       - name: Purchase request demo
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
