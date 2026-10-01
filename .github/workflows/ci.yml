@@ -35,8 +35,9 @@ jobs:
       # gnustep layout does not treat as a library root.
       LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
       # A commit, not a branch: it decides the recipe hash the stack is
-      # cached under. The same pin as ODataStore.
-      GNUSTEP_PATCHES_REF: 0211d2cda98a8a71648204e1dd35bc46572b46eb
+      # cached under. #1, gnustep-gui's bound table columns transformed,
+      # which WorkflowDesk's lists need.
+      GNUSTEP_PATCHES_REF: 9c1d6174e9e5966b6758340d0d30168af54326ba
       # FreeCoreData, pinned to a commit like the stack: #57, whose
       # coredata-model.make generates the entities' classes as the library
       # builds, on top of #55, which serializes every store round trip (the
