@@ -50,13 +50,38 @@
  * with its status: 404 for what is not there, 409 for what its state does
  * not allow, 400 for the rest of what the caller got wrong.
  *
- * Who may call is the application's: give the service an authenticator
- * (ODataAuthentication.h) before it serves requests.
+ * Who is asking is the service's authenticator's (ODataAuthentication.h):
+ * the principal's subject is the user, the groups claim their groups, and
+ * every claim theirs to match (WFIdentity.h). With a principal, what a
+ * caller sees and does follows the processes:
+ *
+ *   Tasks               theirs, or unclaimed and offered to them -- by
+ *                       candidate user, group, or a claim a candidate
+ *                       group name:value names
+ *   ProcessDefinitions  those they may start (candidate starters); all,
+ *                       for a process that names none
+ *   Claim, Unclaim      for themselves; Assign, to themselves
+ *   StartProcessInstance, SubmitStartForm   what they may start
+ *
+ * and a scope of the principal's lifts each limit, for whoever operates
+ * the engine: WFODataScopeReadAllTasks, WFODataScopeAssignTasks,
+ * WFODataScopeReadAllDefinitions, WFODataScopeStartAny. Without an
+ * authenticator, or a principal, nothing is limited.
  */
+FOUNDATION_EXPORT NSString * const WFODataScopeReadAllTasks;        /* Tasks.ReadAll */
+FOUNDATION_EXPORT NSString * const WFODataScopeAssignTasks;         /* Tasks.Assign */
+FOUNDATION_EXPORT NSString * const WFODataScopeReadAllDefinitions;  /* ProcessDefinitions.ReadAll */
+FOUNDATION_EXPORT NSString * const WFODataScopeStartAny;            /* ProcessInstances.StartAny */
+
 @interface WFODataService : NSObject
 
 /* A service over the engine's store, answering under the root; it keeps
- * the engine. Set anything else on it before its first request. */
+ * the engine. Set anything else on it before its first request. A
+ * principal's groups are its "groups" claim. */
 + (ODataService *)serviceForEngine:(WFProcessEngine *)engine serviceRoot:(NSURL *)serviceRoot;
+/* The same, the groups in the claim of this name. */
++ (ODataService *)serviceForEngine:(WFProcessEngine *)engine
+                       serviceRoot:(NSURL *)serviceRoot
+                       groupsClaim:(NSString *)groupsClaim;
 
 @end

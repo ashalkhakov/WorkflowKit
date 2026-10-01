@@ -61,6 +61,9 @@ BOOL WFIsIntegerNumber(NSNumber *number);
 @end
 
 extern NSString * const WFIdentityLinkCandidate;
+/* Who may start a process definition: camunda:candidateStarterUsers and
+ * camunda:candidateStarterGroups, linked to its definition record. */
+extern NSString * const WFIdentityLinkStarter;
 
 extern NSString * const WFEventTypeMessage;
 extern NSString * const WFEventTypeSignal;

@@ -1,6 +1,8 @@
 #import "WFFlowElements.h"
 #import "WFFeel.h"
 
+@class WFIdentity;
+
 @interface WFProcessDefinition : NSObject
 
 /* The BPMN process id: the key versions are counted under. */
@@ -18,6 +20,12 @@
 /* camunda:historyTimeToLive, in days: how long history of an ended
  * instance is kept. nil keeps it. */
 @property (nonatomic, readonly, strong) NSNumber *historyTimeToLive;
+/* Who may start it: camunda:candidateStarterUsers and
+ * camunda:candidateStarterGroups (a group, or name:value, a claim: see
+ * WFIdentity.h). Anyone, when it names none. */
+@property (nonatomic, readonly, copy) NSArray<NSString *> *candidateStarterUsers;
+@property (nonatomic, readonly, copy) NSArray<NSString *> *candidateStarterGroups;
+- (BOOL)isStartableBy:(WFIdentity *)identity;
 /* The process's start and end listeners. */
 @property (nonatomic, readonly, copy) NSArray<WFListener *> *executionListeners;
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, WFFlowNode *> *nodes;
@@ -236,6 +244,7 @@
 /* Process-level settings. */
 - (instancetype)setDefaultTaskPriority:(NSInteger)priority;
 - (instancetype)setHistoryTimeToLive:(NSInteger)days;
+- (instancetype)setCandidateStarterUsers:(NSArray<NSString *> *)users groups:(NSArray<NSString *> *)groups;
 /* Names a node or a sequence flow already added. */
 - (instancetype)setName:(NSString *)name forElement:(NSString *)elementId;
 - (instancetype)setBoundsFor:(NSString *)elementId

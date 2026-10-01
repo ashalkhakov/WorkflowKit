@@ -133,6 +133,9 @@ WFServiceError(WFErrorCode code, NSString *message)
 		if (link.groupId != nil) {
 			[groups addObject:link.groupId];
 		}
+		if (link.claimName != nil) {
+			[groups addObject:[NSString stringWithFormat:@"%@:%@", link.claimName, link.claimValue ?: @""]];
+		}
 	}
 	task.candidateUsers = [users sortedArrayUsingSelector:@selector(compare:)];
 	task.candidateGroups = [groups sortedArrayUsingSelector:@selector(compare:)];

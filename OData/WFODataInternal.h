@@ -33,10 +33,20 @@ NSXMLDocument *WFODataInstance(NSString *text, ODataReply *reply);
  * handler of the service works through. */
 @interface WFODataOperations : NSObject <WFODataServiceActions, WFODataServiceFunctions>
 @property (nonatomic, readonly, strong) WFProcessEngine *engine;
+/* The claim a principal's groups are in. */
+@property (nonatomic, copy) NSString *groupsClaim;
 - (instancetype)initWithEngine:(WFProcessEngine *)engine;
 /* The operations of the service a request came to. */
 + (WFODataOperations *)operationsOf:(ODataRequest *)request;
 @end
+
+@class WFIdentity;
+
+/* Who is asking, as the engine matches people; nil for no one. */
+WFIdentity *WFODataIdentity(ODataRequest *request);
+/* Whether the request's principal has the scope; YES with no principal,
+ * whom nothing limits. */
+BOOL WFODataHasScope(ODataRequest *request, NSString *scope);
 
 /* An engine error as the OData error it is answered with. */
 NSError *WFODataError(NSError *error);

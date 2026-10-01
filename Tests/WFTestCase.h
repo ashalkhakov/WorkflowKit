@@ -55,6 +55,14 @@
 @interface WFOrderFormHandler : NSObject <WFFormHandler>
 @end
 
+#ifdef WORKFLOWKIT_ODATA
+/* Who is asking, from headers: X-User the subject, X-Groups (comma
+ * separated) the groups claim, X-Department a department claim, X-Scopes
+ * the scope claim. No X-User: no one. */
+@interface WFHeaderAuthenticator : NSObject <ODataAuthenticator>
+@end
+#endif
+
 /* Registers a WFApproveDelegate as "approver" and a WFRecordingListener
  * as "recorder". */
 @interface WFTestPlugin : NSObject <WFEnginePlugin>
@@ -117,6 +125,10 @@
 - (NSArray *)rows:(NSString *)entity engine:(WFProcessEngine *)engine;
 
 - (WFProcessDefinition *)approvalDefinition;
+/* A purchase reviewed by sales, by whoever is in purchasing (a claim, not a
+ * group: department:purchasing), or by carol; started by requesters or
+ * purchasing. */
+- (WFProcessDefinition *)claimedPurchase;
 
 /* An exclusive gateway behind an async continuation, with no default: it
  * fails until "amount" is set. */

@@ -22,11 +22,23 @@
                   body:(id)body
                service:(ODataService *)service
 {
+	return [self send:method path:path body:body headers:nil service:service];
+}
+
+- (NSDictionary *)send:(NSString *)method
+                  path:(NSString *)path
+                  body:(id)body
+               headers:(NSDictionary *)headers
+               service:(ODataService *)service
+{
 	NSString *encoded = [path stringByAddingPercentEncodingWithAllowedCharacters:
 		[NSCharacterSet URLQueryAllowedCharacterSet]];
 	NSURL *url = [NSURL URLWithString:[@"http://example.test/api/" stringByAppendingString:encoded]];
 	NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
 	[request setHTTPMethod:method];
+	for (NSString *name in headers) {
+		[request setValue:[headers objectForKey:name] forHTTPHeaderField:name];
+	}
 	if (body != nil) {
 		[request setHTTPBody:[NSJSONSerialization dataWithJSONObject:body options:0 error:NULL]];
 		[request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
@@ -513,4 +525,67 @@
 	                                  service:service]], (NSInteger)409);
 	XCTAssertEqual(([self statusOf:[self send:@"POST" path:[definition stringByAppendingString:@"/WorkflowKit.Activate"]
 	                                     body:@{ @"IncludeInstances": @NO } service:service]]), (NSInteger)204);
+}
+
+/* Who may see and do what: the processes say it, by user, group or claim,
+ * and an operator's scopes lift it. */
+- (void)testODataLimitsWhatEachCallerSeesAndDoes
+{
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	ODataService *service = [self serviceFor:engine];
+	service.authenticator = [[WFHeaderAuthenticator alloc] init];
+	NSString *a = [self run:[self claimedPurchase] engine:engine variables:nil];
+	[self run:[self claimedPurchase] engine:engine variables:nil];
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"open"];
+	[[[b addStart:@"start"] addUserTask:@"chore" name:@"Chore" assignee:@"dan"] addEnd:@"end"];
+	[[b connect:@"start" to:@"chore"] connect:@"chore" to:@"end"];
+	NSError *error = nil;
+	[self run:[b build:&error] engine:engine variables:nil];
+
+	NSDictionary *ann = @{ @"X-User": @"ann", @"X-Groups": @"sales" };
+	NSDictionary *bob = @{ @"X-User": @"bob", @"X-Department": @"purchasing" };
+	NSDictionary *eve = @{ @"X-User": @"eve", @"X-Groups": @"staff" };
+	NSDictionary *operator = @{ @"X-User": @"oz", @"X-Scopes": @"Tasks.ReadAll Tasks.Assign ProcessDefinitions.ReadAll ProcessInstances.StartAny" };
+	NSUInteger (^count)(NSString *, NSDictionary *) = ^NSUInteger(NSString *path, NSDictionary *who) {
+		NSDictionary *response = [self send:@"GET" path:path body:nil headers:who service:service];
+		XCTAssertEqual([self statusOf:response], (NSInteger)200, @"%@: %@", path, [response objectForKey:@"text"]);
+		return [[[self jsonOf:response] objectForKey:@"value"] count];
+	};
+	XCTAssertEqual([self statusOf:[self send:@"GET" path:@"Tasks" body:nil service:service]], (NSInteger)401);
+	XCTAssertEqual(count(@"Tasks", ann), (NSUInteger)2, @"offered to sales");
+	XCTAssertEqual(count(@"Tasks", bob), (NSUInteger)2, @"offered to purchasing, a claim");
+	XCTAssertEqual(count(@"Tasks", @{ @"X-User": @"dan" }), (NSUInteger)1, @"his own");
+	XCTAssertEqual(count(@"Tasks", eve), (NSUInteger)0);
+	XCTAssertEqual(count(@"Tasks", operator), (NSUInteger)3);
+
+	/* Claiming: for oneself; then the task is hers alone. */
+	NSString *taskId = [self task:@"review" of:a engine:engine].taskId;
+	NSString *claim = [NSString stringWithFormat:@"Tasks('%@')/WorkflowKit.Claim", taskId];
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:claim body:@{ @"UserId": @"bob" } headers:ann service:service]]),
+		(NSInteger)403);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:claim body:@{} headers:ann service:service]]), (NSInteger)204);
+	XCTAssertEqualObjects([self task:@"review" of:a engine:engine].assignee, @"ann");
+	XCTAssertEqual(count(@"Tasks", bob), (NSUInteger)1);
+	XCTAssertEqual(count(@"Tasks", ann), (NSUInteger)2);
+	NSString *unclaim = [NSString stringWithFormat:@"Tasks('%@')/WorkflowKit.Unclaim", taskId];
+	XCTAssertEqual([self statusOf:[self send:@"POST" path:unclaim body:nil headers:bob service:service]], (NSInteger)404,
+		@"not his to see");
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:[NSString stringWithFormat:@"Tasks('%@')/WorkflowKit.Assign", taskId]
+	                                     body:@{ @"UserId": @"bob" } headers:operator service:service]]), (NSInteger)204);
+	XCTAssertEqualObjects([self task:@"review" of:a engine:engine].assignee, @"bob");
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:[NSString stringWithFormat:@"Tasks('%@')/WorkflowKit.Complete", taskId]
+	                                     body:@{} headers:eve service:service]]), (NSInteger)404);
+
+	/* Starting: what each may start. */
+	XCTAssertEqual(count(@"ProcessDefinitions", eve), (NSUInteger)1, @"the one that names no starters");
+	XCTAssertEqual(count(@"ProcessDefinitions", bob), (NSUInteger)2);
+	XCTAssertEqual(count(@"ProcessDefinitions", operator), (NSUInteger)2);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:@"StartProcessInstance" body:@{ @"Key": @"claimed" }
+	                                  headers:eve service:service]]), (NSInteger)403);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:@"StartProcessInstance" body:@{ @"Key": @"open" }
+	                                  headers:eve service:service]]), (NSInteger)200);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:@"StartProcessInstance" body:@{ @"Key": @"claimed" }
+	                                  headers:bob service:service]]), (NSInteger)200);
+	XCTAssertEqual(([self statusOf:[self send:@"POST" path:@"StartProcessInstance" body:@{ @"Key": @"claimed" }
+	                                  headers:operator service:service]]), (NSInteger)200);
 }

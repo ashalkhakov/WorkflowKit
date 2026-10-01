@@ -32,6 +32,9 @@
  *   Localhost     YES (the default): listen on loopback only, for a proxy
  *                 on the same machine
  *   MaxPageSize   server-driven paging, 0 for none
+ *   GroupsClaim   the claim a principal's groups are in (default groups):
+ *                 what candidate groups name; any other claim is matched
+ *                 by a candidate group name:value
  *   TrustedUserHeader, ProxySecretHeader, ProxySecretEnvironment,
  *   JWTIssuer, JWTAudience, AllowAnonymous
  *                 who is asking, as ois-serve has them (ODataAuthentication.h)
@@ -240,7 +243,8 @@ main(int argc, const char *argv[])
 		NSUInteger port = [settings objectForKey:@"Port"] != nil ? (NSUInteger)[[settings objectForKey:@"Port"] integerValue] : 8080;
 		NSURL *root = WFURL([settings objectForKey:@"ServiceRoot"])
 			?: [NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:%lu/api/", (unsigned long)port]];
-		ODataService *service = [WFODataService serviceForEngine:engine serviceRoot:root];
+		ODataService *service = [WFODataService serviceForEngine:engine serviceRoot:root
+		                                              groupsClaim:[settings objectForKey:@"GroupsClaim"] ?: @"groups"];
 		if ([settings objectForKey:@"MaxPageSize"] != nil) {
 			service.maxPageSize = (NSUInteger)[[settings objectForKey:@"MaxPageSize"] integerValue];
 		}

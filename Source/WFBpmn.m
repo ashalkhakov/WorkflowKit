@@ -177,6 +177,8 @@ static NSString * const WFBusinessKeyExpression = @"#{execution.processBusinessK
 	WFSet(process, @"isExecutable", @"true");
 	WFSet(process, @"camunda:taskPriority", [definition.defaultTaskPriority stringValue]);
 	WFSet(process, @"camunda:historyTimeToLive", [definition.historyTimeToLive stringValue]);
+	WFSet(process, @"camunda:candidateStarterUsers", [definition.candidateStarterUsers componentsJoinedByString:@","]);
+	WFSet(process, @"camunda:candidateStarterGroups", [definition.candidateStarterGroups componentsJoinedByString:@","]);
 	if ([definition.executionListeners count] > 0) {
 		NSXMLElement *extensions = WFElement(@"bpmn:extensionElements");
 		for (WFListener *listener in definition.executionListeners) {
@@ -1004,6 +1006,18 @@ WFIgnoredElements(void)
 			}
 			[builder setHistoryTimeToLive:(NSInteger)days];
 		}
+		NSArray *(^list)(NSString *) = ^NSArray *(NSString *name) {
+			NSMutableArray *names = [NSMutableArray array];
+			for (NSString *part in [[self attr:name namespace:WFCamundaNamespace of:process] ?: @""
+			         componentsSeparatedByString:@","]) {
+				NSString *trimmed = [part stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+				if ([trimmed length] > 0) {
+					[names addObject:trimmed];
+				}
+			}
+			return names;
+		};
+		[builder setCandidateStarterUsers:list(@"candidateStarterUsers") groups:list(@"candidateStarterGroups")];
 		[self readScope:process into:builder context:context];
 		[self readListenersOf:process id:processId into:builder context:context];
 		if (context.error != nil) {

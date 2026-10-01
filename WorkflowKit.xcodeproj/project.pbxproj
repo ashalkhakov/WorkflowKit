@@ -43,6 +43,7 @@
 		5C00525C929AAB0F9FF7AD0D /* GCDWebServerHTTPMessage.m in wf-serve */ = { isa = PBXBuildFile; fileRef = 706C94B3942D154815574915 /* GCDWebServerHTTPMessage.m */; };
 		61210CDE7320ABDB34638C84 /* WFTestCase.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = B889BD1773784D5B911A2332 /* WFTestCase.m */; };
 		62A943CF6721845AA320BE32 /* WFFlowElements.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = E019399656F10AACD6743EB4 /* WFFlowElements.m */; };
+		644687E4BCD23471CC5F86AD /* WFIdentity.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = DA16A927D0C6C4A193C8053A /* WFIdentity.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		6A2760F2E8D606776C34B716 /* WFHandlers.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = C27CAE65E61048A81C943A74 /* WFHandlers.m */; };
 		6B9BDCD6AB3AEE5EC3C52745 /* WFODataService.m in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = 04F28149E5688FABDAA97A13 /* WFODataService.m */; };
 		6E1AA21AE7EA28F91B1ECDD1 /* WFCommandContext.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 73088BE5CB96B1B9B60C9199 /* WFCommandContext.m */; };
@@ -69,6 +70,7 @@
 		A68B8D5624C0059FF2DB8FE1 /* ODataHTTPServer.m in wf-serve */ = { isa = PBXBuildFile; fileRef = 0EF11CB8DA72B495F40942DA /* ODataHTTPServer.m */; };
 		A76868AC53F7AAA1189D858C /* WorkflowKitOData.framework in wf-serve */ = { isa = PBXBuildFile; fileRef = 86F8E04EBD4FEC74BBFE051A /* WorkflowKitOData.framework */; };
 		A870A865F8D824DCFD20DEFF /* WFTimers.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 549A090589F57133B293D64F /* WFTimers.m */; };
+		A9BBDFEF11E90CE3DE70B990 /* WFIdentity.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 458C9F099CEA38DDB4B699F1 /* WFIdentity.m */; };
 		AF54B0CA1ECFDB553F64DE0A /* ODataKit.framework in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = F308B2510F1C0D890B6F2016 /* ODataKit.framework */; };
 		B01C61BC17C96B65B865C136 /* WorkflowKit.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 6A854FC09A6643484EE20420 /* WorkflowKit.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		B043262804BC43D85FC6B689 /* ODataKit.framework in WorkflowKitOData */ = { isa = PBXBuildFile; fileRef = F308B2510F1C0D890B6F2016 /* ODataKit.framework */; };
@@ -180,6 +182,7 @@
 		3F7FF4D1AAA576287E06A607 /* WFFormService.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFormService.m; sourceTree = "<group>"; };
 		3F88955DF8B2C3DF38CA75CE /* WFEventTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFEventTests.inc; sourceTree = "<group>"; };
 		44A3FD1AC6AC91A463437904 /* WFTaskAssignmentTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTaskAssignmentTests.inc; sourceTree = "<group>"; };
+		458C9F099CEA38DDB4B699F1 /* WFIdentity.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFIdentity.m; sourceTree = "<group>"; };
 		46562FCAF74704E8DA28E482 /* WFEntities.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFEntities.m; sourceTree = "<group>"; };
 		47C719D23D836772452DA2E1 /* CLAUDE.md */ = { isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 		48A161F49A9C3B5D5CDC550F /* WFMigrationTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFMigrationTests.inc; sourceTree = "<group>"; };
@@ -242,6 +245,7 @@
 		D441166BB58C0AB901D87AC8 /* WFProcessEngine.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFProcessEngine.h; sourceTree = "<group>"; };
 		D7418BD4F00F1BFEFE9885B7 /* PurchaseRequestDemo */ = { isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = PurchaseRequestDemo; sourceTree = BUILT_PRODUCTS_DIR; };
 		D83E2818811F67EF54938FC7 /* WFGatewayTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFGatewayTests.inc; sourceTree = "<group>"; };
+		DA16A927D0C6C4A193C8053A /* WFIdentity.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFIdentity.h; sourceTree = "<group>"; };
 		DFC8CC2FFB1029A61E406DE9 /* WorkflowKitTests.xctest */ = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkflowKitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E019399656F10AACD6743EB4 /* WFFlowElements.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFlowElements.m; sourceTree = "<group>"; };
 		E1D110CC1F318D84D733FBBC /* GCDWebServerMultiPartFormRequest.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = GCDWebServerMultiPartFormRequest.m; path = ../ODataKit/ThirdParty/GCDWebServer/Requests/GCDWebServerMultiPartFormRequest.m; sourceTree = SOURCE_ROOT; };
@@ -364,6 +368,7 @@
 				09C94C2B2CF68470F191FFF5 /* WFStore.h */,
 				59630E0E416E1E31E471B6E2 /* WFRepositoryService.h */,
 				61105A30BA3840DBFB00DA37 /* WFRuntimeService.h */,
+				DA16A927D0C6C4A193C8053A /* WFIdentity.h */,
 				1289DE37EC202E36DE9793B1 /* WFTaskQuery.h */,
 				FD4EF373BB0A220F9EF44E92 /* WFForm.h */,
 				693B6C5E6C9A4660D1ED1172 /* WFFormService.h */,
@@ -508,6 +513,7 @@
 				73088BE5CB96B1B9B60C9199 /* WFCommandContext.m */,
 				A99FA1FDB589AA19D5B73BB8 /* WFServices.m */,
 				B3B0F8D62D83EA1F357CC5B5 /* WFTaskQuery.m */,
+				458C9F099CEA38DDB4B699F1 /* WFIdentity.m */,
 				73C42D2DF4205F85785644E7 /* WFForm.m */,
 				3F7FF4D1AAA576287E06A607 /* WFFormService.m */,
 				3262393709D3B8619F13D3D3 /* WFExternalTaskService.m */,
@@ -553,6 +559,7 @@
 				1B5255276409615011BDB720 /* WFStore.h in WorkflowKit */,
 				B50DB206BE50D8BF4BE9675A /* WFRepositoryService.h in WorkflowKit */,
 				23EC5DB65F46CE005D62EFD4 /* WFRuntimeService.h in WorkflowKit */,
+				644687E4BCD23471CC5F86AD /* WFIdentity.h in WorkflowKit */,
 				967C321CBF0CB818D7006865 /* WFTaskQuery.h in WorkflowKit */,
 				92065565EA540A595FCA5AFF /* WFForm.h in WorkflowKit */,
 				74276469454D123DCB7F2EA0 /* WFFormService.h in WorkflowKit */,
@@ -748,6 +755,7 @@
 				6E1AA21AE7EA28F91B1ECDD1 /* WFCommandContext.m in WorkflowKit */,
 				6E96E2FF000FC70BE28FB51F /* WFServices.m in WorkflowKit */,
 				8E0B88B8C0EB745A09586093 /* WFTaskQuery.m in WorkflowKit */,
+				A9BBDFEF11E90CE3DE70B990 /* WFIdentity.m in WorkflowKit */,
 				F4B0AE133EB556BC2E6E86BF /* WFForm.m in WorkflowKit */,
 				CEE9B6A3901AFF7A33D3B326 /* WFFormService.m in WorkflowKit */,
 				7E1890E7CA8ED649C3760ED6 /* WFExternalTaskService.m in WorkflowKit */,

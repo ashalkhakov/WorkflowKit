@@ -9,6 +9,7 @@
 #import "WFStore.h"
 #import "WFRepositoryService.h"
 #import "WFRuntimeService.h"
+#import "WFIdentity.h"
 #import "WFTaskQuery.h"
 #import "WFTaskService.h"
 #import "WFForm.h"

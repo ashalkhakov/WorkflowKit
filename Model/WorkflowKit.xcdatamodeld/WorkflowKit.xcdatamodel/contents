@@ -13,6 +13,7 @@
         <attribute name="resourceName" attributeType="String"/>
         <attribute name="suspended" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="version" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="starterLinks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFIdentityLink" inverseName="definition" inverseEntity="WFIdentityLink"/>
         <relationship name="forms" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WFFormRecord" inverseName="definition" inverseEntity="WFFormRecord"/>
         <relationship name="deployment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFDeployment" inverseName="definitions" inverseEntity="WFDeployment"/>
         <uniquenessConstraints>
@@ -260,16 +261,23 @@
         </userInfo>
     </entity>
     <entity name="WFIdentityLink" representedClassName="WFIdentityLinkEntity" codeGenerationType="class" syncable="YES">
+        <attribute name="claimName" optional="YES" attributeType="String"/>
+        <attribute name="claimValue" optional="YES" attributeType="String"/>
         <attribute name="groupId" optional="YES" attributeType="String"/>
-        <attribute name="processInstanceId" attributeType="String"/>
+        <attribute name="processInstanceId" optional="YES" attributeType="String"/>
         <attribute name="type" attributeType="String"/>
         <attribute name="userId" optional="YES" attributeType="String"/>
+        <relationship name="definition" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFDefinitionRecord" inverseName="starterLinks" inverseEntity="WFDefinitionRecord"/>
         <relationship name="task" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WFTask" inverseName="identityLinks" inverseEntity="WFTask"/>
         <fetchIndex name="byUser">
             <fetchIndexElement property="userId" type="Binary" order="ascending"/>
         </fetchIndex>
         <fetchIndex name="byGroup">
             <fetchIndexElement property="groupId" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byClaim">
+            <fetchIndexElement property="claimName" type="Binary" order="ascending"/>
+            <fetchIndexElement property="claimValue" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
     <entity name="WFTask" representedClassName="WFTaskEntity" codeGenerationType="class" syncable="YES">

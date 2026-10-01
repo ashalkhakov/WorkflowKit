@@ -3,6 +3,7 @@
 #import "WFFlowElements.h"
 #import "WFDuration.h"
 #import "WFFeelInternal.h"
+#import "WFIdentity+Internal.h"
 
 @interface WFFlowNode (WFBuilderAccess)
 - (void)addIncomingFlowId:(NSString *)flowId;
@@ -67,6 +68,8 @@
 @property (nonatomic, readwrite, copy) NSString *resourceName;
 @property (nonatomic, readwrite, strong) NSNumber *defaultTaskPriority;
 @property (nonatomic, readwrite, strong) NSNumber *historyTimeToLive;
+@property (nonatomic, readwrite, copy) NSArray<NSString *> *candidateStarterUsers;
+@property (nonatomic, readwrite, copy) NSArray<NSString *> *candidateStarterGroups;
 @property (nonatomic, readwrite, copy) NSArray<WFListener *> *executionListeners;
 /* Node id to @[node, scope definition], for the whole tree. */
 @property (nonatomic, strong) NSDictionary *nodeIndex;
@@ -140,8 +143,29 @@
 	copy.resourceName = resourceName;
 	copy.defaultTaskPriority = self.defaultTaskPriority;
 	copy.historyTimeToLive = self.historyTimeToLive;
+	copy.candidateStarterUsers = self.candidateStarterUsers;
+	copy.candidateStarterGroups = self.candidateStarterGroups;
 	copy.executionListeners = self.executionListeners;
 	return copy;
+}
+
+- (BOOL)isStartableBy:(WFIdentity *)identity
+{
+	if ([self.candidateStarterUsers count] == 0 && [self.candidateStarterGroups count] == 0) {
+		return YES;
+	}
+	if (identity.userId != nil && [self.candidateStarterUsers containsObject:identity.userId]) {
+		return YES;
+	}
+	for (NSString *entry in self.candidateStarterGroups) {
+		NSString *groupId = nil, *claimName = nil, *claimValue = nil;
+		WFSplitCandidate(entry, &groupId, &claimName, &claimValue);
+		if (groupId != nil ? [identity.groups containsObject:groupId]
+		                   : [[identity valuesOfClaim:claimName] containsObject:claimValue]) {
+			return YES;
+		}
+	}
+	return NO;
 }
 
 - (WFEvent *)startEvent
@@ -214,6 +238,8 @@
 @property (nonatomic, copy) NSString *processName;
 @property (nonatomic, strong) NSNumber *processTaskPriority;
 @property (nonatomic, strong) NSNumber *processTimeToLive;
+@property (nonatomic, copy) NSArray<NSString *> *starterUsers;
+@property (nonatomic, copy) NSArray<NSString *> *starterGroups;
 @property (nonatomic, strong) NSMutableArray<WFListener *> *processListeners;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WFFlowNode *> *nodes;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WFSequenceFlow *> *flows;
@@ -984,6 +1010,13 @@
 	return self;
 }
 
+- (instancetype)setCandidateStarterUsers:(NSArray<NSString *> *)users groups:(NSArray<NSString *> *)groups
+{
+	self.starterUsers = users;
+	self.starterGroups = groups;
+	return self;
+}
+
 - (instancetype)setName:(NSString *)name forElement:(NSString *)elementId
 {
 	WFFlowNode *node = [self.nodes objectForKey:elementId];
@@ -1411,6 +1444,8 @@
 		                                     flowOrder:self.flowOrder];
 	definition.defaultTaskPriority = self.processTaskPriority;
 	definition.historyTimeToLive = self.processTimeToLive;
+	definition.candidateStarterUsers = self.starterUsers ?: @[];
+	definition.candidateStarterGroups = self.starterGroups ?: @[];
 	definition.executionListeners = self.processListeners ?: @[];
 	return definition;
 }

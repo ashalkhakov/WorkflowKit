@@ -1,5 +1,6 @@
 #import "WFTaskQuery+Internal.h"
 #import "WFEntities.h"
+#import "WFIdentity+Internal.h"
 
 static NSError *
 WFQueryError(NSString *message)
@@ -282,6 +283,18 @@ WFVariablePredicate(NSString *variablesKeyPath, NSString *name, WFQueryOperator 
 - (instancetype)candidateGroup:(NSString *)groupId
 {
 	return [self candidateUser:nil groups:groupId != nil ? @[ groupId ] : nil];
+}
+
+- (instancetype)visibleTo:(WFIdentity *)identity
+{
+	NSPredicate *offered = [NSCompoundPredicate andPredicateWithSubpredicates:@[
+		WFKeyCompare(@"assignee", NSEqualToPredicateOperatorType, nil),
+		WFLinksMatch(@"identityLinks", WFIdentityLinkCandidate, identity) ]];
+	if (identity.userId == nil) {
+		return [self where:offered];
+	}
+	return [self where:[NSCompoundPredicate orPredicateWithSubpredicates:@[
+		WFKeyCompare(@"assignee", NSEqualToPredicateOperatorType, identity.userId), offered ]]];
 }
 
 - (instancetype)minPriority:(NSInteger)priority

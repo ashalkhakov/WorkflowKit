@@ -129,3 +129,44 @@
 	WFProcessDefinition *again = [WFBpmnReader definitionFromXMLString:written error:&error];
 	[self assertNode:task matches:[again nodeWithId:@"t"]];
 }
+
+- (void)testCandidatesAndStartersMayNameClaims
+{
+	NSError *error = nil;
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	NSString *pid = [self run:[self claimedPurchase] engine:engine variables:nil];
+	WFWorkItem *task = [self task:@"review" of:pid engine:engine];
+	XCTAssertEqualObjects(task.candidateGroups, (@[ @"department:purchasing", @"sales" ]));
+
+	WFIdentity *ann = [WFIdentity identityWithUserId:@"ann" groups:@[ @"sales" ] claims:nil];
+	WFIdentity *bob = [WFIdentity identityWithUserId:@"bob" groups:nil claims:@{ @"department": @"purchasing" }];
+	WFIdentity *carol = [WFIdentity identityWithUserId:@"carol" groups:nil claims:nil];
+	WFIdentity *eve = [WFIdentity identityWithUserId:@"eve" groups:@[ @"staff" ]
+	                                          claims:@{ @"department": @[ @"finance", @"legal" ] }];
+	NSUInteger (^seen)(WFIdentity *) = ^NSUInteger(WFIdentity *identity) {
+		return [engine.taskService countOfTasksMatching:[[WFTaskQuery query] visibleTo:identity] error:NULL];
+	};
+	XCTAssertEqual(seen(ann), (NSUInteger)1, @"by group");
+	XCTAssertEqual(seen(bob), (NSUInteger)1, @"by claim");
+	XCTAssertEqual(seen(carol), (NSUInteger)1, @"by user");
+	XCTAssertEqual(seen(eve), (NSUInteger)0);
+	/* Claimed: hers alone. */
+	XCTAssertTrue([engine.taskService claimTask:task.taskId user:@"ann" error:&error], @"%@", error);
+	XCTAssertEqual(seen(ann), (NSUInteger)1);
+	XCTAssertEqual(seen(bob), (NSUInteger)0);
+
+	/* Who may start it. */
+	WFProcessDefinition *deployed = [engine.repositoryService latestDefinitionForKey:@"claimed" error:&error];
+	XCTAssertTrue([deployed isStartableBy:bob]);
+	XCTAssertTrue([deployed isStartableBy:[WFIdentity identityWithUserId:@"rita" groups:@[ @"requesters" ] claims:nil]]);
+	XCTAssertFalse([deployed isStartableBy:ann]);
+	XCTAssertFalse([deployed isStartableBy:eve]);
+	NSString *written = [WFBpmnWriter XMLStringFromDefinition:deployed error:&error];
+	XCTAssertTrue([written rangeOfString:@"camunda:candidateStarterGroups=\"requesters,department:purchasing\""].location
+		!= NSNotFound, @"%@", written);
+	WFProcessDefinition *reread = [WFBpmnReader definitionFromXMLString:written error:&error];
+	XCTAssertEqualObjects(reread.candidateStarterGroups, (@[ @"requesters", @"department:purchasing" ]));
+	WFDefinitionBuilder *open = [WFDefinitionBuilder process:@"open"];
+	[[[open addStart:@"s"] addEnd:@"e"] connect:@"s" to:@"e"];
+	XCTAssertTrue([[open build:&error] isStartableBy:eve], @"naming no one, anyone");
+}

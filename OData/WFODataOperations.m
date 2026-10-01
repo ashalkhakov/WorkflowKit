@@ -4,6 +4,8 @@
 #import "WFTaskService.h"
 #import "WFManagementService.h"
 #import "WFRepositoryService.h"
+#import "WFIdentity.h"
+#import "WFProcessDefinition.h"
 #import <ODataKit/ODataError.h>
 
 @protocol WFODataTaskFunctions <ODataFunctions>
@@ -74,6 +76,37 @@ WFODataInstance(NSString *text, ODataReply *reply)
 	return instance;
 }
 
+/* Answers 403 and NO when the caller may not start the process. */
+static BOOL
+WFODataMayStart(WFProcessEngine *engine, NSString *key, ODataReply *reply)
+{
+	WFIdentity *identity = WFODataIdentity(reply.request);
+	if (identity == nil || WFODataHasScope(reply.request, WFODataScopeStartAny)) {
+		return YES;
+	}
+	WFProcessDefinition *definition = [engine.repositoryService latestDefinitionForKey:key error:NULL];
+	if (definition == nil || [definition isStartableBy:identity]) {
+		return YES;  /* an unknown key is answered as the engine answers it */
+	}
+	[reply failWithError:ODataServiceError(403, [NSString stringWithFormat:@"%@ may not start %@", identity.userId, key])];
+	return NO;
+}
+
+/* Answers 403 and NO unless the caller acts for themselves, or may act
+ * for anyone. */
+static BOOL
+WFODataForThemselves(NSString *userId, ODataReply *reply)
+{
+	WFIdentity *identity = WFODataIdentity(reply.request);
+	if (identity == nil || [userId isEqualToString:identity.userId]
+	    || WFODataHasScope(reply.request, WFODataScopeAssignTasks)) {
+		return YES;
+	}
+	[reply failWithError:ODataServiceError(403, [NSString stringWithFormat:@"%@ may assign tasks to themselves only",
+		identity.userId])];
+	return NO;
+}
+
 /* NSNull, which a JSON null is, as no value. */
 static id
 WFODataValue(id value)
@@ -101,6 +134,9 @@ WFODataValue(id value)
                                          variables:(NSDictionary *)variables
                                              reply:(ODataReply *)reply
 {
+	if (!WFODataMayStart(_engine, key, reply)) {
+		return nil;
+	}
 	NSError *error = nil;
 	WFProcessInstance *instance = [_engine.runtimeService startProcessInstanceByKey:key
 	                                                                    businessKey:WFODataValue(businessKey)
@@ -159,7 +195,7 @@ WFODataValue(id value)
                                         reply:(ODataReply *)reply
 {
 	NSXMLDocument *document = WFODataInstance(text, reply);
-	if (document == nil) {
+	if (document == nil || !WFODataMayStart(_engine, key, reply)) {
 		return nil;
 	}
 	NSError *error = nil;
@@ -232,13 +268,21 @@ WFODataValue(id value)
 
 - (void)claimWithUserId:(NSString *)userId reply:(ODataReply *)reply
 {
+	/* For the caller, unless named. */
+	NSString *user = WFODataValue(userId) ?: WFODataIdentity(reply.request).userId;
+	if (!WFODataForThemselves(user, reply)) {
+		return;
+	}
 	NSError *error = nil;
-	BOOL done = [[self wf_taskServiceFor:reply] claimTask:self.taskId user:WFODataValue(userId) error:&error];
+	BOOL done = [[self wf_taskServiceFor:reply] claimTask:self.taskId user:user error:&error];
 	WFODataFinish(reply, done, error);
 }
 
 - (void)unclaim:(ODataReply *)reply
 {
+	if (self.assignee != nil && !WFODataForThemselves(self.assignee, reply)) {
+		return;
+	}
 	NSError *error = nil;
 	BOOL done = [[self wf_taskServiceFor:reply] unclaimTask:self.taskId error:&error];
 	WFODataFinish(reply, done, error);
@@ -246,6 +290,9 @@ WFODataValue(id value)
 
 - (void)assignWithUserId:(NSString *)userId reply:(ODataReply *)reply
 {
+	if (!WFODataForThemselves(WFODataValue(userId), reply)) {
+		return;
+	}
 	NSError *error = nil;
 	BOOL done = [[self wf_taskServiceFor:reply] setAssignee:WFODataValue(userId) forTask:self.taskId error:&error];
 	WFODataFinish(reply, done, error);

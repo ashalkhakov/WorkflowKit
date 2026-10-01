@@ -293,7 +293,12 @@ A task row holds:
 - its execution and process instance.
 
 Completing a task signals its execution. Identity management itself (users,
-groups, passwords) is out of scope. Assignees and groups are plain strings,
+groups, passwords) is out of scope: who is asking arrives as a
+`WFIdentity` -- a user, groups and claims, from an API's sign-in -- which
+is matched against what a process names. A candidate group may name a claim
+(`department:purchasing`) rather than a group, so that a process names what
+a person is, not an organization's group names; candidate starters work the
+same way. Assignees and groups are plain strings,
 resolved by the application: a query for a candidate user takes that
 user's groups as an argument. Claiming a task someone else holds fails.
 

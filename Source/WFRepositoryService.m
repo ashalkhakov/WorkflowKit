@@ -436,6 +436,8 @@ WFFormsOf(WFProcessDefinition *definition)
 		record.resourceName = [pair objectAtIndex:1];
 		record.historyTimeToLive = definition.historyTimeToLive;
 		record.forms = WFFormsOf(definition);
+		record.candidateStarterUsers = definition.candidateStarterUsers;
+		record.candidateStarterGroups = definition.candidateStarterGroups;
 		record.startEventId = [[definition startEvent] elementId];
 		/* Each form's XForms document: deployed with it, else generated
 		 * from its fields. */

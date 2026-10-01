@@ -173,4 +173,5 @@ WFIsIntegerNumber(NSNumber *number)
 @end
 
 NSString * const WFIdentityLinkCandidate = @"candidate";
+NSString * const WFIdentityLinkStarter = @"starter";
 

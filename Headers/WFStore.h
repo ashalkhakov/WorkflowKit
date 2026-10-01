@@ -38,6 +38,9 @@
 @property (nonatomic, copy) NSString *startEventId;
 /* Their XForms documents, by activity id, where the engine has one. */
 @property (nonatomic, copy) NSDictionary<NSString *, NSString *> *formDocuments;
+/* Who may start it, stored as starter links of its record. */
+@property (nonatomic, copy) NSArray<NSString *> *candidateStarterUsers;
+@property (nonatomic, copy) NSArray<NSString *> *candidateStarterGroups;
 @property (nonatomic, copy) NSString *timerStartActivityId;
 @property (nonatomic, copy) NSDate *timerStartDue;
 @property (nonatomic, copy) NSString *timerStartRepeat;

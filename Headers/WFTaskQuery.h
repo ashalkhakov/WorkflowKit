@@ -1,5 +1,7 @@
 #import "WFTypes.h"
 
+@class WFIdentity;
+
 /* How a condition compares a value. */
 typedef NS_ENUM(NSInteger, WFQueryOperator) {
 	WFQueryEqual = 0,
@@ -52,6 +54,10 @@ typedef NS_ENUM(NSInteger, WFTaskOrder) {
 - (instancetype)candidateUser:(NSString *)userId groups:(NSArray<NSString *> *)groupIds;
 /* Unclaimed, and offered to the group. */
 - (instancetype)candidateGroup:(NSString *)groupId;
+/* What the person may see: theirs, or unclaimed and offered to them -- by
+ * their user, one of their groups, or a claim of theirs a candidate group
+ * name:value names (WFIdentity.h). */
+- (instancetype)visibleTo:(WFIdentity *)identity;
 
 - (instancetype)minPriority:(NSInteger)priority;
 - (instancetype)maxPriority:(NSInteger)priority;

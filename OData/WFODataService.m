@@ -1,5 +1,51 @@
 #import "WFODataInternal.h"
 #import "WFStore.h"
+#import "WFEntities.h"
+#import "WFIdentity+Internal.h"
+#import "WFTaskQuery+Internal.h"
+
+NSString * const WFODataScopeReadAllTasks = @"Tasks.ReadAll";
+NSString * const WFODataScopeAssignTasks = @"Tasks.Assign";
+NSString * const WFODataScopeReadAllDefinitions = @"ProcessDefinitions.ReadAll";
+NSString * const WFODataScopeStartAny = @"ProcessInstances.StartAny";
+
+/* What a principal may do: OAuth's scope claim (text) or scp (a list). */
+static NSSet *
+WFODataScopes(ODataPrincipal *principal)
+{
+	id scope = [principal.claims objectForKey:@"scope"] ?: [principal.claims objectForKey:@"scp"];
+	if ([scope isKindOfClass:[NSString class]]) {
+		return [NSSet setWithArray:[scope componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+	}
+	return [scope isKindOfClass:[NSArray class]] ? [NSSet setWithArray:scope] : [NSSet set];
+}
+
+BOOL
+WFODataHasScope(ODataRequest *request, NSString *scope)
+{
+	return request.principal == nil || [WFODataScopes(request.principal) containsObject:scope];
+}
+
+WFIdentity *
+WFODataIdentity(ODataRequest *request)
+{
+	ODataPrincipal *principal = request.principal;
+	if (principal == nil) {
+		return nil;
+	}
+	id groups = [principal.claims objectForKey:[WFODataOperations operationsOf:request].groupsClaim ?: @"groups"];
+	if ([groups isKindOfClass:[NSString class]]) {
+		groups = [groups componentsSeparatedByString:@","];
+	}
+	NSMutableArray *names = [NSMutableArray array];
+	for (id group in [groups isKindOfClass:[NSArray class]] ? groups : @[]) {
+		NSString *name = [[group description] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+		if ([name length] > 0) {
+			[names addObject:name];
+		}
+	}
+	return [WFIdentity identityWithUserId:principal.subject groups:names claims:principal.claims];
+}
 #import <ODataKit/ODataError.h>
 
 NSError *
@@ -68,19 +114,70 @@ WFODataIsNil(NSString *key, BOOL isNil)
 
 @end
 
+/* Tasks: the caller's, or offered to them. */
+@interface WFODataTasksHandler : WFODataHandler
+@end
+
+@implementation WFODataTasksHandler
+
+- (NSPredicate *)predicateForVisibleObjectsInRequest:(ODataRequest *)request
+{
+	WFIdentity *identity = WFODataIdentity(request);
+	if (identity == nil || WFODataHasScope(request, WFODataScopeReadAllTasks)) {
+		return nil;
+	}
+	return [[[WFTaskQuery query] visibleTo:identity] wf_predicateWithDefinitionIds:nil error:NULL];
+}
+
+@end
+
+/* Process definitions: those the caller may start. */
+@interface WFODataDefinitionsHandler : WFODataHandler
+@end
+
+@implementation WFODataDefinitionsHandler
+
+- (NSPredicate *)predicateForVisibleObjectsInRequest:(ODataRequest *)request
+{
+	WFIdentity *identity = WFODataIdentity(request);
+	if (identity == nil || WFODataHasScope(request, WFODataScopeReadAllDefinitions)) {
+		return nil;
+	}
+	NSPredicate *anyone = [NSComparisonPredicate predicateWithLeftExpression:[NSExpression expressionForKeyPath:@"starterLinks.@count"]
+	                                                         rightExpression:[NSExpression expressionForConstantValue:@0]
+	                                                                modifier:NSDirectPredicateModifier
+	                                                                    type:NSEqualToPredicateOperatorType
+	                                                                 options:0];
+	return [NSCompoundPredicate orPredicateWithSubpredicates:@[
+		anyone, WFLinksMatch(@"starterLinks", WFIdentityLinkStarter, identity) ]];
+}
+
+@end
+
 @implementation WFODataService
 
 + (ODataService *)serviceForEngine:(WFProcessEngine *)engine serviceRoot:(NSURL *)serviceRoot
+{
+	return [self serviceForEngine:engine serviceRoot:serviceRoot groupsClaim:@"groups"];
+}
+
++ (ODataService *)serviceForEngine:(WFProcessEngine *)engine
+                       serviceRoot:(NSURL *)serviceRoot
+                       groupsClaim:(NSString *)groupsClaim
 {
 	ODataService *service = [[ODataService alloc] initWithPersistentStoreCoordinator:engine.store.coordinator
 	                                                                      serviceRoot:serviceRoot];
 	service.namespaceName = @"WorkflowKit";
 	service.configurationName = @"API";
-	service.serviceOperations = [[WFODataOperations alloc] initWithEngine:engine];
+	WFODataOperations *operations = [[WFODataOperations alloc] initWithEngine:engine];
+	operations.groupsClaim = groupsClaim;
+	service.serviceOperations = operations;
 	NSDictionary *entities = [service.model entitiesByName];
-	NSDictionary *sets = @{ @"Tasks": @"WFTask",
-	                        @"ProcessDefinitions": @"WFDefinitionRecord",
-	                        @"Forms": @"WFFormRecord",
+	[service setHandler:[[WFODataTasksHandler alloc] initWithEntity:[entities objectForKey:@"WFTask"]]
+	       forEntitySet:@"Tasks"];
+	[service setHandler:[[WFODataDefinitionsHandler alloc] initWithEntity:[entities objectForKey:@"WFDefinitionRecord"]]
+	       forEntitySet:@"ProcessDefinitions"];
+	NSDictionary *sets = @{ @"Forms": @"WFFormRecord",
 	                        @"Deployments": @"WFDeployment",
 	                        @"Resources": @"WFResource",
 	                        @"DecisionDefinitions": @"WFDecisionRecord",

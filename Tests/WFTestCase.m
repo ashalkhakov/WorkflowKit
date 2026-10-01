@@ -194,6 +194,30 @@ static NSMutableArray *WFTestEntries;
 
 @end
 
+#ifdef WORKFLOWKIT_ODATA
+@implementation WFHeaderAuthenticator
+
+- (void)authenticateRequest:(ODataRequest *)request reply:(ODataReply *)reply
+{
+	NSString *user = [request valueForHeader:@"X-User"];
+	if ([user length] == 0) {
+		[reply finishWithResult:nil];
+		return;
+	}
+	NSMutableDictionary *claims = [NSMutableDictionary dictionary];
+	NSString *groups = [request valueForHeader:@"X-Groups"];
+	[claims setObject:[groups length] > 0 ? [groups componentsSeparatedByString:@","] : @[] forKey:@"groups"];
+	NSString *department = [request valueForHeader:@"X-Department"];
+	if ([department length] > 0) {
+		[claims setObject:department forKey:@"department"];
+	}
+	[claims setObject:[request valueForHeader:@"X-Scopes"] ?: @"" forKey:@"scope"];
+	[reply finishWithResult:[[ODataPrincipal alloc] initWithSubject:user claims:claims]];
+}
+
+@end
+#endif
+
 @implementation WFTestPlugin
 
 - (void)registerWithEngine:(WFProcessEngine *)engine
@@ -382,6 +406,20 @@ static NSMutableArray *WFTestEntries;
 
 /* An exclusive gateway behind an async continuation, with no default: it
  * fails until "amount" is set. */
+- (WFProcessDefinition *)claimedPurchase
+{
+	NSError *error = nil;
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"claimed"];
+	[[[b addStart:@"start"] addUserTask:@"review" name:@"Review" assignee:nil] addEnd:@"end"];
+	[[b connect:@"start" to:@"review"] connect:@"review" to:@"end"];
+	[b setAssignment:@{ @"candidateGroups": @"sales, department:purchasing", @"candidateUsers": @"carol" }
+	      forElement:@"review"];
+	[b setCandidateStarterUsers:nil groups:@[ @"requesters", @"department:purchasing" ]];
+	WFProcessDefinition *definition = [b build:&error];
+	XCTAssertNotNil(definition, @"%@", error);
+	return definition;
+}
+
 - (WFProcessDefinition *)fragileDefinition:(NSString *)cycle
 {
 	NSError *error = nil;

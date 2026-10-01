@@ -1,5 +1,6 @@
 #import "WFCommandContext.h"
 #import "WFEntities.h"
+#import "WFIdentity+Internal.h"
 #import "WFProcessEngine+Internal.h"
 #import "WFFlowElements.h"
 #import "WFProcessDefinition.h"
@@ -3189,10 +3190,20 @@ WFSameKind(WFFlowNode *a, WFFlowNode *b)
 		if (names == nil) {
 			return NO;
 		}
+		BOOL users = [[kind objectAtIndex:0] isEqualToString:@"candidateUsers"];
 		for (NSString *name in names == [NSNull null] ? @[] : names) {
 			WFIdentityLinkEntity *link = [self insert:WFIdentityLinkName];
 			link.type = WFIdentityLinkCandidate;
-			[link setValue:name forKey:[kind objectAtIndex:2]];
+			if (users) {
+				link.userId = name;
+			} else {
+				/* A group, or name:value, a claim. */
+				NSString *groupId = nil, *claimName = nil, *claimValue = nil;
+				WFSplitCandidate(name, &groupId, &claimName, &claimValue);
+				link.groupId = groupId;
+				link.claimName = claimName;
+				link.claimValue = claimValue;
+			}
 			link.processInstanceId = row.processInstanceId;
 			link.task = row;
 		}

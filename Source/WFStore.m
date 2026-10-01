@@ -1,6 +1,7 @@
 #import "WFStore.h"
 #import "WFEntities.h"
 #import "WFForm.h"
+#import "WFIdentity+Internal.h"
 #import <CoreData/CoreData.h>
 
 static NSString * const WFDeploymentEntityName = @"WFDeployment";
@@ -293,6 +294,24 @@ static NSString * const WFJobEntityName = @"WFJob";
 			definitionRow.resourceName = record.resourceName;
 			definitionRow.historyTimeToLive = definition.historyTimeToLive;
 			definitionRow.deployment = row;
+			for (NSString *user in definition.candidateStarterUsers) {
+				WFIdentityLinkEntity *link = [NSEntityDescription insertNewObjectForEntityForName:@"WFIdentityLink"
+				                                                           inManagedObjectContext:self->_context];
+				link.type = WFIdentityLinkStarter;
+				link.userId = user;
+				link.definition = definitionRow;
+			}
+			for (NSString *entry in definition.candidateStarterGroups) {
+				WFIdentityLinkEntity *link = [NSEntityDescription insertNewObjectForEntityForName:@"WFIdentityLink"
+				                                                           inManagedObjectContext:self->_context];
+				NSString *groupId = nil, *claimName = nil, *claimValue = nil;
+				WFSplitCandidate(entry, &groupId, &claimName, &claimValue);
+				link.type = WFIdentityLinkStarter;
+				link.groupId = groupId;
+				link.claimName = claimName;
+				link.claimValue = claimValue;
+				link.definition = definitionRow;
+			}
 			for (NSString *activityId in definition.forms) {
 				[self insertForm:[definition.forms objectForKey:activityId] of:activityId
 				        document:[definition.formDocuments objectForKey:activityId]
