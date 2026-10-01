@@ -95,15 +95,36 @@ write.
   out like this when it opens.
 - **Undo and Redo** cover every change. **View** zooms in and out.
 
+## The server
+
+The designer connects to a `wf-serve` as WorkflowDesk does, through the
+same connect window and sign-in. **Server ▸ Connect…** chooses the server.
+Deploying or opening from a server before connecting shows the connect
+window first.
+
+- **Server ▸ Deploy** (⇧⌘D) sends the process to the server. Forms the
+  process names as `camunda:formKey="embedded:deployment:<name>"` go with
+  it, read from beside the file. A missing form stops the deployment. The
+  status line then gives the version the server holds. An unchanged
+  process keeps the version it had.
+- **File ▸ Open from Server…** (⇧⌘O) lists every deployed version of every
+  process definition. Opening one reads its BPMN as it was deployed into a
+  new, unsaved document named after its key and version, such as
+  "purchase v2". Deploying it again keeps its resource name. A deployed
+  file without a diagram is laid out as it opens.
+
 ## Building
 
 **On GNUstep**, build the engine library at the top of the repository with
-`make` first. Then, in this directory:
+`make` first. The designer also needs FreeCoreData installed (with `momc`)
+and a built ODataKit checkout, as WorkflowDesk does. Then, in this
+directory:
 
-    make              # WorkflowDesigner.app
-    make run          # open it
-    make check        # the tests: the document model, edits, layout, and
-                      # that the engine reads what the designer writes
+    make ODATAKIT=...         # WorkflowDesigner.app
+    make ODATAKIT=... run     # open it
+    make ODATAKIT=... check   # the tests: the document model, edits, layout,
+                              # deployments, and that the engine reads what
+                              # the designer writes
 
 **On macOS**, use the `WorkflowDesigner` scheme of `WorkflowKit.xcworkspace`.
 
@@ -116,4 +137,6 @@ write.
 | `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's. |
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it. |
 | `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with its DMTabBar (`ThirdParty/`). |
+| `WKDDeployment` | What a deployment sends: the process and the forms it embeds. |
+| `WKDAppDelegate`, `WKDServerProcessesController` | The server connection, shared by every window, and the Open from Server window. The connection itself is WorkflowDesk's (`../Shared`). |
 | `WKDCanvasView`, `WKDPaletteView`, `WKDRenderer` | Drawing and editing, adapted from CoreWF's graph view. BPMN notation is drawn with `NSBezierPath`, with no images. |

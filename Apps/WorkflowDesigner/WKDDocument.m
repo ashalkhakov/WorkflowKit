@@ -50,6 +50,11 @@
 	return [_editor.document XMLDataWithOptions:NSXMLNodePrettyPrint];
 }
 
+- (NSString *)displayName
+{
+	return [self fileURL] == nil && self.serverTitle != nil ? self.serverTitle : [super displayName];
+}
+
 + (BOOL)autosavesInPlace
 {
 	return NO;

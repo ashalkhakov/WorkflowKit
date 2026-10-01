@@ -38,9 +38,10 @@ endif
 # The OData API's tests, where it is built (make test ODATAKIT=...).
 ifeq ($(odata),yes)
 WorkflowKitTests_OBJCFLAGS += -DWORKFLOWKIT_ODATA=1
-WorkflowKitTests_BUNDLE_LIBS += -lWorkflowKitOData -lODataService -lODataKit
+WorkflowKitTests_BUNDLE_LIBS += -lWorkflowKitOData -lODataService -lHTTPServerKit -lOTelKit -lODataKit
 ifneq ($(ODATAKIT),)
-WorkflowKitTests_INCLUDE_DIRS += -I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataService/include
+WorkflowKitTests_INCLUDE_DIRS += -I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataService/include \
+	-I$(ODATAKIT)/Source/HTTPServerKit/include -I$(ODATAKIT)/Source/OTelKit/include
 ADDITIONAL_LIB_DIRS += -L$(ODATAKIT)/obj
 ODATAKIT_LIBRARY_PATH = $(ODATAKIT)/obj:
 endif

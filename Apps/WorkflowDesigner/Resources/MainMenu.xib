@@ -6,9 +6,14 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
-        <customObject id="-2" userLabel="File's Owner" customClass="NSApplication"/>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSApplication">
+            <connections>
+                <outlet property="delegate" destination="WKm-de-001" id="WKm-ol-001"/>
+            </connections>
+        </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customObject id="WKm-de-001" customClass="WKDAppDelegate"/>
         <menu title="Main Menu" systemMenu="main" id="WKm-mm-001">
             <items>
                 <menuItem title="WorkflowDesigner" id="WKm-mt-013">
@@ -60,6 +65,11 @@
                             <menuItem title="Open…" keyEquivalent="o" id="WKm-mi-017">
                                 <connections>
                                     <action selector="openDocument:" target="-1" id="WKm-ac-018"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Open from Server…" keyEquivalent="O" id="WKm-mi-101">
+                                <connections>
+                                    <action selector="openFromServer:" target="WKm-de-001" id="WKm-ac-101"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="WKm-sp-019"/>
@@ -186,6 +196,25 @@
                             <menuItem title="Arrange" keyEquivalent="l" id="WKm-mi-055">
                                 <connections>
                                     <action selector="arrange:" target="-1" id="WKm-ac-056"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Server" id="WKm-mt-102">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="Server" id="WKm-mn-102">
+                        <items>
+                            <menuItem title="Connect…" id="WKm-mi-103">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="connect:" target="WKm-de-001" id="WKm-ac-103"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-sp-104"/>
+                            <menuItem title="Deploy" keyEquivalent="D" id="WKm-mi-105">
+                                <connections>
+                                    <action selector="deploy:" target="-1" id="WKm-ac-105"/>
                                 </connections>
                             </menuItem>
                         </items>

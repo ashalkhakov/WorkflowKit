@@ -21,8 +21,9 @@ back as the form leaves it.
 
 | Where | What |
 | --- | --- |
-| `WDSession` | Core Data over `ODataIncrementalStore`, with the engine's own model on its `API` configuration. Fetches and operations run on a private-queue context; the windows bind to the main queue's context. |
-| `WDSignIn` | OpenID Connect sign-in: the authorization code flow with PKCE, in the system browser, back to a loopback redirect. It is the store's credential provider. |
+| `../Shared/WDSession` | Core Data over `ODataIncrementalStore`, with the engine's own model on its `API` configuration. Fetches and operations run on a private-queue context; the windows bind to the main queue's context. |
+| `../Shared/WDSignIn` | OpenID Connect sign-in: the authorization code flow with PKCE, in the system browser, back to a loopback redirect. It is the store's credential provider. |
+| `../Shared/WDConnectWindowController` | The connect window, which WorkflowDesigner opens too. |
 | `WDFormDocument` | Puts the task's instance into its form. |
 | `Resources/*.xib` | The windows. Each list is an `NSArrayController` with Cocoa Bindings. |
 

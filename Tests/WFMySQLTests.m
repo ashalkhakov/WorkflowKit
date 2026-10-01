@@ -59,6 +59,13 @@
 #include "WFJobTests.inc"
 @end
 
+@interface WFTracingMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFTracingMySQLTests
+#include "WFTracingTests.inc"
+@end
+
 @interface WFHistoryMySQLTests : WFMySQLTestCase
 @end
 

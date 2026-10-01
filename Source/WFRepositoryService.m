@@ -80,7 +80,7 @@ WFFormsOf(WFProcessDefinition *definition)
                error:(NSError **)error
 {
 	WFProcessEngine *engine = _engine;
-	BOOL ok = [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		[command setSuspended:suspended definition:definitionId includeInstances:includeInstances];
 		return YES;

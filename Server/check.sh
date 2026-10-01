@@ -1,6 +1,7 @@
 #!/bin/sh
 # A purchase request over HTTP: wf-serve on the example deployment, started
-# through its form, approved through the task's, and found in the history.
+# through its form, approved through the task's, and found in the history;
+# then what HTTPServerKit adds: health, readiness, and the requests counted.
 #
 #   ./check.sh path/to/wf-serve
 set -eu
@@ -42,4 +43,11 @@ state=$(curl -sS "$root/HistoricProcessInstances('$instance')" | json "d['State'
 [ "$state" = COMPLETED ] || fail "the instance is $state"
 ended=$(curl -sS "$root/Tasks/\$count")
 [ "$ended" = 0 ] || fail "$ended tasks left"
-echo "check: a purchase request, started, approved and completed over HTTP"
+
+base="http://127.0.0.1:$port"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$base/health")" = 200 ] || fail "health"
+ready=$(curl -sS "$base/ready")
+[ "$(echo "$ready" | json "d['checks']['store']")" = ok ] || fail "readiness: $ready"
+curl -sS "$base/metrics" | grep -q '^http_requests_total{method="POST",route="/api/\*",status="204"}' \
+  || fail "the requests are not counted"
+echo "check: a purchase request, started, approved and completed over HTTP; health, readiness, metrics"

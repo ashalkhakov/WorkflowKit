@@ -124,7 +124,7 @@
 - (NSXMLDocument *)documentOf:(WFFormContext *)context
 {
 	__block NSString *text = nil;
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		NSString *formId = [NSString stringWithFormat:@"%@:%@", context.definitionId, context.activityId];
 		WFFormRecordEntity *record = [[command fetch:@"WFFormRecord"
@@ -146,7 +146,7 @@
 - (WFFormContext *)contextOfTask:(NSString *)taskId error:(NSError **)error
 {
 	__block WFFormContext *context = nil;
-	BOOL found = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL found = [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFTaskEntity *task = [[command fetch:@"WFTask"
 		                           predicate:[NSPredicate predicateWithFormat:@"taskId == %@", taskId ?: @""]
 		                                sort:nil

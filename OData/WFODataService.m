@@ -22,7 +22,7 @@ WFODataHasScope(ODataRequest *request, NSString *scope)
 WFIdentity *
 WFODataIdentity(ODataRequest *request)
 {
-	ODataPrincipal *principal = request.principal;
+	HSPrincipal *principal = request.principal;
 	if (principal == nil) {
 		return nil;
 	}

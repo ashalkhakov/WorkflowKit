@@ -61,6 +61,13 @@
 #include "WFJobTests.inc"
 @end
 
+@interface WFTracingInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFTracingInMemoryTests
+#include "WFTracingTests.inc"
+@end
+
 @interface WFHistoryInMemoryTests : WFInMemoryTestCase
 @end
 

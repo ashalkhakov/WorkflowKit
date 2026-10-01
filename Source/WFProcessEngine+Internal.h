@@ -9,8 +9,16 @@
 /* What commands tell the engine after they commit, and how services run
  * commands. */
 @interface WFProcessEngine (WFInternal)
-- (BOOL)wf_runCommand:(BOOL (^)(WFCommandContext *command, NSError **error))body
+/* A command a service method runs, named for it (pass _cmd and self): its
+ * span's name. */
+- (BOOL)wf_runCommand:(SEL)method of:(id)owner
+                 body:(BOOL (^)(WFCommandContext *command, NSError **error))body
                 error:(NSError **)error;
+/* A command under a name of its own, with these attributes; untraced with
+ * a nil name. */
+- (BOOL)wf_runCommandNamed:(NSString *)name attributes:(NSDictionary *)attributes
+                      body:(BOOL (^)(WFCommandContext *command, NSError **error))body
+                     error:(NSError **)error;
 - (void)wf_taskCreated:(WFWorkItem *)task;
 - (void)wf_processInstanceEnded:(WFProcessInstance *)instance;
 - (void)wf_messageThrown:(NSString *)messageName

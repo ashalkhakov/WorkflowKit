@@ -60,9 +60,26 @@
  * separated) the groups claim, X-Department a department claim, X-Scopes
  * the scope claim. An empty X-User: no one; none: a tester with every
  * scope the API has. */
-@interface WFHeaderAuthenticator : NSObject <ODataAuthenticator>
+@interface WFHeaderAuthenticator : NSObject <HSAuthenticator>
 @end
 #endif
+
+/* A span the engine started: what it was named and given, the span that
+ * was current on its thread then, and how it ended. */
+@interface WFRecordedSpan : NSObject <WFSpan>
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, weak) WFRecordedSpan *parent;
+@property (atomic, readonly, copy) NSDictionary *attributes;
+@property (atomic, strong) NSError *error;
+@property (atomic) BOOL ended;
+@end
+
+/* Keeps every span the engine starts, current on its thread until it
+ * ends, as OTelKit's tracer has them. */
+@interface WFRecordingTracer : NSObject <WFTracer>
+@property (atomic, readonly, copy) NSArray<WFRecordedSpan *> *spans;
+- (NSArray<WFRecordedSpan *> *)spansNamed:(NSString *)name;
+@end
 
 /* Registers a WFApproveDelegate as "approver" and a WFRecordingListener
  * as "recorder". */

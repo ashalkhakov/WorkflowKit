@@ -2,6 +2,7 @@
 #import "WFTypes.h"
 
 @class WFProcessEngine;
+@protocol WFSpan;
 @class WFProcessDefinition;
 @class WFEvent;
 @class WFExecutionEntity;
@@ -25,6 +26,9 @@
 
 @property (nonatomic, readonly, weak) WFProcessEngine *engine;
 @property (nonatomic, readonly, strong) NSManagedObjectContext *context;
+/* The command's span, when the engine traces: what it worked on goes in
+ * its attributes. */
+@property (nonatomic, strong) id<WFSpan> span;
 
 - (instancetype)initWithEngine:(WFProcessEngine *)engine;
 

@@ -128,7 +128,7 @@ WFTaskError(WFErrorCode code, NSString *message)
 		return nil;
 	}
 	NSMutableArray *locked = [NSMutableArray array];
-	BOOL ok = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		NSDate *now = [NSDate date];
 		NSArray *candidates = [command fetch:@"WFExternalTask"
@@ -191,7 +191,7 @@ WFTaskError(WFErrorCode code, NSString *message)
 	if (![WFCommandContext areStorableVariables:variables error:error]) {
 		return NO;
 	}
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExternalTaskEntity *task = [self task:externalTaskId lockedBy:workerId
 		                                command:command error:commandError];
 		if (task == nil) {
@@ -215,7 +215,7 @@ WFTaskError(WFErrorCode code, NSString *message)
                 error:(NSError **)error
 {
 	WFProcessEngine *engine = _engine;
-	return [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExternalTaskEntity *task = [self task:externalTaskId lockedBy:workerId
 		                                command:command error:commandError];
 		if (task == nil) {
@@ -258,7 +258,7 @@ WFTaskError(WFErrorCode code, NSString *message)
 	if (![WFCommandContext areStorableVariables:variables error:error]) {
 		return NO;
 	}
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExternalTaskEntity *task = [self task:externalTaskId lockedBy:workerId
 		                                command:command error:commandError];
 		if (task == nil) {
@@ -279,7 +279,7 @@ WFTaskError(WFErrorCode code, NSString *message)
           duration:(NSTimeInterval)duration
              error:(NSError **)error
 {
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExternalTaskEntity *task = [self task:externalTaskId lockedBy:workerId
 		                                command:command error:commandError];
 		if (task == nil) {
@@ -301,7 +301,7 @@ WFTaskError(WFErrorCode code, NSString *message)
 - (BOOL)unlock:(NSString *)externalTaskId error:(NSError **)error
 {
 	WFProcessEngine *engine = _engine;
-	return [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExternalTaskEntity *task = [self task:externalTaskId in:command];
 		if (task == nil) {
 			if (commandError != NULL) {
@@ -325,7 +325,7 @@ WFTaskError(WFErrorCode code, NSString *message)
              error:(NSError **)error
 {
 	WFProcessEngine *engine = _engine;
-	return [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExternalTaskEntity *task = [self task:externalTaskId in:command];
 		if (task == nil) {
 			if (commandError != NULL) {
@@ -349,7 +349,7 @@ WFTaskError(WFErrorCode code, NSString *message)
 - (NSArray<WFExternalTask *> *)tasksMatching:(NSPredicate *)predicate
 {
 	NSMutableArray *tasks = [NSMutableArray array];
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		for (WFExternalTaskEntity *entity in [command fetch:@"WFExternalTask"
 		                                         predicate:predicate
@@ -380,7 +380,7 @@ WFTaskError(WFErrorCode code, NSString *message)
                        duration:(NSTimeInterval)duration
 {
 	__block WFExternalTask *locked = nil;
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		WFExternalTaskEntity *task = [self task:externalTaskId in:command];
 		if (task != nil && [self isAvailable:task]) {

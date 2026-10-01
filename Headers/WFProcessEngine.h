@@ -15,6 +15,21 @@
 
 /* Called on the engine's callbackQueue after the command that caused the
  * call has committed. */
+/* What the engine traces its work with: OpenTelemetry's spans, as OTelKit's
+ * OTTracer and OTSpan make them -- an OTTracer is a WFTracer -- without the
+ * engine linking it. A span started is current on its thread until it
+ * ends, so what the store does meanwhile goes under it, and it under
+ * whatever was current: the request that asked. */
+@protocol WFSpan <NSObject>
+- (void)setAttribute:(id)value forKey:(NSString *)key;
+- (void)recordError:(NSError *)error;
+- (void)end;
+@end
+
+@protocol WFTracer <NSObject>
+- (id<WFSpan>)startSpanNamed:(NSString *)name attributes:(NSDictionary<NSString *, id> *)attributes;
+@end
+
 @protocol WFProcessEngineDelegate <NSObject>
 @optional
 - (void)processEngine:(WFProcessEngine *)engine
@@ -74,6 +89,15 @@ processInstanceEnded:(WFProcessInstance *)instance;
 @property (nonatomic) NSTimeInterval lockDuration;
 
 @property (nonatomic, weak) id<WFProcessEngineDelegate> delegate;
+/* Each command a span, named for the service method that ran it
+ * (startProcessInstanceByKey; code.namespace and code.function say whose),
+ * with what it worked on -- workflow.process_definition.key,
+ * workflow.process_instance.id -- and its error when it failed; each job a
+ * runJob span (workflow.job.id) over the commands that acquire, execute
+ * (workflow.job.type, workflow.activity.id) and, when it fails, record it.
+ * The scheduler's polling is not traced. nil, the default: none. Set
+ * before it opens. */
+@property (nonatomic, strong) id<WFTracer> tracer;
 /* Handles every external task's topic in process: the engine's own
  * worker fetches each task as it is created and hands it over, with the
  * activity's retry cycle for failures. Without one, external tasks wait

@@ -80,26 +80,37 @@ ODataKit: `ODATAKIT` names a built checkout (`/w/odatakit-*` in
 `WFOData*Tests` classes, compiled in with it:
 
 ```sh
-.tools/gnustep.sh make test ODATAKIT=/w/odatakit-master
+.tools/gnustep.sh make test ODATAKIT=/w/odatakit-host
 ```
 
 CI builds ODataKit at the commit pinned by `ODATAKIT_REF` in
 `.github/workflows/ci.yml`, and the OData API with it.
 
-`wf-serve` (`Server/`) is the engine served over HTTP: it opens a store,
-deploys a directory, loads plugins, runs the job executor and serves the
-OData API through ODataKit's `ODataHTTPServer` (its settings are at the top
-of `Server/wf-serve.m`). It needs ODataKit's `Server/` built too; with
+The engine's server is `WFServerApplication` (`OData/WFODataServer.h`, in
+WorkflowKitOData): an application of ODataKit's HTTPServerKit that opens a
+store, deploys a directory, loads plugins, runs the job executor and serves
+the OData API as its module. HTTPServerKit adds what every server has --
+who is asking, health and readiness, metrics, the access log, CORS, and
+OpenTelemetry traces (OTelKit) -- from settings its header lists; the
+header lists the engine's own. An app that needs routes or APIs beside
+OData subclasses it, or adds an `HSModule`; never write another HTTP
+server. `wf-serve` (`Server/`) is `HSMain` with it and nothing more; with
 `postgresql=yes` and `mysql=yes` it has FreeCoreData's server stores.
-`make -C Server check` drives a purchase request through it with curl:
+`make -C Server check` drives a purchase request through it with curl and
+asks for its health, readiness and metrics:
 
 ```sh
-.tools/gnustep.sh "make -C /w/odatakit-master/Server && make server ODATAKIT=/w/odatakit-master \
-    && make -C Server check ODATAKIT=/w/odatakit-master"
+.tools/gnustep.sh "make server ODATAKIT=/w/odatakit-host && make -C Server check ODATAKIT=/w/odatakit-host"
 ```
 
-On macOS it is the `wf-serve` scheme, which compiles ODataKit's HTTP
-adapter and the GCDWebServer sources it vendors from `../ODataKit`.
+On macOS it is the `wf-serve` scheme, which links ODataKit's HTTPServerKit
+and OTelKit frameworks. The apps trace too: given OpenTelemetry's
+`OTEL_EXPORTER_OTLP_ENDPOINT`, their requests are client spans whose
+traces wf-serve's spans continue (`Apps/Shared/WDTracing.h`). The engine traces through
+`WFProcessEngine.tracer` (`WFTracer`, which OTelKit's `OTTracer` is,
+without the engine linking it): a command is a span named for the service
+method that ran it, so a service runs its commands with
+`wf_runCommand:_cmd of:self body:...`.
 
 The API requires a signed-in caller with the scopes its sets and actions
 declare (`OData/WFODataService.h`). Without an identity provider,
@@ -130,7 +141,10 @@ Its windows are XIBs with Cocoa Bindings, and its forms are XFormsKit's.
 `Apps/WorkflowDesigner` is the BPMN designer (see its README): a document
 app whose document is the BPMN XML, edited in place through `WKDEditor`,
 with the engine's `WFBpmnReader` saying after each change whether it runs.
-It links the engine. Its document model and editor are Foundation only, and
+It links the engine, and deploys to and opens from a `wf-serve` through
+the connection WorkflowDesk has: `Apps/Shared` holds what both apps
+compile (the session, sign-in and connect window), so the designer builds
+with `ODATAKIT=...` too. Its document model and editor are Foundation only, and
 its tests (`make check`) need no display. A diagram's shapes link to one
 another weakly, so keep the diagram they came from while using them: Apple
 frees it at once, GNUstep later.
@@ -144,7 +158,7 @@ and libs-opal in the stack.
 `WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`
 framework, the `WorkflowKitOData` framework, the `WorkflowKitTests` bundle
 (the OData API's tests included), the `PurchaseRequestDemo` and `wf-serve`
-tools, and the `WorkflowDesk` app with its tests, with shared settings in
+tools, and the `WorkflowDesk` and `WorkflowDesigner` apps with their tests, with shared settings in
 `Xcode/Configs` (the same as ODataKit's). It also holds
 `../ODataKit/ODataKit.xcodeproj` and `../XFormsKit/XFormsKit.xcodeproj`, the
 checkouts beside this one, whose frameworks the OData API and the app link

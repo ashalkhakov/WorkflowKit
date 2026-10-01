@@ -1,10 +1,13 @@
 #import "WKDWindowController.h"
+#import "WKDAppDelegate.h"
+#import "WKDDeployment.h"
 #import "WKDDocument.h"
 #import "WKDEditor.h"
 #import "WKDInspectorView.h"
 #import "WKDPane.h"
 #import "WKDRenderer.h"
 #import "WKDXML.h"
+#import "WDSession.h"
 #import "ThirdParty/DMTabBar/DMTabBar.h"
 #import "ThirdParty/DMTabBar/DMTabBarItem.h"
 
@@ -328,6 +331,79 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	_note = nil;
 	[[self editor] arrange];
 	[self.canvas scrollToContent];
+}
+
+#pragma mark Deploying
+
+- (void)alert:(NSString *)message detail:(NSString *)detail
+{
+	NSAlert *alert = [[NSAlert alloc] init];
+	[alert setMessageText:message];
+	[alert setInformativeText:detail ?: @""];
+	[alert beginSheetModalForWindow:[self window] completionHandler:nil];
+}
+
+- (IBAction)deploy:(id)sender
+{
+	WKDDocument *document = [self designerDocument];
+	NSString *problem = document.problem;
+	if (problem != nil) {
+		[self alert:@"The engine would not run this process." detail:problem];
+		return;
+	}
+	NSString *processId = [self processId];
+	NSURL *file = [document fileURL];
+	NSString *fileName = document.resourceName ?: [file lastPathComponent]
+		?: [processId stringByAppendingPathExtension:@"bpmn"];
+	NSArray<NSString *> *missing = nil;
+	NSDictionary *resources = WKDDeploymentResources([self editor].document, fileName,
+	                                                 [file URLByDeletingLastPathComponent], &missing);
+	if (resources == nil) {
+		[self alert:@"The process's forms are missing."
+		     detail:[NSString stringWithFormat:@"%@ must be beside the process%@: %@.",
+		             [missing count] == 1 ? @"This form" : @"These forms",
+		             file == nil ? @", which must be saved first" : @"",
+		             [missing componentsJoinedByString:@", "]]];
+		return;
+	}
+	NSString *name = WKDAttribute([self editor].diagram.process, @"name");
+	[[WKDAppDelegate shared] withSession:^(WDSession *session) {
+		[self deploy:resources named:[name length] > 0 ? name : processId key:processId on:session];
+	}];
+}
+
+- (void)deploy:(NSDictionary *)resources named:(NSString *)name key:(NSString *)key on:(WDSession *)session
+{
+	[self note:nil];
+	self.status = [NSString stringWithFormat:@"Deploying to %@…", [session.serviceURL host]];
+	[session invoke:@"Deploy" on:nil parameters:@{ @"Name": name, @"Resources": resources }
+	     completion:^(id result, NSError *error) {
+		if (error != nil) {
+			[self updateStatus];
+			[self alert:@"Could not deploy." detail:[error localizedDescription]];
+			return;
+		}
+		/* The version the process has now: a new one, or -- unchanged
+		 * since it was last deployed -- the one it had. */
+		NSFetchRequest *latest = [NSFetchRequest fetchRequestWithEntityName:@"WFDefinitionRecord"];
+		[latest setPredicate:[NSPredicate predicateWithFormat:@"key == %@", key]];
+		[latest setSortDescriptors:@[ [NSSortDescriptor sortDescriptorWithKey:@"version" ascending:NO] ]];
+		[latest setFetchLimit:1];
+		[session fetch:latest completion:^(NSArray *objects, NSError *fetchError) {
+			id version = [[objects firstObject] valueForKey:@"version"];
+			self->_note = version != nil ? [NSString stringWithFormat:@"Deployed %@ as version %@", key, version]
+			                       : [NSString stringWithFormat:@"Deployed %@", key];
+			[self updateStatus];
+		}];
+	}];
+}
+
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
+{
+	if ([item action] == @selector(deploy:)) {
+		return [self designerDocument].problem == nil;
+	}
+	return YES;
 }
 
 - (void)showTab:(NSInteger)index bar:(NSView *)bar tabs:(NSTabView *)tabs

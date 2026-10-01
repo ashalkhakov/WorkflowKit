@@ -30,6 +30,8 @@
 - (IBAction)zoomOut:(id)sender;
 - (IBAction)actualSize:(id)sender;
 - (IBAction)arrange:(id)sender;
+/* Server ▸ Deploy: the process and its forms, to the server connected. */
+- (IBAction)deploy:(id)sender;
 - (IBAction)showOutline:(id)sender;
 - (IBAction)showPalette:(id)sender;
 - (IBAction)showProblems:(id)sender;

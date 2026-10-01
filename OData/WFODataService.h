@@ -50,7 +50,8 @@
  * with its status: 404 for what is not there, 409 for what its state does
  * not allow, 400 for the rest of what the caller got wrong.
  *
- * Who is asking is the service's authenticator's (ODataAuthentication.h):
+ * Who is asking is the service's authenticator's (HTTPServerKit's
+ * HSAuthentication.h):
  * the principal's subject is the user, the groups claim their groups, and
  * every claim theirs to match (WFIdentity.h). With a principal, what a
  * caller sees and does follows the processes:

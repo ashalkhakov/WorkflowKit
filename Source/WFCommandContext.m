@@ -495,6 +495,10 @@ WFGone(NSManagedObject *object)
 	root.isActive = YES;
 	root.superExecution = superExecution;
 	root.superProcessInstanceId = superExecution.processInstanceId;
+	if (superExecution == nil) {
+		[_span setAttribute:definition.processId forKey:@"workflow.process_definition.key"];
+		[_span setAttribute:root.processInstanceId forKey:@"workflow.process_instance.id"];
+	}
 
 	WFHistoricProcessInstanceEntity *history =
 		[self records:WFHistoryLevelActivity] ? [self insert:WFHistoricInstanceName] : nil;
@@ -1188,6 +1192,9 @@ WFHasConditionalEvents(WFProcessDefinition *definition)
 
 - (void)runJob:(WFJobEntity *)job
 {
+	[_span setAttribute:job.jobType forKey:@"workflow.job.type"];
+	[_span setAttribute:job.activityId forKey:@"workflow.activity.id"];
+	[_span setAttribute:job.processInstanceId forKey:@"workflow.process_instance.id"];
 	[self historyJob:job state:WFJobLogStateSuccessful];
 	NSString *type = job.jobType;
 	NSString *repeat = job.repeat;

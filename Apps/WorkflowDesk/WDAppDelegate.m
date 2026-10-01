@@ -4,12 +4,23 @@
 #import "WDSession.h"
 #import "WDSignIn.h"
 #import "WDTasksWindowController.h"
+#import "WDTracing.h"
 
 @implementation WDAppDelegate
 {
 	WDConnectWindowController *_connect;
 	WDTasksWindowController *_tasks;
 	WDOperationsWindowController *_operations;
+}
+
+- (void)applicationWillFinishLaunching:(NSNotification *)notification
+{
+	WDStartTracing();
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification
+{
+	WDStopTracing();
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
@@ -42,7 +53,10 @@
 - (IBAction)connect:(id)sender
 {
 	if (_connect == nil) {
-		_connect = [[WDConnectWindowController alloc] initWithDelegate:self];
+		__weak WDAppDelegate *weakSelf = self;
+		_connect = [[WDConnectWindowController alloc] initWithCompletion:^(WDSession *session, WDSignIn *signIn) {
+			[weakSelf didOpenSession:session signIn:signIn];
+		}];
 	}
 	[_connect showWindow:sender];
 }

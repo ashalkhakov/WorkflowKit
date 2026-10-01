@@ -59,6 +59,13 @@
 #include "WFJobTests.inc"
 @end
 
+@interface WFTracingPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFTracingPostgreSQLTests
+#include "WFTracingTests.inc"
+@end
+
 @interface WFHistoryPostgreSQLTests : WFPostgreSQLTestCase
 @end
 

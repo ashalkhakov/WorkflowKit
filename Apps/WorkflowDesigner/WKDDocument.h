@@ -15,5 +15,10 @@
 @property (nonatomic, readonly, copy) NSString *problem;
 /* Asks the engine again: after every change. */
 - (void)check;
+/* Opened from a server, never saved: its name until it is -- the
+ * definition's key and version. */
+@property (nonatomic, copy) NSString *serverTitle;
+/* The name it was deployed under, which deploying again keeps. */
+@property (nonatomic, copy) NSString *resourceName;
 
 @end

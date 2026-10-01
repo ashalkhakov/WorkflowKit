@@ -59,6 +59,13 @@
 #include "WFJobTests.inc"
 @end
 
+@interface WFTracingSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFTracingSQLiteTests
+#include "WFTracingTests.inc"
+@end
+
 @interface WFHistorySQLiteTests : WFSQLiteTestCase
 @end
 

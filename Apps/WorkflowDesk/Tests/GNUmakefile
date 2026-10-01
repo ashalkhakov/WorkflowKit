@@ -7,12 +7,12 @@ BUNDLE_NAME = WorkflowDeskTests
 
 WorkflowDeskTests_OBJC_FILES = \
 	../WDFormDocument.m \
-	../WDSignIn.m \
+	../../Shared/WDSignIn.m \
 	WDFormDocumentTests.m \
 	WDSignInTests.m
 
 WorkflowDeskTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
-WorkflowDeskTests_INCLUDE_DIRS = -I.. \
+WorkflowDeskTests_INCLUDE_DIRS = -I.. -I../../Shared \
 	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include
 ADDITIONAL_LIB_DIRS += -L$(ODATAKIT)/obj
 WorkflowDeskTests_BUNDLE_LIBS += -lODataKit -lXCTest -ldispatch -lgnutls

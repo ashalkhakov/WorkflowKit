@@ -259,20 +259,45 @@ WFIsConflict(NSError *error)
 
 #pragma mark - Commands
 
-- (BOOL)wf_runCommand:(BOOL (^)(WFCommandContext *, NSError **))body error:(NSError **)error
+- (BOOL)wf_runCommandNamed:(NSString *)name attributes:(NSDictionary *)attributes
+                      body:(BOOL (^)(WFCommandContext *, NSError **))body error:(NSError **)error
 {
 	WFCommandContext *command = [[WFCommandContext alloc] initWithEngine:self];
-	return [command execute:body error:error];
+	id<WFSpan> span = name != nil ? [self.tracer startSpanNamed:name attributes:attributes] : nil;
+	command.span = span;
+	NSError *failure = nil;
+	BOOL ok = [command execute:body error:&failure];
+	if (!ok && failure != nil) {
+		[span recordError:failure];
+	}
+	[span end];
+	if (!ok && error != NULL) {
+		*error = failure;
+	}
+	return ok;
+}
+
+- (BOOL)wf_runCommand:(SEL)method of:(id)owner body:(BOOL (^)(WFCommandContext *, NSError **))body
+                error:(NSError **)error
+{
+	if (self.tracer == nil) {
+		return [self wf_runCommandNamed:nil attributes:nil body:body error:error];
+	}
+	NSString *function = NSStringFromSelector(method);
+	NSString *name = [[function componentsSeparatedByString:@":"] firstObject];
+	return [self wf_runCommandNamed:name
+	                     attributes:@{ @"code.namespace": NSStringFromClass([owner class]), @"code.function": function }
+	                           body:body error:error];
 }
 
 /* A command the engine runs by itself: retried on conflict, and reported
  * to the delegate when it fails for good. */
-- (BOOL)runInternal:(BOOL (^)(WFCommandContext *, NSError **))body error:(NSError **)error
+- (BOOL)runInternal:(NSString *)name body:(BOOL (^)(WFCommandContext *, NSError **))body error:(NSError **)error
 {
 	NSError *localError = nil;
 	for (int attempt = 0; attempt < WF_CONFLICT_ATTEMPTS; attempt++) {
 		localError = nil;
-		if ([self wf_runCommand:body error:&localError]) {
+		if ([self wf_runCommandNamed:name attributes:nil body:body error:&localError]) {
 			return YES;
 		}
 		if (!WFIsConflict(localError)) {
@@ -506,8 +531,17 @@ WFIsConflict(NSError *error)
 {
 	NSString *owner = self.identifier;
 	NSTimeInterval lockDuration = self.lockDuration;
+	id<WFSpan> span = [self.tracer startSpanNamed:@"runJob" attributes:@{ @"workflow.job.id": jobId }];
+	BOOL done = [self runJobLocked:jobId force:force owner:owner lockDuration:lockDuration span:span error:error];
+	[span end];
+	return done;
+}
+
+- (BOOL)runJobLocked:(NSString *)jobId force:(BOOL)force owner:(NSString *)owner
+        lockDuration:(NSTimeInterval)lockDuration span:(id<WFSpan>)span error:(NSError **)error
+{
 	__block BOOL acquired = NO;
-	[self runInternal:^BOOL(WFCommandContext *command, NSError **commandError) {
+	[self runInternal:@"acquireJob" body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		WFJobEntity *job = [self job:jobId in:command];
 		if (job == nil) {
@@ -530,7 +564,7 @@ WFIsConflict(NSError *error)
 		return YES;
 	}
 	NSError *failure = nil;
-	BOOL ran = [self runInternal:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ran = [self runInternal:@"executeJob" body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		WFJobEntity *job = [self job:jobId in:command];
 		if (job == nil || ![job.lockOwner isEqualToString:owner]) {
@@ -545,7 +579,8 @@ WFIsConflict(NSError *error)
 	/* The job's own work rolled back; the failure is recorded apart from
 	 * it: an attempt fewer, the retry cycle's delay, an incident at none
 	 * left. */
-	[self runInternal:^BOOL(WFCommandContext *command, NSError **commandError) {
+	[span recordError:failure];
+	[self runInternal:@"recordJobFailure" body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		WFJobEntity *job = [self job:jobId in:command];
 		if (job == nil) {
@@ -591,7 +626,8 @@ WFIsConflict(NSError *error)
 {
 	__block NSDate *next = nil;
 	BOOL runJobs = self.jobExecutorActive;
-	[self wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	/* The scheduler's own bookkeeping, every tick: untraced. */
+	[self wf_runCommandNamed:nil attributes:nil body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		NSDate *now = [NSDate date];
 		/* With the job executor off, jobs wait for managementService: the
@@ -658,7 +694,8 @@ WFIsConflict(NSError *error)
 	NSMutableArray *tasks = [NSMutableArray array];
 	BOOL handler = self.serviceHandler != nil;
 	BOOL runJobs = self.jobExecutorActive;
-	[self wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	/* The scheduler's own bookkeeping, every tick: untraced. */
+	[self wf_runCommandNamed:nil attributes:nil body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		NSDate *now = [NSDate date];
 		for (WFJobEntity *job in !runJobs ? @[] : [command fetch:@"WFJob"
@@ -708,7 +745,7 @@ WFIsConflict(NSError *error)
 	BOOL handler = self.serviceHandler != nil;
 	/* Whatever this engine held before it stopped is in flight nowhere:
 	 * take it back now rather than waiting for the locks to run out. */
-	BOOL ok = [self runInternal:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [self runInternal:@"openEngine" body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		for (WFJobEntity *job in [command fetch:@"WFJob"
 		                              predicate:[NSPredicate predicateWithFormat:@"lockOwner == %@", owner]
@@ -767,7 +804,7 @@ WFIsConflict(NSError *error)
 - (BOOL)checkHistoryLevel:(NSError **)error
 {
 	NSString *mine = [NSString stringWithFormat:@"%ld", (long)self.historyLevel];
-	return [self wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [self wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFPropertyEntity *property = [[command fetch:@"WFProperty"
 		                                  predicate:[NSPredicate predicateWithFormat:
 		                                      @"name == %@", @"historyLevel"]

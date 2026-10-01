@@ -244,7 +244,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 		return nil;
 	}
 	__block NSString *processInstanceId = nil;
-	BOOL ok = [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		WFExecutionEntity *root = [command startProcessInstance:definition
 		                                            businessKey:businessKey
@@ -277,7 +277,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 	WFProcessEngine *engine = _engine;
 	NSMutableArray *started = [NSMutableArray array];
 	NSMutableArray *definitions = [NSMutableArray array];
-	BOOL ok = [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		NSArray *starts = [command fetch:@"WFEventSubscription"
 		                        predicate:[NSPredicate predicateWithFormat:
 		                            @"execution == nil AND eventType == %@", WFEventTypeConditional]
@@ -345,7 +345,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 - (WFProcessInstance *)endedInstance:(NSString *)processInstanceId
 {
 	__block WFProcessInstance *instance = nil;
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		WFHistoricProcessInstanceEntity *history =
 			[[command fetch:@"WFHistoricProcessInstance"
@@ -365,7 +365,7 @@ WFServiceError(WFErrorCode code, NSString *message)
                                        error:(NSError **)error
 {
 	__block WFProcessInstance *instance = nil;
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		WFExecutionEntity *root = [self root:processInstanceId in:command];
 		if (root != nil) {
@@ -385,7 +385,7 @@ WFServiceError(WFErrorCode code, NSString *message)
                        reason:(NSString *)reason
                         error:(NSError **)error
 {
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExecutionEntity *root = [self root:processInstanceId in:command];
 		if (root == nil) {
 			if (commandError != NULL) {
@@ -410,7 +410,7 @@ WFServiceError(WFErrorCode code, NSString *message)
                                                         error:(NSError **)error
 {
 	__block NSDictionary *tree = nil;
-	BOOL ok = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExecutionEntity *root = [self root:processInstanceId in:command];
 		if (root == nil) {
 			if (commandError != NULL) {
@@ -433,7 +433,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 			return NO;
 		}
 	}
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExecutionEntity *root = [self root:processInstanceId in:command];
 		if (root == nil) {
 			if (commandError != NULL) {
@@ -463,7 +463,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 
 - (BOOL)validateMigrationPlan:(WFMigrationPlan *)plan error:(NSError **)error
 {
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		return [self resolve:plan command:command error:commandError] != nil;
 	} error:error];
 }
@@ -472,7 +472,7 @@ WFServiceError(WFErrorCode code, NSString *message)
                            plan:(WFMigrationPlan *)plan
                           error:(NSError **)error
 {
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		NSArray *resolved = [self resolve:plan command:command error:commandError];
 		if (resolved == nil) {
 			return NO;
@@ -496,7 +496,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 
 - (BOOL)setSuspended:(BOOL)suspended processInstance:(NSString *)processInstanceId error:(NSError **)error
 {
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		if ([self root:processInstanceId in:command] == nil) {
 			if (commandError != NULL) {
 				*commandError = [self notRunning:processInstanceId];
@@ -527,7 +527,7 @@ WFServiceError(WFErrorCode code, NSString *message)
                                                   error:(NSError **)error
 {
 	__block NSMutableArray *instances = nil;
-	BOOL ok = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		instances = [NSMutableArray array];
 		NSArray *roots = [command fetch:@"WFExecution"
@@ -553,7 +553,7 @@ WFServiceError(WFErrorCode code, NSString *message)
                                                        error:(NSError **)error
 {
 	__block NSArray *ids = nil;
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		NSArray *executions = [command fetch:@"WFExecution"
 		                           predicate:[NSPredicate predicateWithFormat:
@@ -581,7 +581,7 @@ WFServiceError(WFErrorCode code, NSString *message)
                                         error:(NSError **)error
 {
 	__block NSMutableDictionary *variables = nil;
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		WFExecutionEntity *root = [self root:processInstanceId in:command];
 		if (root != nil) {
@@ -605,7 +605,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 	if (![WFCommandContext areStorableVariables:variables error:error]) {
 		return NO;
 	}
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExecutionEntity *root = [self root:processInstanceId in:command];
 		if (root == nil) {
 			if (commandError != NULL) {
@@ -621,7 +621,7 @@ WFServiceError(WFErrorCode code, NSString *message)
       processInstanceId:(NSString *)processInstanceId
                   error:(NSError **)error
 {
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFExecutionEntity *root = [self root:processInstanceId in:command];
 		if (root == nil) {
 			if (commandError != NULL) {
@@ -698,7 +698,7 @@ WFServiceError(WFErrorCode code, NSString *message)
 	}
 	WFProcessEngine *engine = _engine;
 	NSMutableArray *reached = [NSMutableArray array];
-	BOOL ok = [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		NSArray *recipients = [self recipientsOf:messageName
 		                             businessKey:businessKey
 		                         correlationKeys:correlationKeys
@@ -783,7 +783,7 @@ processInstanceId:(NSString *)processInstanceId
 	if (![WFCommandContext areStorableVariables:variables error:error]) {
 		return NO;
 	}
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		[command broadcastSignal:signalName variables:variables processInstanceId:processInstanceId];
 		return YES;
@@ -825,7 +825,7 @@ processInstanceId:(NSString *)processInstanceId
 - (NSArray<WFWorkItem *> *)tasksMatching:(NSPredicate *)predicate
 {
 	NSMutableArray *tasks = [NSMutableArray array];
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		for (WFTaskEntity *entity in [command fetch:@"WFTask"
 		                                  predicate:predicate
@@ -866,7 +866,7 @@ processInstanceId:(NSString *)processInstanceId
                                    error:(NSError **)error
 {
 	NSMutableArray *tasks = [NSMutableArray array];
-	BOOL found = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL found = [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		NSFetchRequest *fetch = [self fetchOf:query command:command error:commandError];
 		if (fetch == nil) {
 			return NO;
@@ -888,7 +888,7 @@ processInstanceId:(NSString *)processInstanceId
 - (NSUInteger)countOfTasksMatching:(WFTaskQuery *)query error:(NSError **)error
 {
 	__block NSUInteger count = NSNotFound;
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		NSFetchRequest *fetch = [self fetchOf:query command:command error:commandError];
 		if (fetch == nil) {
 			return NO;
@@ -926,7 +926,7 @@ processInstanceId:(NSString *)processInstanceId
 - (NSArray<WFWorkItem *> *)unclaimedTasksLinked:(NSPredicate *)links
 {
 	NSMutableArray *tasks = [NSMutableArray array];
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		NSMutableSet *taskIds = [NSMutableSet set];
 		for (WFIdentityLinkEntity *link in [command fetch:@"WFIdentityLink" predicate:links sort:nil limit:0]) {
@@ -966,7 +966,7 @@ processInstanceId:(NSString *)processInstanceId
 /* Changes who has the open task; claiming fails when someone else does. */
 - (BOOL)assign:(NSString *)userId task:(NSString *)taskId claim:(BOOL)claim error:(NSError **)error
 {
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFTaskEntity *task = [[command fetch:@"WFTask"
 		                           predicate:[NSPredicate predicateWithFormat:@"taskId == %@", taskId ?: @""]
 		                                sort:nil
@@ -1015,7 +1015,7 @@ processInstanceId:(NSString *)processInstanceId
 	if (![WFCommandContext areStorableVariables:variables error:error]) {
 		return NO;
 	}
-	return [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFTaskEntity *task = [[command fetch:@"WFTask"
 		                           predicate:[NSPredicate predicateWithFormat:@"taskId == %@", taskId]
 		                                sort:nil
@@ -1158,7 +1158,7 @@ processInstanceId:(NSString *)processInstanceId
             value:(id (^)(id row))value
 {
 	NSMutableArray *values = [NSMutableArray array];
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		for (id row in [command fetch:entity
 		                    predicate:[NSPredicate predicateWithFormat:@"processInstanceId == %@",
@@ -1273,7 +1273,7 @@ processInstanceId:(NSString *)processInstanceId
 {
 	__block NSInteger removed = 0;
 	NSDate *now = [NSDate date];
-	BOOL ok = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		/* Time to live per definition, read once. */
 		NSMutableDictionary *ttls = [NSMutableDictionary dictionary];
@@ -1321,7 +1321,7 @@ processInstanceId:(NSString *)processInstanceId
 - (NSArray<WFHistoricDecisionInstance *> *)decisionInstances:(NSPredicate *)predicate
 {
 	NSMutableArray *values = [NSMutableArray array];
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		for (WFHistoricDecisionInstanceEntity *row in [command fetch:@"WFHistoricDecisionInstance"
 		                                  predicate:predicate
@@ -1567,7 +1567,7 @@ processInstanceId:(NSString *)processInstanceId
 		return nil;
 	}
 	__block WFDecisionResult *result = nil;
-	BOOL ok = [_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	BOOL ok = [_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		(void)commandError;
 		result = [command evaluateDecision:decision variables:variables ?: @{} execution:nil];
 		return result != nil;
@@ -1686,7 +1686,7 @@ processInstanceId:(NSString *)processInstanceId
 - (NSArray<WFJob *> *)jobsMatching:(NSPredicate *)predicate
 {
 	NSMutableArray *jobs = [NSMutableArray array];
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		for (WFJobEntity *entity in [command fetch:@"WFJob"
 		                                 predicate:predicate
@@ -1758,7 +1758,7 @@ processInstanceId:(NSString *)processInstanceId
 - (BOOL)setRetries:(NSInteger)retries forJob:(NSString *)jobId error:(NSError **)error
 {
 	WFProcessEngine *engine = _engine;
-	return [engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **commandError) {
+	return [engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **commandError) {
 		WFJobEntity *job = [[command fetch:@"WFJob"
 		                         predicate:[NSPredicate predicateWithFormat:@"jobId == %@", jobId ?: @""]
 		                              sort:nil
@@ -1787,7 +1787,7 @@ processInstanceId:(NSString *)processInstanceId
 - (NSArray<WFIncident *> *)incidentsForProcessInstance:(NSString *)processInstanceId
 {
 	NSMutableArray *incidents = [NSMutableArray array];
-	[_engine wf_runCommand:^BOOL(WFCommandContext *command, NSError **error) {
+	[_engine wf_runCommand:_cmd of:self body:^BOOL(WFCommandContext *command, NSError **error) {
 		(void)error;
 		for (WFIncidentEntity *entity in [command fetch:@"WFIncident"
 		                                      predicate:[NSPredicate predicateWithFormat:

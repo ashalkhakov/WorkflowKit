@@ -36,14 +36,26 @@ MODELS = make_list("GNUmakefile", "WorkflowKit_XCDATAMODELD_FILES")     # Model/
 # ../ODataKit/ODataKit.xcodeproj.
 ODATA_SOURCES = make_list("GNUmakefile", "WorkflowKitOData_OBJC_FILES")  # OData/X.m
 ODATA_HEADERS = make_list("GNUmakefile", "WorkflowKitOData_HEADER_FILES")  # X.h
-# wf-serve, and what it compiles in from ODataKit: its HTTP adapter and the
-# GCDWebServer sources ODataKit vendors, as ODataKit's own macOS server
-# build does.
+# wf-serve: HSMain with WorkflowKitOData's application, served by ODataKit's
+# HTTPServerKit framework.
 SERVE = make_list("Server/GNUmakefile", "wf-serve_OBJC_FILES")             # X.m
 ODATAKIT = "../ODataKit"
-GCD = [f.replace("$(GCDWebServer_DIR)", ODATAKIT + "/ThirdParty/GCDWebServer")
-       for f in make_list(ODATAKIT + "/ThirdParty/GCDWebServer/GCDWebServer.make", "GCDWebServer_OBJC_FILES")]
-SERVE_EXTERNAL = [ODATAKIT + "/Server/ODataHTTPServer.m"] + GCD
+# What both apps share (Apps/Shared): connecting to a server and its API.
+# Their GNUmakefiles name these files as ../Shared/X.
+SHARED = "Apps/Shared/"
+SHARED_FILES = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, SHARED, "*.[hm]")))
+SHARED_RESOURCES = sorted("Resources/" + os.path.basename(p)
+                          for p in glob.glob(os.path.join(ROOT, SHARED, "Resources", "*.xib")))
+
+
+def shared(path):
+    return path.split("Shared/", 1)[1] if "Shared/" in path else None
+
+
+def own(paths):
+    return [p for p in paths if shared(p) is None]
+
+
 # WorkflowDesk (Apps/WorkflowDesk), over ODataKit's client and XFormsKit's
 # form view, whose frameworks the workspace builds from their projects.
 DESK = "Apps/WorkflowDesk/"
@@ -52,8 +64,8 @@ DESK_RESOURCES = make_list(DESK + "GNUmakefile", "WorkflowDesk_RESOURCE_FILES") 
 DESK_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESK, "*.h")))
 DESK_TESTS = [t for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
               if not t.startswith("../")]                                             # Tests/X.m
-DESK_TESTED = [os.path.basename(t) for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
-               if t.startswith("../")]                                                # X.m, the app's
+DESK_TESTED = [t[3:] for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
+               if t.startswith("../")]                                                # X.m, ../Shared/X.m
 # WorkflowDesigner (Apps/WorkflowDesigner), over the engine's framework, whose
 # BPMN reader checks what it draws.
 DESIGNER = "Apps/WorkflowDesigner/"
@@ -62,7 +74,7 @@ DESIGNER_RESOURCES = make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_RESOU
 DESIGNER_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "*.h")))
 DESIGNER_TEST_FILES = make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_OBJC_FILES")
 DESIGNER_TESTS = [t for t in DESIGNER_TEST_FILES if not t.startswith("../")]
-DESIGNER_TESTED = [os.path.basename(t) for t in DESIGNER_TEST_FILES if t.startswith("../")]
+DESIGNER_TESTED = [t[3:] for t in DESIGNER_TEST_FILES if t.startswith("../")]
 DESIGNER_TEST_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "Tests", "*.h")))
 ODATA_OTHERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "OData", "*.h"))
                       if os.path.basename(p) not in ODATA_HEADERS)
@@ -109,27 +121,25 @@ cfg_refs = {c: fileref("Xcode/Configs/" + c, c, "text.xcconfig") for c in CONFIG
 odata_refs = {o: fileref(o, os.path.basename(o), ftype(o)) for o in ODATA_SOURCES}
 odata_hdr_refs = {h: fileref("OData/" + h, h, ftype(h)) for h in ODATA_HEADERS + ODATA_OTHERS}
 serve_refs = {s: fileref("Server/" + s, s, ftype(s)) for s in SERVE}
-desk_refs = {f: fileref(DESK + f, f, ftype(f)) for f in DESK_SOURCES + DESK_HEADERS + ["WorkflowDesk-Info.plist"]}
-desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), "file.xib") for r in DESK_RESOURCES}
+shared_refs = {f: fileref(SHARED + f, os.path.basename(f), "file.xib" if f.endswith(".xib") else ftype(f))
+               for f in SHARED_FILES + SHARED_RESOURCES}
+
+
+# An app's file by the path its GNUmakefile gives: its own, or a shared one.
+def app_file(refs, path):
+    return shared_refs[shared(path)] if shared(path) is not None else refs[path]
+
+
+desk_refs = {f: fileref(DESK + f, f, ftype(f)) for f in own(DESK_SOURCES) + DESK_HEADERS + ["WorkflowDesk-Info.plist"]}
+desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), "file.xib") for r in own(DESK_RESOURCES)}
 desk_test_refs = {t: fileref(DESK + "Tests/" + t, t, ftype(t)) for t in DESK_TESTS}
 designer_refs = {f: fileref(DESIGNER + f, f, ftype(f))
-                 for f in DESIGNER_SOURCES + DESIGNER_HEADERS + ["WorkflowDesigner-Info.plist"]}
-designer_res_refs = {r: fileref(DESIGNER + r, os.path.basename(r), "file.xib") for r in DESIGNER_RESOURCES}
+                 for f in own(DESIGNER_SOURCES) + DESIGNER_HEADERS + ["WorkflowDesigner-Info.plist"]}
+designer_res_refs = {r: fileref(DESIGNER + r, os.path.basename(r), "file.xib") for r in own(DESIGNER_RESOURCES)}
 designer_test_refs = {t: fileref(DESIGNER + "Tests/" + t, t, ftype(t)) for t in DESIGNER_TESTS + DESIGNER_TEST_HEADERS}
 
 
-# A file of another checkout, by its path from this one.
-def external_ref(path):
-    return add(oid("ref", path), os.path.basename(path), [
-        ("isa", "PBXFileReference"),
-        ("lastKnownFileType", ftype(path)),
-        ("name", q(os.path.basename(path))),
-        ("path", q(path)),
-        ("sourceTree", "SOURCE_ROOT"),
-    ])
 
-
-external_refs = {e: external_ref(e) for e in SERVE_EXTERNAL}
 
 
 
@@ -161,6 +171,8 @@ def built_framework(name):
 odatakit = built_framework("ODataKit")
 odataservice = built_framework("ODataService")
 odatastore = built_framework("ODataIncrementalStore")
+httpserverkit = built_framework("HTTPServerKit")
+otelkit = built_framework("OTelKit")
 xformskit = built_framework("XFormsKit")
 appkit = sdk_framework("AppKit")
 
@@ -247,6 +259,8 @@ o_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKitOData", "Frameworks"
     [buildfile("WorkflowKitOData", p_fw, "WorkflowKit.framework"),
      buildfile("WorkflowKitOData", odatakit, "ODataKit.framework"),
      buildfile("WorkflowKitOData", odataservice, "ODataService.framework"),
+     buildfile("WorkflowKitOData", httpserverkit, "HTTPServerKit.framework"),
+     buildfile("WorkflowKitOData", otelkit, "OTelKit.framework"),
      buildfile("WorkflowKitOData", foundation, "Foundation.framework"),
      buildfile("WorkflowKitOData", coredata, "CoreData.framework")]))
 
@@ -256,16 +270,19 @@ t_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKitTests", "Frameworks"
     [buildfile("WorkflowKitTests", p_fw, "WorkflowKit.framework"),
      buildfile("WorkflowKitTests", p_odata, "WorkflowKitOData.framework"),
      buildfile("WorkflowKitTests", odatakit, "ODataKit.framework"),
-     buildfile("WorkflowKitTests", odataservice, "ODataService.framework")]))
+     buildfile("WorkflowKitTests", odataservice, "ODataService.framework"),
+     buildfile("WorkflowKitTests", httpserverkit, "HTTPServerKit.framework"),
+     buildfile("WorkflowKitTests", otelkit, "OTelKit.framework")]))
 
 s_sources = phase("PBXSourcesBuildPhase", "wf-serve", "Sources", names(
-    [buildfile("wf-serve", serve_refs[s], s) for s in SERVE] +
-    [buildfile("wf-serve", external_refs[e], os.path.basename(e)) for e in SERVE_EXTERNAL]))
+    [buildfile("wf-serve", serve_refs[s], s) for s in SERVE]))
 s_frameworks = phase("PBXFrameworksBuildPhase", "wf-serve", "Frameworks", names(
     [buildfile("wf-serve", p_fw, "WorkflowKit.framework"),
      buildfile("wf-serve", p_odata, "WorkflowKitOData.framework"),
      buildfile("wf-serve", odatakit, "ODataKit.framework"),
      buildfile("wf-serve", odataservice, "ODataService.framework"),
+     buildfile("wf-serve", httpserverkit, "HTTPServerKit.framework"),
+     buildfile("wf-serve", otelkit, "OTelKit.framework"),
      buildfile("wf-serve", foundation, "Foundation.framework"),
      buildfile("wf-serve", coredata, "CoreData.framework")]))
 
@@ -275,11 +292,11 @@ d_frameworks = phase("PBXFrameworksBuildPhase", "PurchaseRequestDemo", "Framewor
     [buildfile("PurchaseRequestDemo", p_fw, "WorkflowKit.framework")]))
 
 DESK_FRAMEWORKS = [(odatakit, "ODataKit.framework"), (odatastore, "ODataIncrementalStore.framework"),
-                   (xformskit, "XFormsKit.framework")]
+                   (otelkit, "OTelKit.framework"), (xformskit, "XFormsKit.framework")]
 w_sources = phase("PBXSourcesBuildPhase", "WorkflowDesk", "Sources", names(
-    [buildfile("WorkflowDesk", desk_refs[f], f) for f in DESK_SOURCES]))
+    [buildfile("WorkflowDesk", app_file(desk_refs, f), os.path.basename(f)) for f in DESK_SOURCES]))
 w_resources = phase("PBXResourcesBuildPhase", "WorkflowDesk", "Resources", names(
-    [buildfile("WorkflowDesk", desk_res_refs[r], os.path.basename(r)) for r in DESK_RESOURCES]))
+    [buildfile("WorkflowDesk", app_file(desk_res_refs, r), os.path.basename(r)) for r in DESK_RESOURCES]))
 w_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesk", "Frameworks", names(
     [buildfile("WorkflowDesk", ref, name) for ref, name in DESK_FRAMEWORKS] +
     [buildfile("WorkflowDesk", appkit, "AppKit.framework"),
@@ -297,7 +314,8 @@ w_embed = add(oid("phase", "WorkflowDesk", "Embed Frameworks"), "Embed Framework
 ])
 # The engine's model, compiled into the app without the engine's classes:
 # in the Sources phase Xcode would generate them too.
-w_model = add(oid("phase", "WorkflowDesk", "Compile Model"), "Compile Model", [
+def model_phase(target):
+    return add(oid("phase", target, "Compile Model"), "Compile Model", [
     ("isa", "PBXShellScriptBuildPhase"),
     ("buildActionMask", "2147483647"),
     ("files", []),
@@ -309,38 +327,47 @@ w_model = add(oid("phase", "WorkflowDesk", "Compile Model"), "Compile Model", [
     ("shellScript", q('xcrun momc --macosx-deployment-target "$MACOSX_DEPLOYMENT_TARGET" '
                       '"$SRCROOT/Model/WorkflowKit.xcdatamodeld" '
                       '"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/WorkflowKit.momd"\n')),
-])
+    ])
+
+
+w_model = model_phase("WorkflowDesk")
 
 wt_sources = phase("PBXSourcesBuildPhase", "WorkflowDeskTests", "Sources", names(
     [buildfile("WorkflowDeskTests", desk_test_refs[t], t) for t in DESK_TESTS] +
-    [buildfile("WorkflowDeskTests", desk_refs[f], f) for f in DESK_TESTED]))
+    [buildfile("WorkflowDeskTests", app_file(desk_refs, f), os.path.basename(f)) for f in DESK_TESTED]))
 wt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDeskTests", "Frameworks", names(
     [buildfile("WorkflowDeskTests", odatakit, "ODataKit.framework")]))
 
 # Vendored code (ThirdParty/) is compiled as it came, its warnings unheard.
 wg_sources = phase("PBXSourcesBuildPhase", "WorkflowDesigner", "Sources", names(
-    [buildfile("WorkflowDesigner", designer_refs[f], f,
+    [buildfile("WorkflowDesigner", app_file(designer_refs, f), os.path.basename(f),
                '{COMPILER_FLAGS = "-w"; }' if f.startswith("ThirdParty/") else None)
      for f in DESIGNER_SOURCES]))
 wg_resources = phase("PBXResourcesBuildPhase", "WorkflowDesigner", "Resources", names(
-    [buildfile("WorkflowDesigner", designer_res_refs[r], os.path.basename(r)) for r in DESIGNER_RESOURCES]))
+    [buildfile("WorkflowDesigner", app_file(designer_res_refs, r), os.path.basename(r))
+     for r in DESIGNER_RESOURCES]))
+# The server's API, as WorkflowDesk opens it.
+DESIGNER_FRAMEWORKS = [(p_fw, "WorkflowKit.framework"), (odatakit, "ODataKit.framework"),
+                       (odatastore, "ODataIncrementalStore.framework"), (otelkit, "OTelKit.framework")]
+wg_model = model_phase("WorkflowDesigner")
 wg_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesigner", "Frameworks", names(
-    [buildfile("WorkflowDesigner", p_fw, "WorkflowKit.framework"),
-     buildfile("WorkflowDesigner", appkit, "AppKit.framework"),
+    [buildfile("WorkflowDesigner", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
+    [buildfile("WorkflowDesigner", appkit, "AppKit.framework"),
      buildfile("WorkflowDesigner", coredata, "CoreData.framework")]))
 wg_embed = add(oid("phase", "WorkflowDesigner", "Embed Frameworks"), "Embed Frameworks", [
     ("isa", "PBXCopyFilesBuildPhase"),
     ("buildActionMask", "2147483647"),
     ("dstPath", '""'),
     ("dstSubfolderSpec", "10"),
-    ("files", names([buildfile("WorkflowDesigner.embed", p_fw, "WorkflowKit.framework",
-                               "{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }")])),
+    ("files", names([buildfile("WorkflowDesigner.embed", ref, name,
+                               "{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }")
+                     for ref, name in DESIGNER_FRAMEWORKS])),
     ("name", q("Embed Frameworks")),
     ("runOnlyForDeploymentPostprocessing", "0"),
 ])
 gt_sources = phase("PBXSourcesBuildPhase", "WorkflowDesignerTests", "Sources", names(
     [buildfile("WorkflowDesignerTests", designer_test_refs[t], t) for t in DESIGNER_TESTS] +
-    [buildfile("WorkflowDesignerTests", designer_refs[f], f) for f in DESIGNER_TESTED]))
+    [buildfile("WorkflowDesignerTests", app_file(designer_refs, f), os.path.basename(f)) for f in DESIGNER_TESTED]))
 gt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesignerTests", "Frameworks", names(
     [buildfile("WorkflowDesignerTests", p_fw, "WorkflowKit.framework")]))
 
@@ -363,30 +390,33 @@ g_odata = group("OData", "OData", [odata_hdr_refs[h] for h in ODATA_HEADERS + OD
 g_tests = group("Tests", "Tests", [test_refs[t] for t in TESTS + TEST_BODIES], "Tests")
 g_examples = group("Examples", "Examples", [demo_refs[d] for d in DEMO], "Examples")
 g_server = group("Server", "Server", [serve_refs[s] for s in SERVE], "Server")
-g_odatakit = group("ODataKitServer", "ODataKit Server", [external_refs[e] for e in SERVE_EXTERNAL])
 g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
-g_desk_res = group("WorkflowDeskResources", "Resources", [desk_res_refs[r] for r in DESK_RESOURCES], "Resources")
+g_shared_res = group("SharedResources", "Resources", [shared_refs[r] for r in SHARED_RESOURCES], "Resources")
+g_shared = group("Shared", "Shared",
+                 [shared_refs[f] for f in sorted(SHARED_FILES, key=lambda n: (n[:-2], n[-1:]))] + [g_shared_res],
+                 "Shared")
+g_desk_res = group("WorkflowDeskResources", "Resources", [desk_res_refs[r] for r in own(DESK_RESOURCES)], "Resources")
 g_desk_tests = group("WorkflowDeskTests", "Tests", [desk_test_refs[t] for t in DESK_TESTS], "Tests")
 g_desk = group("WorkflowDesk", "WorkflowDesk",
-               [desk_refs[f] for f in sorted(DESK_HEADERS + DESK_SOURCES, key=lambda n: (n[:-2], n[-1:]))] +
+               [desk_refs[f] for f in sorted(DESK_HEADERS + own(DESK_SOURCES), key=lambda n: (n[:-2], n[-1:]))] +
                [desk_refs["WorkflowDesk-Info.plist"], g_desk_res, g_desk_tests], "WorkflowDesk")
 g_designer_res = group("WorkflowDesignerResources", "Resources",
-                       [designer_res_refs[r] for r in DESIGNER_RESOURCES], "Resources")
+                       [designer_res_refs[r] for r in own(DESIGNER_RESOURCES)], "Resources")
 g_designer_tests = group("WorkflowDesignerTests", "Tests",
                          [designer_test_refs[t] for t in DESIGNER_TEST_HEADERS + DESIGNER_TESTS], "Tests")
 g_designer = group("WorkflowDesigner", "WorkflowDesigner",
-                   [designer_refs[f] for f in sorted(DESIGNER_HEADERS + DESIGNER_SOURCES,
+                   [designer_refs[f] for f in sorted(DESIGNER_HEADERS + own(DESIGNER_SOURCES),
                                                      key=lambda n: (n[:-2], n[-1:]))] +
                    [designer_refs["WorkflowDesigner-Info.plist"], g_designer_res, g_designer_tests],
                    "WorkflowDesigner")
-g_apps = group("Apps", "Apps", [g_desk, g_designer], "Apps")
+g_apps = group("Apps", "Apps", [g_shared, g_desk, g_designer], "Apps")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
 g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_desk, p_desk_tests,
                                             p_designer, p_designer_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
-                                                  xformskit])
+                                                  httpserverkit, otelkit, xformskit])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
-               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_odatakit, g_apps, g_configs,
+               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_apps, g_configs,
                 g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
@@ -440,17 +470,8 @@ TESTS_S = {
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
 SERVE_S = {
-    # ODataHTTPServer.m names ODataKit's headers bare, as its tree has them.
-    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData", "$(SRCROOT)/%s/Server", '
-                           '"$(SRCROOT)/%s/Source/ODataKit/include", "$(SRCROOT)/%s/Source/ODataService/include", '
-                           '"$(SRCROOT)/%s/Source/ODataKit/include/ODataKit", '
-                           '"$(SRCROOT)/%s/Source/ODataService/include/ODataService", '
-                           '"$(SRCROOT)/%s/ThirdParty/GCDWebServer/Core", '
-                           '"$(SRCROOT)/%s/ThirdParty/GCDWebServer/Requests", '
-                           '"$(SRCROOT)/%s/ThirdParty/GCDWebServer/Responses")' % ((ODATAKIT,) * 8),
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
-    # What GCDWebServer uses of the system.
-    "OTHER_LDFLAGS": '("-framework", Security, "-framework", SystemConfiguration, "-framework", CoreServices, "-lz")',
 }
 DEMO_S = {
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
@@ -473,7 +494,7 @@ DESK_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDeskTests",
     "GENERATE_INFOPLIST_FILE": "YES",
     "MACOSX_DEPLOYMENT_TARGET": "11.0",
-    "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Apps/WorkflowDesk"',
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Apps/WorkflowDesk", "$(SRCROOT)/Apps/Shared")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
 DESIGNER_S = {
@@ -482,6 +503,8 @@ DESIGNER_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesigner",
     "MACOSX_DEPLOYMENT_TARGET": "11.0",
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
+    # The model's compiling script writes into the app.
+    "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
 }
 DESIGNER_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesignerTests",
@@ -560,7 +583,7 @@ t_desk = target("WorkflowDesk", cl_desk, [w_model, w_sources, w_resources, w_fra
                 p_desk, "com.apple.product-type.application")
 t_desk_tests = target("WorkflowDeskTests", cl_desk_tests, [wt_sources, wt_frameworks], [],
                       p_desk_tests, "com.apple.product-type.bundle.unit-test")
-t_designer = target("WorkflowDesigner", cl_designer, [wg_sources, wg_resources, wg_frameworks, wg_embed],
+t_designer = target("WorkflowDesigner", cl_designer, [wg_model, wg_sources, wg_resources, wg_frameworks, wg_embed],
                     [dependency("WorkflowDesigner", t_fw, "WorkflowKit")],
                     p_designer, "com.apple.product-type.application")
 t_designer_tests = target("WorkflowDesignerTests", cl_designer_tests, [gt_sources, gt_frameworks],
@@ -686,10 +709,11 @@ DESK_EXTERNAL = [
     ref("AA0000000000000000000006", "ODataKit", "ODataKit.framework", ODATAKIT + "/ODataKit.xcodeproj"),
     ref("AA0000000000000000000002", "ODataIncrementalStore", "ODataIncrementalStore.framework",
         ODATAKIT + "/ODataKit.xcodeproj"),
+    ref("4CBB61F9CEEAF8A9C5A1F7CF", "OTelKit", "OTelKit.framework", ODATAKIT + "/ODataKit.xcodeproj"),
     ref("EE0000010000000000000001", "XFormsKit", "XFormsKit.framework", "../XFormsKit/XFormsKit.xcodeproj"),
 ]
 scheme("WorkflowDesk", DESK_EXTERNAL + [desk_ref], test=desk_tests_ref, run=desk_ref)
 designer_ref = ref(t_designer, "WorkflowDesigner", "WorkflowDesigner.app")
 designer_tests_ref = ref(t_designer_tests, "WorkflowDesignerTests", "WorkflowDesignerTests.xctest")
-scheme("WorkflowDesigner", [fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
+scheme("WorkflowDesigner", DESK_EXTERNAL[:3] + [fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
 print("wrote", proj)

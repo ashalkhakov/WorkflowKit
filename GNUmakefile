@@ -81,7 +81,8 @@ WorkflowKit_XCDATAMODELD_FILES = Model/WorkflowKit.xcdatamodeld
 WorkflowKit_COREDATA_CODEGEN = yes
 WorkflowKit_HAS_RESOURCE_BUNDLE = yes
 
-# The OData API (OData/, WorkflowKitOData) over ODataKit's server, built
+# The OData API (OData/, WorkflowKitOData) over ODataKit's server, and the
+# engine's HTTP server (WFServerApplication) over its HTTPServerKit, built
 # when ODATAKIT names a built ODataKit checkout, or with odata=yes against
 # an installed ODataKit:
 #
@@ -96,18 +97,21 @@ ifeq ($(odata),yes)
 LIBRARY_NAME += WorkflowKitOData
 WorkflowKitOData_OBJC_FILES = \
 	OData/WFODataService.m \
-	OData/WFODataOperations.m
+	OData/WFODataOperations.m \
+	OData/WFODataServer.m
 WorkflowKitOData_HEADER_FILES_DIR = OData
 WorkflowKitOData_HEADER_FILES_INSTALL_DIR = WorkflowKitOData
-WorkflowKitOData_HEADER_FILES = WFODataService.h
+WorkflowKitOData_HEADER_FILES = WFODataService.h WFODataServer.h
 ifneq ($(ODATAKIT),)
-WorkflowKitOData_INCLUDE_DIRS = -I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataService/include
+WorkflowKitOData_INCLUDE_DIRS = -I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataService/include \
+	-I$(ODATAKIT)/Source/HTTPServerKit/include -I$(ODATAKIT)/Source/OTelKit/include
 WorkflowKitOData_LIB_DIRS = -L$(ODATAKIT)/obj
 endif
 WorkflowKitOData_INCLUDE_DIRS += -IHeaders -ISource -IOData -I$(GNUSTEP_OBJ_DIR)/CoreDataGenerated/WorkflowKit
 WorkflowKitOData_LIB_DIRS += -L./$(GNUSTEP_OBJ_DIR)
 WorkflowKitOData_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
-WorkflowKitOData_LIBRARIES_DEPEND_UPON += -lWorkflowKit -lODataService -lODataKit -lCoreData -ldispatch \
+WorkflowKitOData_LIBRARIES_DEPEND_UPON += -lWorkflowKit -lODataService -lHTTPServerKit -lOTelKit -lODataKit \
+	-lCoreData -ldispatch \
 	$(FND_LIBS) $(OBJC_LIBS)
 endif
 

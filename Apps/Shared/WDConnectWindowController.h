@@ -1,13 +1,16 @@
 #import <AppKit/AppKit.h>
 
-@class WDAppDelegate;
+@class WDSession, WDSignIn;
 
 /* Which server: its service root, and the client ID the app has at the
  * identity provider, for a server that asks for a sign-in. The fields
- * bind to the properties here, remembered in the user defaults. */
+ * bind to the properties here, remembered in the user defaults. Shared by
+ * WorkflowDesk and WorkflowDesigner. */
 @interface WDConnectWindowController : NSWindowController
 
-- (instancetype)initWithDelegate:(WDAppDelegate *)delegate;
+/* Called on the main queue with the session open, signed in where the
+ * server asks for it. */
+- (instancetype)initWithCompletion:(void (^)(WDSession *session, WDSignIn *signIn))completion;
 
 @property (nonatomic, copy) NSString *serviceAddress;
 @property (nonatomic, copy) NSString *clientID;

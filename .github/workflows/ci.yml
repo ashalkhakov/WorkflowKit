@@ -44,14 +44,16 @@ jobs:
       # PostgreSQL store has one connection), and #53's optimistic locking,
       # which the engine's joins rely on.
       FREECOREDATA_REF: c0404dbea20eb74fc2c278e24680098d9e354690
-      # ODataKit, for the OData API (WorkflowKitOData) and WorkflowDesk's
-      # client: #5, whose client asks for no to-one the service does not
-      # serve and reads a key segment of several tokens (a form's
-      # definition:activity), on #4, the scopes a set's methods and an
+      # ODataKit, for the OData API (WorkflowKitOData), wf-serve and the
+      # apps' client: #6, whose HTTPServerKit is the server
+      # (WFServerApplication an application of it) and whose OTelKit traces
+      # it and the client, on #5, whose client asks for no to-one the
+      # service does not serve and reads a key segment of several tokens (a
+      # form's definition:activity), #4, the scopes a set's methods and an
       # operation need, and #3, which leaves what the engine keeps for
       # itself out of what it serves (OData.served NO). Built in its
       # checkout, not installed.
-      ODATAKIT_REF: 51e4ec3a50c6930a24dc06ed33520f230971b926
+      ODATAKIT_REF: 1d8ef5b3b7c3fa94b4a092eee08c6cbd3dbb7e1f
       ODATAKIT: ${{ github.workspace }}/ODataKit
       # XFormsKit, for WorkflowDesk's forms: built in its checkout.
       XFORMSKIT_REF: 30d4fd054d57c1878d2f9b016ad0e6aae02f3849
@@ -180,14 +182,15 @@ jobs:
           make -C Backends/PostgreSQL install
           make -C Backends/MySQL install
 
-      # Its libraries only, against FreeCoreData; ODATAKIT (above) names
-      # the checkout, so the library build and the tests find them there.
+      # Its libraries only (ODataKit, ODataIncrementalStore, OTelKit,
+      # HTTPServerKit, ODataService), against FreeCoreData; ODATAKIT (above)
+      # names the checkout, so the library build, wf-serve and the apps find
+      # them there.
       - name: Build ODataKit
         working-directory: ${{ github.workspace }}/ODataKit
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make -j"$(nproc)"
-          make -C Server -j"$(nproc)"
 
       # On its own, so a compile error is reported as that and not as a
       # test failure. With ODATAKIT set, WorkflowKitOData too.
@@ -210,7 +213,8 @@ jobs:
           make test
 
       # wf-serve on the example deployment: a purchase request started,
-      # approved and completed over HTTP (Server/check.sh).
+      # approved and completed over HTTP, and its health, readiness and
+      # metrics (Server/check.sh).
       - name: Server
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
@@ -231,8 +235,9 @@ jobs:
           make -C Apps/WorkflowDesk
           make -C Apps/WorkflowDesk check
 
-      # The BPMN designer: built, and its tests -- the document model, its
-      # edits and layout, and that the engine reads what it writes -- run.
+      # The BPMN designer, over ODataKit (ODATAKIT, above) as WorkflowDesk
+      # is: built, and its tests -- the document model, its edits and
+      # layout, deployments, and that the engine reads what it writes -- run.
       - name: WorkflowDesigner
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh

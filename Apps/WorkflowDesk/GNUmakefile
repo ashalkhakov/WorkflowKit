@@ -21,19 +21,20 @@ APP_NAME = WorkflowDesk
 WorkflowDesk_OBJC_FILES = \
 	main.m \
 	WDAppDelegate.m \
-	WDConnectWindowController.m \
-	WDEntities.m \
+	../Shared/WDConnectWindowController.m \
+	../Shared/WDEntities.m \
 	WDFormDocument.m \
 	WDFormWindowController.m \
 	WDInterface.m \
 	WDOperationsWindowController.m \
-	WDSession.m \
-	WDSignIn.m \
+	../Shared/WDSession.m \
+	../Shared/WDSignIn.m \
+	../Shared/WDTracing.m \
 	WDTasksWindowController.m
 
 WorkflowDesk_RESOURCE_FILES = \
 	Resources/MainMenu.xib \
-	Resources/ConnectWindow.xib \
+	../Shared/Resources/ConnectWindow.xib \
 	Resources/TasksWindow.xib \
 	Resources/FormWindow.xib \
 	Resources/OperationsWindow.xib
@@ -41,10 +42,11 @@ WorkflowDesk_RESOURCE_FILES = \
 WorkflowDesk_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 
 WorkflowDesk_OBJCFLAGS += -fobjc-arc -fblocks -Wall
-WorkflowDesk_INCLUDE_DIRS = \
-	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include
+WorkflowDesk_INCLUDE_DIRS = -I../Shared \
+	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \
+	-I$(ODATAKIT)/Source/OTelKit/include
 WorkflowDesk_LIB_DIRS = -L$(ODATAKIT)/obj
-WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lCoreData -ldispatch -lgnutls
+WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lOTelKit -lCoreData -ldispatch -lgnutls
 
 ifneq ($(XFORMSKIT),)
 override XFORMSKIT := $(abspath $(XFORMSKIT))

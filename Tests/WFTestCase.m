@@ -197,18 +197,18 @@ static NSMutableArray *WFTestEntries;
 #ifdef WORKFLOWKIT_ODATA
 @implementation WFHeaderAuthenticator
 
-- (void)authenticateRequest:(ODataRequest *)request reply:(ODataReply *)reply
+- (void)authenticateRequest:(HSRequest *)request reply:(HSAuthenticationReply *)reply
 {
 	NSString *user = [request valueForHeader:@"X-User"];
 	if (user == nil) {
 		NSString *every = [@[ WFODataScopeWork, WFODataScopeOperationsRead, WFODataScopeOperationsManage,
 		                      WFODataScopeDeploy, WFODataScopeReadAllTasks, WFODataScopeAssignTasks,
 		                      WFODataScopeReadAllDefinitions, WFODataScopeStartAny ] componentsJoinedByString:@" "];
-		[reply finishWithResult:[[ODataPrincipal alloc] initWithSubject:@"tester" claims:@{ @"scope": every }]];
+		[reply finishWithPrincipal:[[HSPrincipal alloc] initWithSubject:@"tester" claims:@{ @"scope": every }]];
 		return;
 	}
 	if ([user length] == 0) {
-		[reply finishWithResult:nil];
+		[reply finishWithPrincipal:nil];
 		return;
 	}
 	NSMutableDictionary *claims = [NSMutableDictionary dictionary];
@@ -219,11 +219,99 @@ static NSMutableArray *WFTestEntries;
 		[claims setObject:department forKey:@"department"];
 	}
 	[claims setObject:[request valueForHeader:@"X-Scopes"] ?: @"" forKey:@"scope"];
-	[reply finishWithResult:[[ODataPrincipal alloc] initWithSubject:user claims:claims]];
+	[reply finishWithPrincipal:[[HSPrincipal alloc] initWithSubject:user claims:claims]];
 }
 
 @end
 #endif
+
+@implementation WFRecordedSpan
+{
+	NSMutableDictionary *_attributes;
+}
+
+- (instancetype)init
+{
+	if ((self = [super init])) {
+		_attributes = [NSMutableDictionary dictionary];
+	}
+	return self;
+}
+
+- (NSDictionary *)attributes
+{
+	@synchronized (self) {
+		return [_attributes copy];
+	}
+}
+
+- (void)setAttribute:(id)value forKey:(NSString *)key
+{
+	@synchronized (self) {
+		if (value != nil) {
+			[_attributes setObject:value forKey:key];
+		} else {
+			[_attributes removeObjectForKey:key];
+		}
+	}
+}
+
+- (void)recordError:(NSError *)error
+{
+	self.error = error;
+}
+
+- (void)end
+{
+	self.ended = YES;
+	NSMutableArray *stack = [[[NSThread currentThread] threadDictionary] objectForKey:@"WFRecordedSpans"];
+	[stack removeObjectIdenticalTo:self];
+}
+
+@end
+
+@implementation WFRecordingTracer
+{
+	NSMutableArray *_spans;
+}
+
+- (NSArray *)spans
+{
+	@synchronized (self) {
+		return [_spans copy] ?: @[];
+	}
+}
+
+- (NSArray *)spansNamed:(NSString *)name
+{
+	return [[self spans] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"name == %@", name]];
+}
+
+- (id<WFSpan>)startSpanNamed:(NSString *)name attributes:(NSDictionary *)attributes
+{
+	WFRecordedSpan *span = [[WFRecordedSpan alloc] init];
+	span.name = name;
+	for (NSString *key in attributes) {
+		[span setAttribute:[attributes objectForKey:key] forKey:key];
+	}
+	NSMutableDictionary *thread = [[NSThread currentThread] threadDictionary];
+	NSMutableArray *stack = [thread objectForKey:@"WFRecordedSpans"];
+	if (stack == nil) {
+		stack = [NSMutableArray array];
+		[thread setObject:stack forKey:@"WFRecordedSpans"];
+	}
+	span.parent = [stack lastObject];
+	[stack addObject:span];
+	@synchronized (self) {
+		if (_spans == nil) {
+			_spans = [NSMutableArray array];
+		}
+		[_spans addObject:span];
+	}
+	return span;
+}
+
+@end
 
 @implementation WFTestPlugin
 

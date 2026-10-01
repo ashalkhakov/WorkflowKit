@@ -1,5 +1,4 @@
 #import "WDConnectWindowController.h"
-#import "WDAppDelegate.h"
 #import "WDSession.h"
 #import "WDSignIn.h"
 #if __has_include(<ODataIncrementalStore/ODataIncrementalStore.h>)
@@ -16,7 +15,7 @@ static NSString * const WDScopesKey = @"WDScopes";
 
 @implementation WDConnectWindowController
 {
-	__weak WDAppDelegate *_delegate;
+	void (^_completion)(WDSession *, WDSignIn *);
 	WDSignIn *_signIn;
 }
 
@@ -30,10 +29,10 @@ static NSString * const WDScopesKey = @"WDScopes";
 	}
 }
 
-- (instancetype)initWithDelegate:(WDAppDelegate *)delegate
+- (instancetype)initWithCompletion:(void (^)(WDSession *session, WDSignIn *signIn))completion
 {
 	if ((self = [super initWithWindowNibName:@"ConnectWindow"])) {
-		_delegate = delegate;
+		_completion = [completion copy];
 		NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 		_serviceAddress = [[defaults stringForKey:WDServiceAddressKey] copy];
 		_clientID = [[defaults stringForKey:WDClientIDKey] copy];
@@ -138,7 +137,7 @@ static NSString * const WDScopesKey = @"WDScopes";
 					return;
 				}
 				[self finishWithStatus:@""];
-				[self->_delegate didOpenSession:session signIn:signIn];
+				self->_completion(session, signIn);
 			});
 		}
 	});
