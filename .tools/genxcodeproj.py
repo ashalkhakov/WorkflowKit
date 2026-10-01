@@ -548,11 +548,11 @@ with open(os.path.join(proj, "project.pbxproj"), "w") as f:
 
 
 # ---------------------------------------------------------------- schemes
-def ref(tid, name, product_name):
+def ref(tid, name, product_name, container="WorkflowKit.xcodeproj"):
     return ('<BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "%s" '
             'BuildableName = "%s" BlueprintName = "%s" '
-            'ReferencedContainer = "container:WorkflowKit.xcodeproj"></BuildableReference>'
-            % (tid, product_name, name))
+            'ReferencedContainer = "container:%s"></BuildableReference>'
+            % (tid, product_name, name, container))
 
 
 def scheme(name, build, test=None, run=None, directory=None, arguments=None):
@@ -602,5 +602,15 @@ scheme("wf-serve", [serve_ref], run=serve_ref, directory="$(PROJECT_DIR)/Server"
        arguments=["-Config Examples/server.plist"])
 desk_ref = ref(t_desk, "WorkflowDesk", "WorkflowDesk.app")
 desk_tests_ref = ref(t_desk_tests, "WorkflowDeskTests", "WorkflowDeskTests.xctest")
-scheme("WorkflowDesk", [desk_ref], test=desk_tests_ref, run=desk_ref)
+# The frameworks of the projects beside this one that the app embeds, built
+# first by name: the IDE does not always find them as implicit dependencies,
+# and then compiles the app before their headers are there. Their targets'
+# ids are fixed in those projects.
+DESK_EXTERNAL = [
+    ref("AA0000000000000000000006", "ODataKit", "ODataKit.framework", ODATAKIT + "/ODataKit.xcodeproj"),
+    ref("AA0000000000000000000002", "ODataIncrementalStore", "ODataIncrementalStore.framework",
+        ODATAKIT + "/ODataKit.xcodeproj"),
+    ref("EE0000010000000000000001", "XFormsKit", "XFormsKit.framework", "../XFormsKit/XFormsKit.xcodeproj"),
+]
+scheme("WorkflowDesk", DESK_EXTERNAL + [desk_ref], test=desk_tests_ref, run=desk_ref)
 print("wrote", proj)
