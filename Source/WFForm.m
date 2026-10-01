@@ -486,7 +486,11 @@ WFXFormsLabel(NSString *text)
 			[item addChild:value];
 			[control addChild:item];
 		}
-		[body addChild:control];
+		/* A block of its own: controls are inline, as in a browser, and
+		 * would otherwise run on in one line. */
+		NSXMLElement *row = WFXFormsElement(@"div", nil);
+		[row addChild:control];
+		[body addChild:row];
 	}
 	[html addChild:body];
 	NSXMLDocument *document = [[NSXMLDocument alloc] initWithRootElement:html];

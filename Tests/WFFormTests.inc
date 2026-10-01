@@ -72,12 +72,13 @@
 	WFFormData *data = [engine.formService formDataForTask:taskId error:&error];
 	XCTAssertNotNil(data, @"%@", error);
 	XCTAssertEqualObjects(data.formKey, @"app:review");
-	/* The document: a model with <data>, a bind per field, a control per field. */
+	/* The document: a model with <data>, a bind per field, a control per
+	 * field, each in a block of its own. */
 	NSString *xml = [data.document XMLString];
 	for (NSString *part in @[ @"http://www.w3.org/2002/xforms", @"<data xmlns=\"\">", @"ref=\"amount\"", @"xsd:long",
 	                          @"required=\"true()\"", @"readonly=\"true()\"", @"number(.) &gt;= 1",
 	                          @"string-length(.) &lt;= 10", @"seconds-from-dateTime", @"xf:select1",
-	                          @"<xf:value>b</xf:value>", @"xsd:dateTime", @"xsd:boolean" ]) {
+	                          @"<xf:value>b</xf:value>", @"xsd:dateTime", @"xsd:boolean", @"<div><xf:input ref=\"amount\"" ]) {
 		XCTAssertTrue([xml rangeOfString:part].location != NSNotFound, @"%@ in %@", part, xml);
 	}
 	/* The instance: each field's variable, else its default. */
