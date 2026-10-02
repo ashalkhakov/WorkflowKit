@@ -14,6 +14,13 @@
 /* One undoable step named for the change: the document as it was is what
  * undo restores, and the diagram is read again after it. */
 - (void)change:(NSString *)name with:(void (^)(void))change;
+/* The same, joining the last step when it was a change of the same name
+ * made within a second, with nothing undone since. */
+- (void)change:(NSString *)name coalescing:(BOOL)coalescing with:(void (^)(void))change;
+/* Shapes moved by offsets of their own, as one step of the action's name:
+ * each with what it holds and what is attached to it; a boundary event
+ * without its activity slides along the activity's edge. */
+- (void)moveShapes:(NSDictionary<NSString *, NSValue *> *)offsets action:(NSString *)action coalescing:(BOOL)coalescing;
 /* Every id in the document. */
 - (NSMutableSet *)usedIds;
 /* An id of the prefix no element has. */

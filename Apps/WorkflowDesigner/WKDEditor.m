@@ -10,6 +10,9 @@ static const double WKDMargin = 80;
 @implementation WKDEditor
 {
 	NSUndoManager *_undoManager;
+	/* The change the next coalescing one may join, and when it was. */
+	NSString *_coalescedName;
+	NSDate *_coalescedAt;
 }
 
 #pragma mark Documents
@@ -82,11 +85,27 @@ WKDSnapshot(NSXMLDocument *document)
  * another are weak, and a change reads the document afresh as it goes. */
 - (void)change:(NSString *)name with:(void (^)(void))change
 {
+	[self change:name coalescing:NO with:change];
+}
+
+/* With coalescing, a change of the same name made within a second of the
+ * last, with nothing undone since, joins its undo step: a burst of arrow
+ * key presses is undone at once. */
+- (void)change:(NSString *)name coalescing:(BOOL)coalescing with:(void (^)(void))change
+{
 	__attribute__((objc_precise_lifetime)) WKDDiagram *start = _diagram;
-	NSXMLDocument *before = WKDSnapshot(_document);
+	NSDate *now = [NSDate date];
+	BOOL joins = coalescing && _undoManager != nil && [_coalescedName isEqualToString:name]
+		&& [now timeIntervalSinceDate:_coalescedAt] < 1.0 && ![_undoManager canRedo]
+		&& [[_undoManager undoActionName] isEqualToString:name];
+	NSXMLDocument *before = joins ? nil : WKDSnapshot(_document);
 	change();
-	[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:before];
-	[_undoManager setActionName:name];
+	if (!joins) {
+		[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:before];
+		[_undoManager setActionName:name];
+	}
+	_coalescedName = coalescing ? name : nil;
+	_coalescedAt = now;
 	[self reread];
 }
 
@@ -802,20 +821,42 @@ WKDOnEdge(NSRect host, NSPoint point)
 	if (offset.width == 0 && offset.height == 0) {
 		return;
 	}
-	NSMutableSet *moving = [NSMutableSet set];
-	NSMutableSet *slides = [NSMutableSet set];
+	NSMutableDictionary *offsets = [NSMutableDictionary dictionary];
 	for (NSString *elementId in elementIds) {
-		WKDShape *shape = [_diagram shapeWithId:elementId];
-		if (shape == nil) {
+		[offsets setObject:[NSValue valueWithSize:offset] forKey:elementId];
+	}
+	[self moveShapes:offsets action:@"Move" coalescing:NO];
+}
+
+- (void)moveShapes:(NSDictionary<NSString *, NSValue *> *)offsets action:(NSString *)action coalescing:(BOOL)coalescing
+{
+	/* Each shape's offset goes to what it holds and what is attached to
+	 * it, a container's before its contents'; a boundary event moved
+	 * without its activity slides along the activity's edge. */
+	NSMutableDictionary<NSString *, NSValue *> *moving = [NSMutableDictionary dictionary];
+	NSMutableDictionary<NSString *, NSValue *> *sliding = [NSMutableDictionary dictionary];
+	for (WKDShape *shape in _diagram.shapes) {
+		NSValue *offset = [offsets objectForKey:shape.elementId];
+		NSSize by = offset != nil ? [offset sizeValue] : NSZeroSize;
+		if (offset == nil || (by.width == 0 && by.height == 0) || [moving objectForKey:shape.elementId] != nil) {
 			continue;
 		}
-		if (shape.host != nil && ![elementIds containsObject:shape.host.elementId]) {
-			[slides addObject:shape];
-		} else {
-			[self collect:shape into:moving];
+		if (shape.host != nil && [offsets objectForKey:shape.host.elementId] == nil) {
+			[sliding setObject:offset forKey:shape.elementId];
+			continue;
+		}
+		NSMutableSet *held = [NSMutableSet set];
+		[self collect:shape into:held];
+		for (NSString *heldId in held) {
+			if ([moving objectForKey:heldId] == nil) {
+				[moving setObject:offset forKey:heldId];
+			}
 		}
 	}
-	[self change:@"Move" with:^{
+	if ([moving count] == 0 && [sliding count] == 0) {
+		return;
+	}
+	[self change:action coalescing:coalescing with:^{
 		/* How far each shape went, its label with it. */
 		NSMutableDictionary<NSString *, NSValue *> *moved = [NSMutableDictionary dictionary];
 		void (^place)(WKDShape *, NSRect) = ^(WKDShape *shape, NSRect bounds) {
@@ -827,11 +868,14 @@ WKDOnEdge(NSRect host, NSPoint point)
 			[moved setObject:[NSValue valueWithSize:by] forKey:shape.elementId];
 		};
 		for (WKDShape *shape in self->_diagram.shapes) {
-			if ([moving containsObject:shape.elementId] && shape.hasBounds) {
-				place(shape, NSOffsetRect(shape.bounds, offset.width, offset.height));
+			NSValue *offset = [moving objectForKey:shape.elementId];
+			if (offset != nil && shape.hasBounds) {
+				place(shape, NSOffsetRect(shape.bounds, [offset sizeValue].width, [offset sizeValue].height));
 			}
 		}
-		for (WKDShape *event in slides) {
+		for (NSString *eventId in sliding) {
+			WKDShape *event = [self->_diagram shapeWithId:eventId];
+			NSSize offset = [[sliding objectForKey:eventId] sizeValue];
 			NSRect bounds = NSOffsetRect(event.bounds, offset.width, offset.height);
 			NSPoint centre = WKDOnEdge(event.host.bounds, NSMakePoint(NSMidX(bounds), NSMidY(bounds)));
 			place(event, NSMakeRect(centre.x - NSWidth(bounds) / 2, centre.y - NSHeight(bounds) / 2,

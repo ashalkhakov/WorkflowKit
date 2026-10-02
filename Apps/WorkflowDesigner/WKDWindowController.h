@@ -38,6 +38,16 @@
  * made from its fields first, and named in its form key, when there is
  * none. */
 - (IBAction)editForm:(id)sender;
+/* Diagram ▸ Align: the selected shapes lined up with the first selected;
+ * Diagram ▸ Distribute: spread out evenly, across or down. */
+- (IBAction)alignLeftEdges:(id)sender;
+- (IBAction)alignCentres:(id)sender;
+- (IBAction)alignRightEdges:(id)sender;
+- (IBAction)alignTopEdges:(id)sender;
+- (IBAction)alignMiddles:(id)sender;
+- (IBAction)alignBottomEdges:(id)sender;
+- (IBAction)distributeAcross:(id)sender;
+- (IBAction)distributeDown:(id)sender;
 /* View ▸ Zoom to Fit: the whole diagram in the window. */
 - (IBAction)zoomToFit:(id)sender;
 /* Diagram ▸ Rename: the selected element's name typed over it. */

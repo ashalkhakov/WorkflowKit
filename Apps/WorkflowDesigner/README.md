@@ -138,9 +138,20 @@ write.
   tasks, a subprocess, gateways and boundary events are all there. A node
   placed inside a subprocess belongs to it. A boundary event placed near a
   task's or subprocess's edge attaches to it there.
-- **Select:** click a shape or a flow. Shift-click adds to the selection,
-  and dragging on empty canvas draws a band around shapes.
-- **Move:** drag the selection. A subprocess moves with its contents, and
+- **Select:** click a shape or a flow. Shift- or ⌘-click adds to the
+  selection or takes out of it, and dragging on empty canvas draws a band
+  around shapes. The first selected is the anchor the others are lined up
+  with, marked with a square when there are several.
+- **Arrange several:** Diagram ▸ Align lines the selected shapes up with
+  the anchor, by their left edges, centres, right edges, tops, middles or
+  bottoms; Diagram ▸ Distribute spreads three or more out evenly, across or
+  down, the outermost two staying where they are. Both are on the right-
+  click menu too. What a selected subprocess holds goes with it.
+- **Nudge:** the arrow keys move the selection by one, or by ten with
+  Shift; a burst of presses is one undo step.
+- **Move:** drag the selection. The shape dragged snaps its centre to
+  another's when it comes within a few pixels of it, and a dashed guide
+  shows the line. A subprocess moves with its contents, and
   an activity with its boundary events. A boundary event dragged alone
   slides along its activity's edge. A flow whose ends both move goes with
   them; one with a single end moved keeps its bends, the bend next to that
@@ -241,7 +252,7 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | Where | What |
 | --- | --- |
 | `WKDDiagram` | What the canvas draws, read from the XML: shapes with their bounds, subprocess and boundary host, and flows with their waypoints. It is read again after every change. |
-| `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. Its categories hold what the canvas changes directly (`+Canvas`: names, reconnections, bends, labels, kept routes), the clipboard (`+Clipboard`) and type changes (`+Types`). |
+| `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. Its categories hold what the canvas changes directly (`+Canvas`: names, reconnections, bends, labels, kept routes), the clipboard (`+Clipboard`), type changes (`+Types`) and arranging several shapes (`+Alignment`). |
 | `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's: layers by longest path, ordered to cross as little as they can, then placed by sweeps that move each layer as near its neighbours as its order and spacing allow (isotonic regression). Edges can leave a node's bottom. |
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
 | `WKDTableEditor` | A table property in the inspector, with its + and − and its detail table. |

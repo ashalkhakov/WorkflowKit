@@ -32,6 +32,12 @@ static const double WKDHandle = 7;
 	/* A reconnection's end, a bend's index. */
 	BOOL _atSource;
 	NSUInteger _bend;
+	/* The selection's order, and the shape a move was started on. */
+	NSMutableArray<NSString *> *_order;
+	NSString *_grabbed;
+	/* The centre lines a move snapped to; NAN when none. */
+	double _guideX;
+	double _guideY;
 	/* The field a name is typed in, and whose name it is. */
 	NSTextField *_nameField;
 	NSString *_renaming;
@@ -43,6 +49,7 @@ static const double WKDHandle = 7;
 	if ((self = [super initWithFrame:frame])) {
 		_zoom = 1;
 		_selection = [NSSet set];
+		_guideX = _guideY = NAN;
 	}
 	return self;
 }
@@ -52,6 +59,7 @@ static const double WKDHandle = 7;
 	if ((self = [super initWithCoder:coder])) {
 		_zoom = 1;
 		_selection = [NSSet set];
+		_guideX = _guideY = NAN;
 	}
 	return self;
 }
@@ -104,6 +112,7 @@ static const double WKDHandle = 7;
 		}
 	}
 	_selection = kept;
+	[self keepOrder];
 	if (_renaming != nil && [diagram shapeWithId:_renaming] == nil && [diagram connectionWithId:_renaming] == nil) {
 		[self endRenaming:NO];
 	}
@@ -119,8 +128,39 @@ static const double WKDHandle = 7;
 - (void)setSelection:(NSSet<NSString *> *)selection
 {
 	_selection = [selection copy] ?: [NSSet set];
+	[self keepOrder];
 	[self setNeedsDisplay:YES];
 	[self.delegate canvasSelectionDidChange:self];
+}
+
+/* What stays selected keeps its place; what is new comes after it, in the
+ * diagram's order. */
+- (void)keepOrder
+{
+	NSMutableArray *order = [NSMutableArray array];
+	for (NSString *elementId in _order) {
+		if ([_selection containsObject:elementId]) {
+			[order addObject:elementId];
+		}
+	}
+	NSMutableArray *added = [NSMutableArray array];
+	for (WKDShape *shape in self.diagram.shapes) {
+		if ([_selection containsObject:shape.elementId] && ![order containsObject:shape.elementId]) {
+			[added addObject:shape.elementId];
+		}
+	}
+	for (NSString *elementId in _selection) {
+		if (![order containsObject:elementId] && ![added containsObject:elementId]) {
+			[added addObject:elementId];
+		}
+	}
+	[order addObjectsFromArray:added];
+	_order = order;
+}
+
+- (NSArray<NSString *> *)orderedSelection
+{
+	return [_order copy] ?: @[];
 }
 
 - (void)scrollToContent
@@ -260,11 +300,43 @@ WKDPointHandle(NSPoint point, double zoom)
 
 #pragma mark Drawing
 
+/* How far the selection has been dragged: the pointer's way, with the
+ * grabbed shape's centre snapped to another's within a few pixels. */
+- (NSSize)moveOffset
+{
+	NSSize offset = NSMakeSize(_at.x - _down.x, _at.y - _down.y);
+	_guideX = _guideY = NAN;
+	WKDShape *grabbed = [self.diagram shapeWithId:_grabbed];
+	if (grabbed == nil || !grabbed.hasBounds) {
+		return offset;
+	}
+	double snap = 6 / _zoom, bestX = snap, bestY = snap;
+	NSPoint centre = NSMakePoint(NSMidX(grabbed.bounds) + offset.width, NSMidY(grabbed.bounds) + offset.height);
+	NSSize snapped = offset;
+	for (WKDShape *other in self.diagram.shapes) {
+		if (!other.hasBounds || [self isMoving:other] || WKDIsContainerType(other.type)) {
+			continue;
+		}
+		double dx = NSMidX(other.bounds) - centre.x, dy = NSMidY(other.bounds) - centre.y;
+		if (fabs(dx) < bestX) {
+			bestX = fabs(dx);
+			snapped.width = offset.width + dx;
+			_guideX = NSMidX(other.bounds);
+		}
+		if (fabs(dy) < bestY) {
+			bestY = fabs(dy);
+			snapped.height = offset.height + dy;
+			_guideY = NSMidY(other.bounds);
+		}
+	}
+	return snapped;
+}
+
 /* How far a shape has gone in the gesture under way. */
 - (NSSize)offsetOf:(WKDShape *)shape
 {
 	if (_gesture == WKDGestureMove && [self isMoving:shape]) {
-		return NSMakeSize(_at.x - _down.x, _at.y - _down.y);
+		return [self moveOffset];
 	}
 	return NSZeroSize;
 }
@@ -418,6 +490,17 @@ WKDPointHandle(NSPoint point, double zoom)
 			WKDDrawSelection([self movedBounds:shape]);
 		}
 	}
+	/* With several selected, the anchor the others line up with. */
+	WKDShape *anchor = [_order count] > 1 ? [self.diagram shapeWithId:[_order firstObject]] : nil;
+	if (anchor.hasBounds) {
+		NSRect bounds = [self movedBounds:anchor];
+		[WKDSelectionColor() setFill];
+		NSRectFill(NSMakeRect(NSMinX(bounds) - 8, NSMinY(bounds) - 8, 6 / _zoom + 2, 6 / _zoom + 2));
+	}
+	if (_gesture == WKDGestureMove) {
+		[self moveOffset];
+		[self drawGuides];
+	}
 	[self drawHandles];
 	if (_gesture == WKDGestureConnect || _gesture == WKDGestureReconnect) {
 		[self drawRubberBand];
@@ -498,6 +581,26 @@ WKDPointHandle(NSPoint point, double zoom)
 	}
 }
 
+/* The centre lines a move has snapped to, dashed across the view. */
+- (void)drawGuides
+{
+	NSRect visible = [self visibleRect];
+	NSBezierPath *guides = [NSBezierPath bezierPath];
+	if (!isnan(_guideX)) {
+		[guides moveToPoint:NSMakePoint(_guideX, NSMinY(visible))];
+		[guides lineToPoint:NSMakePoint(_guideX, NSMaxY(visible))];
+	}
+	if (!isnan(_guideY)) {
+		[guides moveToPoint:NSMakePoint(NSMinX(visible), _guideY)];
+		[guides lineToPoint:NSMakePoint(NSMaxX(visible), _guideY)];
+	}
+	CGFloat pattern[2] = { 4, 4 };
+	[guides setLineDash:pattern count:2 phase:0];
+	[guides setLineWidth:1 / _zoom];
+	[[WKDSelectionColor() colorWithAlphaComponent:0.7] setStroke];
+	[guides stroke];
+}
+
 - (NSRect)band
 {
 	return NSMakeRect(MIN(_down.x, _at.x), MIN(_down.y, _at.y), fabs(_at.x - _down.x), fabs(_at.y - _down.y));
@@ -570,7 +673,8 @@ WKDPointHandle(NSPoint point, double zoom)
 		}
 		return;
 	}
-	BOOL extend = ([event modifierFlags] & NSEventModifierFlagShift) != 0;
+	/* Shift or Command: add to the selection, or take out of it. */
+	BOOL extend = ([event modifierFlags] & (NSEventModifierFlagShift | NSEventModifierFlagCommand)) != 0;
 	NSString *labelled = [self labelAt:point];
 	if (labelled != nil && !extend) {
 		if ([event clickCount] >= 2) {
@@ -604,6 +708,7 @@ WKDPointHandle(NSPoint point, double zoom)
 		}
 		self.selection = selection;
 		_gesture = [selection containsObject:shape.elementId] ? WKDGestureMove : WKDGestureNone;
+		_grabbed = shape.elementId;
 		return;
 	}
 	WKDConnection *connection = [self connectionAt:point];
@@ -637,6 +742,10 @@ WKDPointHandle(NSPoint point, double zoom)
 	_at = [self pointOf:event];
 	NSSize offset = NSMakeSize(round(_at.x - _down.x), round(_at.y - _down.y));
 	BOOL dragged = fabs(offset.width) >= 2 || fabs(offset.height) >= 2;
+	if (gesture == WKDGestureMove) {
+		NSSize snapped = [self moveOffset];
+		offset = NSMakeSize(round(snapped.width), round(snapped.height));
+	}
 	switch (gesture) {
 	case WKDGestureMove:
 		if (dragged) {
@@ -698,6 +807,7 @@ WKDPointHandle(NSPoint point, double zoom)
 		break;
 	}
 	_from = nil;
+	_grabbed = nil;
 	[self setNeedsDisplay:YES];
 }
 
@@ -717,6 +827,13 @@ WKDPointHandle(NSPoint point, double zoom)
 	unichar key = [characters length] > 0 ? [characters characterAtIndex:0] : 0;
 	if (key == NSDeleteCharacter || key == NSBackspaceCharacter || key == NSDeleteFunctionKey) {
 		[self delete:self];
+		return;
+	}
+	if (key >= NSUpArrowFunctionKey && key <= NSRightArrowFunctionKey && [_selection count] > 0) {
+		double step = ([event modifierFlags] & NSEventModifierFlagShift) != 0 ? 10 : 1;
+		NSSize by = NSMakeSize(key == NSLeftArrowFunctionKey ? -step : key == NSRightArrowFunctionKey ? step : 0,
+		                       key == NSUpArrowFunctionKey ? -step : key == NSDownArrowFunctionKey ? step : 0);
+		[self.delegate canvas:self nudge:[self orderedSelection] by:by];
 		return;
 	}
 	if ((key == NSCarriageReturnCharacter || key == NSEnterCharacter) && [_selection count] == 1) {

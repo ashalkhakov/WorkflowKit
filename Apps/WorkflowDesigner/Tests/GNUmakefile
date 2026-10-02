@@ -13,6 +13,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../WKDEditor+Canvas.m \
 	../WKDEditor+Clipboard.m \
 	../WKDEditor+Types.m \
+	../WKDEditor+Alignment.m \
 	../WKDProperties.m \
 	../WKDDeployment.m \
 	WKDDiagramTests.m \
@@ -20,6 +21,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	WKDCanvasEditsTests.m \
 	WKDClipboardTests.m \
 	WKDTypesTests.m \
+	WKDAlignmentTests.m \
 	WKDLayoutTests.m \
 	WKDPropertiesTests.m \
 	WKDTablesTests.m \

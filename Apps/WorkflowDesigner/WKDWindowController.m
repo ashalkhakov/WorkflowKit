@@ -312,6 +312,12 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	[[self editor] moveBend:index of:flowId to:point];
 }
 
+- (void)canvas:(WKDCanvasView *)canvas nudge:(NSArray<NSString *> *)elementIds by:(NSSize)offset
+{
+	_note = nil;
+	[[self editor] nudgeElements:elementIds by:offset];
+}
+
 - (void)canvas:(WKDCanvasView *)canvas moveLabelOf:(NSString *)elementId by:(NSSize)offset
 {
 	_note = nil;
@@ -347,6 +353,26 @@ WKDSelectTab(id sender, NSTabView *tabView)
 			}
 			NSMenuItem *change = (NSMenuItem *)[menu addItemWithTitle:@"Change Type" action:NULL keyEquivalent:@""];
 			[change setSubmenu:submenu];
+		}
+		[menu addItem:[NSMenuItem separatorItem]];
+	}
+	if ([[self selectedShapes] count] >= 2) {
+		/* Several: lined up with the first selected, or spread out. */
+		NSArray *groups = @[ @[ @"Align", @[ @[ @"Left Edges", @"alignLeftEdges:" ], @[ @"Centres", @"alignCentres:" ],
+		                                    @[ @"Right Edges", @"alignRightEdges:" ], @[ @"Top Edges", @"alignTopEdges:" ],
+		                                    @[ @"Middles", @"alignMiddles:" ], @[ @"Bottom Edges", @"alignBottomEdges:" ] ] ],
+		                     @[ @"Distribute", @[ @[ @"Across", @"distributeAcross:" ], @[ @"Down", @"distributeDown:" ] ] ] ];
+		for (NSArray *group in groups) {
+			NSMenu *submenu = [[NSMenu alloc] initWithTitle:group[0]];
+			[submenu setAutoenablesItems:NO];
+			for (NSArray *entry in group[1]) {
+				NSMenuItem *item = (NSMenuItem *)[submenu addItemWithTitle:entry[0] action:NSSelectorFromString(entry[1])
+				                                             keyEquivalent:@""];
+				[item setTarget:self];
+				[item setEnabled:[self validateUserInterfaceItem:item]];
+			}
+			NSMenuItem *holder = (NSMenuItem *)[menu addItemWithTitle:group[0] action:NULL keyEquivalent:@""];
+			[holder setSubmenu:submenu];
 		}
 		[menu addItem:[NSMenuItem separatorItem]];
 	}
@@ -436,6 +462,74 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	NSString *reason = nil;
 	BOOL done = [[self editor] changeType:selected to:type error:&reason];
 	[self note:done ? nil : reason];
+}
+
+#pragma mark Arranging several
+
+/* The selected shapes, the anchor first. */
+- (NSArray<NSString *> *)selectedShapes
+{
+	NSMutableArray *shapes = [NSMutableArray array];
+	for (NSString *elementId in self.canvas.orderedSelection) {
+		if ([[self editor].diagram shapeWithId:elementId] != nil) {
+			[shapes addObject:elementId];
+		}
+	}
+	return shapes;
+}
+
+- (void)align:(WKDAlignment)alignment
+{
+	_note = nil;
+	if (![[self editor] alignElements:[self selectedShapes] to:alignment]) {
+		[self note:@"Select two shapes or more to line up with the first."];
+	}
+}
+
+- (IBAction)alignLeftEdges:(id)sender
+{
+	[self align:WKDAlignLeft];
+}
+
+- (IBAction)alignCentres:(id)sender
+{
+	[self align:WKDAlignCentre];
+}
+
+- (IBAction)alignRightEdges:(id)sender
+{
+	[self align:WKDAlignRight];
+}
+
+- (IBAction)alignTopEdges:(id)sender
+{
+	[self align:WKDAlignTop];
+}
+
+- (IBAction)alignMiddles:(id)sender
+{
+	[self align:WKDAlignMiddle];
+}
+
+- (IBAction)alignBottomEdges:(id)sender
+{
+	[self align:WKDAlignBottom];
+}
+
+- (IBAction)distributeAcross:(id)sender
+{
+	_note = nil;
+	if (![[self editor] distributeElements:[self selectedShapes] vertically:NO]) {
+		[self note:@"Select three shapes or more to spread out."];
+	}
+}
+
+- (IBAction)distributeDown:(id)sender
+{
+	_note = nil;
+	if (![[self editor] distributeElements:[self selectedShapes] vertically:YES]) {
+		[self note:@"Select three shapes or more to spread out."];
+	}
 }
 
 #pragma mark Clipboard
@@ -665,6 +759,13 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	SEL action = [item action];
 	if (action == @selector(copy:) || action == @selector(cut:) || action == @selector(duplicate:)) {
 		return [self.canvas.selection count] > 0;
+	}
+	NSString *name = NSStringFromSelector(action);
+	if ([name hasPrefix:@"align"]) {
+		return [[self selectedShapes] count] >= 2;
+	}
+	if ([name hasPrefix:@"distribute"]) {
+		return [[self selectedShapes] count] >= 3;
 	}
 	if (action == @selector(rename:)) {
 		return [self selectedId] != nil;

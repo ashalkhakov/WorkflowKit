@@ -142,3 +142,30 @@
 - (BOOL)changeType:(NSString *)elementId to:(WKDNodeType *)type error:(NSString **)reason;
 
 @end
+
+/* How shapes are lined up with the anchor: by their left edges, centres
+ * or right edges, or their tops, middles or bottoms. */
+typedef NS_ENUM(NSInteger, WKDAlignment) {
+	WKDAlignLeft,
+	WKDAlignCentre,
+	WKDAlignRight,
+	WKDAlignTop,
+	WKDAlignMiddle,
+	WKDAlignBottom,
+};
+
+/* Several shapes arranged at once (WKDEditor+Alignment.m). A shape inside
+ * or on another of those given goes with it rather than on its own. */
+@interface WKDEditor (WKDAlignment)
+
+/* Moved by the offset, a burst of nudges within a second of each other
+ * one undo step. */
+- (void)nudgeElements:(NSArray<NSString *> *)elementIds by:(NSSize)offset;
+/* The others lined up with the first, the anchor, as one step; NO when
+ * fewer than two are given. */
+- (BOOL)alignElements:(NSArray<NSString *> *)elementIds to:(WKDAlignment)alignment;
+/* Spread out so the gaps between them are equal, the outermost two where
+ * they are, as one step; NO when fewer than three are given. */
+- (BOOL)distributeElements:(NSArray<NSString *> *)elementIds vertically:(BOOL)vertically;
+
+@end

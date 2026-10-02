@@ -213,6 +213,68 @@
                                     <action selector="rename:" target="-1" id="WKm-ac-123"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Align" id="WKm-mi-124">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Align" id="WKm-mn-124">
+                                    <items>
+                                        <menuItem title="Left Edges" id="WKm-al-001">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="alignLeftEdges:" target="-1" id="WKm-aa-001"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Centres" id="WKm-al-002">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="alignCentres:" target="-1" id="WKm-aa-002"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Right Edges" id="WKm-al-003">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="alignRightEdges:" target="-1" id="WKm-aa-003"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Top Edges" id="WKm-al-004">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="alignTopEdges:" target="-1" id="WKm-aa-004"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Middles" id="WKm-al-005">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="alignMiddles:" target="-1" id="WKm-aa-005"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Bottom Edges" id="WKm-al-006">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="alignBottomEdges:" target="-1" id="WKm-aa-006"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                            </menuItem>
+                            <menuItem title="Distribute" id="WKm-mi-125">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Distribute" id="WKm-mn-125">
+                                    <items>
+                                        <menuItem title="Across" id="WKm-al-011">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="distributeAcross:" target="-1" id="WKm-aa-011"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Down" id="WKm-al-012">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="distributeDown:" target="-1" id="WKm-aa-012"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="WKm-sp-110"/>
                             <menuItem title="Edit Form…" keyEquivalent="e" id="WKm-mi-111">
                                 <connections>
