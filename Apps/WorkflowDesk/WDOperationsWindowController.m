@@ -56,7 +56,7 @@ WDSort(NSString *key, BOOL ascending)
 	[self.activities setSortDescriptors:@[ WDSort(@"startTime", YES) ]];
 	[self.incidents setSortDescriptors:@[ WDSort(@"createdAt", NO) ]];
 	[self.jobs setSortDescriptors:@[ WDSort(@"dueDate", YES) ]];
-	for (NSTableView *table in @[ self.definitionsTable, self.instancesTable, self.jobsTable ]) {
+	for (NSTableView *table in @[ self.definitionsTable, self.instancesTable, self.jobsTable, self.incidentsTable ]) {
 		[table setDelegate:self];
 	}
 	/* Every table's, those in the tabs too. */
@@ -215,6 +215,7 @@ WDIsRunning(NSManagedObject *instance)
 {
 	NSManagedObject *instance = [self selectedOf:self.instances];
 	self.instanceSelected = instance != nil;
+	self.incidentRetryable = NO;
 	BOOL running = WDIsRunning(instance);
 	self.instanceRunning = running;
 	NSUInteger read = ++_detailsRead;
@@ -421,6 +422,20 @@ WDIsRunning(NSManagedObject *instance)
 	self.jobSelected = [self selectedOf:self.jobs] != nil;
 }
 
+/* An open incident, not one in the history, of what a retry can fix. */
+static BOOL
+WDIsRetryable(NSManagedObject *incident)
+{
+	NSString *type = [incident valueForKey:@"incidentType"];
+	return [[[incident entity] name] isEqualToString:@"WFIncident"]
+		&& ([type isEqualToString:@"failedJob"] || [type isEqualToString:@"failedExternalTask"]);
+}
+
+- (void)incidentSelectionDidChange
+{
+	self.incidentRetryable = WDIsRetryable([self selectedOf:self.incidents]);
+}
+
 - (void)tableViewSelectionDidChange:(NSNotification *)notification
 {
 	id table = [notification object];
@@ -430,6 +445,8 @@ WDIsRunning(NSManagedObject *instance)
 		[self instanceSelectionDidChange];
 	} else if (table == self.jobsTable) {
 		[self jobSelectionDidChange];
+	} else if (table == self.incidentsTable) {
+		[self incidentSelectionDidChange];
 	}
 }
 
@@ -527,6 +544,40 @@ WDIsRunning(NSManagedObject *instance)
 {
 	[self invoke:@"SetRetries" on:[self selectedOf:self.jobs] parameters:@{ @"Retries": @1 }
 	     failure:@"Could not retry the job."];
+}
+
+- (IBAction)retryIncident:(id)sender
+{
+	NSManagedObject *incident = [self selectedOf:self.incidents];
+	NSString *failed = [incident valueForKey:@"configuration"];
+	if (!WDIsRetryable(incident) || failed == nil) {
+		return;
+	}
+	/* The incident names what failed by its id: a job's, or an external
+	 * task's. */
+	BOOL job = [[incident valueForKey:@"incidentType"] isEqualToString:@"failedJob"];
+	NSFetchRequest *fetch = [NSFetchRequest fetchRequestWithEntityName:job ? @"WFJob" : @"WFExternalTask"];
+	[fetch setPredicate:[NSPredicate predicateWithFormat:job ? @"jobId == %@" : @"externalTaskId == %@", failed]];
+	[self setLoading:YES];
+	[_session fetch:fetch completion:^(NSArray *objects, NSError *error) {
+		NSManagedObject *target = [objects firstObject];
+		if (target == nil) {
+			[self setLoading:NO];
+			WDAlert([self window], job ? @"The job is no longer there." : @"The external task is no longer there.", error);
+			return;
+		}
+		[self->_session invoke:@"SetRetries" on:target parameters:@{ @"Retries": @1 }
+		            completion:^(id result, NSError *invokeError) {
+			[self setLoading:NO];
+			if (invokeError != nil) {
+				WDAlert([self window], job ? @"Could not retry the job." : @"Could not retry the external task.",
+				        invokeError);
+				return;
+			}
+			/* Resolved: the instance read again, its incidents too. */
+			[self instanceSelectionDidChange];
+		}];
+	}];
 }
 
 - (IBAction)deploy:(id)sender

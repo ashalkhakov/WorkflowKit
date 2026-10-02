@@ -216,8 +216,9 @@ static NSMutableArray *WFTestEntries;
 	NSString *user = [request valueForHeader:@"X-User"];
 	if (user == nil) {
 		NSString *every = [@[ WFODataScopeWork, WFODataScopeOperationsRead, WFODataScopeOperationsManage,
-		                      WFODataScopeDeploy, WFODataScopeReadAllTasks, WFODataScopeAssignTasks,
-		                      WFODataScopeReadAllDefinitions, WFODataScopeStartAny ] componentsJoinedByString:@" "];
+		                      WFODataScopeDeploy, WFODataScopeExternalWork, WFODataScopeReadAllTasks,
+		                      WFODataScopeAssignTasks, WFODataScopeReadAllDefinitions,
+		                      WFODataScopeStartAny ] componentsJoinedByString:@" "];
 		[reply finishWithPrincipal:[[HSPrincipal alloc] initWithSubject:@"tester" claims:@{ @"scope": every }]];
 		return;
 	}

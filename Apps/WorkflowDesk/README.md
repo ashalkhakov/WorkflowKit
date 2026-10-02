@@ -22,7 +22,10 @@ only, and it has two windows:
     its jobs; for a finished instance its variables' last values and the
     incidents it had, from the history;
   - controls to suspend and resume a definition or a running instance,
-    cancel a running instance, retry a failed job, and deploy BPMN, DMN and form files.
+    cancel a running instance, retry a failed job, retry what an open
+    incident is about (a failed job or external task, given an attempt
+    again, which resolves the incident), and deploy BPMN, DMN and form
+    files.
 
 Forms are the engine's XForms documents, rendered by XFormsKit. The
 server holds the instance a form opens with; the app puts it into the

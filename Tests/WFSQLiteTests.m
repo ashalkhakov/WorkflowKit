@@ -227,4 +227,11 @@
 @implementation WFODataSQLiteTests
 #include "WFODataTests.inc"
 @end
+
+@interface WFODataExternalTasksSQLiteTests : WFSQLiteTestCase
+@end
+
+@implementation WFODataExternalTasksSQLiteTests
+#include "WFODataExternalTasksTests.inc"
+@end
 #endif

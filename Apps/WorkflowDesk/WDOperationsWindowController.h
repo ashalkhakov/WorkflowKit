@@ -28,6 +28,7 @@
 @property (nonatomic, strong) IBOutlet NSTableView *definitionsTable;
 @property (nonatomic, strong) IBOutlet NSTableView *instancesTable;
 @property (nonatomic, strong) IBOutlet NSTableView *jobsTable;
+@property (nonatomic, strong) IBOutlet NSTableView *incidentsTable;
 @property (nonatomic, strong) IBOutlet NSProgressIndicator *progress;
 @property (nonatomic, strong) IBOutlet WDDiagramView *diagramView;
 /* The diagram shows every running instance of the definition, rather than
@@ -41,6 +42,9 @@
  * cancelled. */
 @property (nonatomic) BOOL instanceRunning;
 @property (nonatomic) BOOL jobSelected;
+/* The incident selected is open, of a job or an external task: retrying
+ * what failed resolves it. */
+@property (nonatomic) BOOL incidentRetryable;
 
 - (IBAction)refresh:(id)sender;
 /* The Show menu above the instances: running ones, read from the engine's
@@ -52,6 +56,9 @@
 - (IBAction)activateInstance:(id)sender;
 - (IBAction)cancelInstance:(id)sender;
 - (IBAction)retryJob:(id)sender;
+/* The selected incident's job or external task given an attempt again,
+ * which resolves the incident. */
+- (IBAction)retryIncident:(id)sender;
 - (IBAction)deploy:(id)sender;
 
 @end

@@ -368,6 +368,7 @@
 		394F2297ABF162C35878F55C /* WKDTableEditor.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WKDTableEditor.h; sourceTree = "<group>"; };
 		395226B5E85C4EFC64B4FA28 /* WorkflowDesignerTests.xctest */ = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkflowDesignerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		396282C4A5E97D9C66F1AA38 /* WFHistoryService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFHistoryService.h; sourceTree = "<group>"; };
+		3AC37B5A9C450A34CFAB955A /* WFODataExternalTasksTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFODataExternalTasksTests.inc; sourceTree = "<group>"; };
 		3C697DF2959F5EFF7661EBED /* WKDDiagram.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WKDDiagram.h; sourceTree = "<group>"; };
 		3CD2252AA3B4D1DD0E75B874 /* WKDClipboardTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WKDClipboardTests.m; sourceTree = "<group>"; };
 		3E656682F58F930BD3911355 /* WFLinkEventTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFLinkEventTests.inc; sourceTree = "<group>"; };
@@ -404,6 +405,7 @@
 		651237E11CCFB75816EDC998 /* WKDFixtures.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WKDFixtures.h; sourceTree = "<group>"; };
 		67B24703A45CD039231852E6 /* WDTracing.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WDTracing.m; sourceTree = "<group>"; };
 		693B6C5E6C9A4660D1ED1172 /* WFFormService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFFormService.h; sourceTree = "<group>"; };
+		6A1E9AF4DEDB378BF4BB16D2 /* WFODataSupport.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFODataSupport.inc; sourceTree = "<group>"; };
 		6A39BD6A1A322B814E9ED908 /* Debug.xcconfig */ = { isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		6A5B59A12DF8F25B6776719E /* WKDDecisionsTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WKDDecisionsTests.m; sourceTree = "<group>"; };
 		6A854FC09A6643484EE20420 /* WorkflowKit.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WorkflowKit.h; sourceTree = "<group>"; };
@@ -763,6 +765,8 @@
 				48A161F49A9C3B5D5CDC550F /* WFMigrationTests.inc */,
 				4B2F821E275C5D147FEA73CF /* WFModificationTests.inc */,
 				0DE2A8B934CE80EDBCE4F927 /* WFMultiInstanceTests.inc */,
+				3AC37B5A9C450A34CFAB955A /* WFODataExternalTasksTests.inc */,
+				6A1E9AF4DEDB378BF4BB16D2 /* WFODataSupport.inc */,
 				97C333D838694B18AE80ED1F /* WFODataTests.inc */,
 				D07C8B4779BECC110E3278A7 /* WFOperationsTests.inc */,
 				6BEC7F52D7040725EEB5536E /* WFSubprocessTests.inc */,

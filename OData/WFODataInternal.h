@@ -19,6 +19,11 @@
                                   businessKey:(NSString *)businessKey
                                      instance:(NSString *)instance
                                         reply:(ODataReply *)reply;
+/* The external tasks locked for the worker, as JSON objects. */
+- (NSArray *)fetchAndLockWithWorkerId:(NSString *)workerId
+                             maxTasks:(int32_t)maxTasks
+                               topics:(NSDictionary *)topics
+                                reply:(ODataReply *)reply;
 @end
 
 @protocol WFODataServiceFunctions <ODataFunctions>

@@ -4,6 +4,7 @@
 #import "WFTaskService.h"
 #import "WFManagementService.h"
 #import "WFRepositoryService.h"
+#import "WFExternalTaskService.h"
 #import "WFIdentity.h"
 #import "WFProcessDefinition.h"
 #import <ODataKit/ODataError.h>
@@ -39,6 +40,25 @@
 /* Runs it now, whatever its due date; a failure counts as an attempt. */
 - (void)execute:(ODataReply *)reply;
 /* Gives a failed job attempts again, which resolves its incident. */
+- (void)setRetriesWithRetries:(int32_t)retries reply:(ODataReply *)reply;
+@end
+
+@protocol WFODataExternalTaskActions <ODataActions>
+- (void)completeWithWorkerId:(NSString *)workerId variables:(NSDictionary *)variables reply:(ODataReply *)reply;
+/* RetryTimeout in seconds; with no retries, an incident. */
+- (void)handleFailureWithWorkerId:(NSString *)workerId
+                     errorMessage:(NSString *)errorMessage
+                          retries:(int32_t)retries
+                     retryTimeout:(int32_t)retryTimeout
+                            reply:(ODataReply *)reply;
+- (void)handleBpmnErrorWithWorkerId:(NSString *)workerId
+                          errorCode:(NSString *)errorCode
+                          variables:(NSDictionary *)variables
+                              reply:(ODataReply *)reply;
+/* Duration in seconds from now. */
+- (void)extendLockWithWorkerId:(NSString *)workerId duration:(int32_t)duration reply:(ODataReply *)reply;
+- (void)unlock:(ODataReply *)reply;
+/* Above 0, resolves the task's incident. */
 - (void)setRetriesWithRetries:(int32_t)retries reply:(ODataReply *)reply;
 @end
 
@@ -114,12 +134,62 @@ WFODataValue(id value)
 	return value == [NSNull null] ? nil : value;
 }
 
+/* A date as JSON writes one: ISO 8601 text, in UTC. */
+static NSString *
+WFODataDateText(NSDate *date)
+{
+	NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+	[formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
+	[formatter setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:0]];
+	[formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"];
+	return [formatter stringFromDate:date];
+}
+
+/* A variable's value as JSON can hold it: dates as text, bytes as base64. */
+static id
+WFODataJSONValue(id value)
+{
+	if (value == nil) {
+		return [NSNull null];
+	}
+	if ([value isKindOfClass:[NSDate class]]) {
+		return WFODataDateText(value);
+	}
+	if ([value isKindOfClass:[NSData class]]) {
+		return [(NSData *)value base64EncodedStringWithOptions:0];
+	}
+	if ([value isKindOfClass:[NSDictionary class]]) {
+		NSMutableDictionary *object = [NSMutableDictionary dictionary];
+		for (id key in value) {
+			[object setObject:WFODataJSONValue([value objectForKey:key]) forKey:[key description]];
+		}
+		return object;
+	}
+	if ([value isKindOfClass:[NSArray class]]) {
+		NSMutableArray *array = [NSMutableArray array];
+		for (id element in value) {
+			[array addObject:WFODataJSONValue(element)];
+		}
+		return array;
+	}
+	if ([value isKindOfClass:[NSString class]] || [value isKindOfClass:[NSNumber class]] || value == [NSNull null]) {
+		return value;
+	}
+	return [value description];
+}
+
 @implementation WFODataOperations
+
++ (NSDictionary *)ODataOperationTypes
+{
+	return @{ @"fetchAndLockWithWorkerId:maxTasks:topics:reply:": @"Collection(Edm.Untyped)" };
+}
 
 + (NSDictionary *)ODataOperationScopes
 {
 	NSArray *start = @[ WFODataScopeWork, WFODataScopeStartAny ];
-	return @{ @"startProcessInstanceWithKey:businessKey:variables:reply:": start,
+	return @{ @"fetchAndLockWithWorkerId:maxTasks:topics:reply:": @[ WFODataScopeExternalWork ],
+	          @"startProcessInstanceWithKey:businessKey:variables:reply:": start,
 	          @"submitStartFormWithKey:businessKey:instance:reply:": start,
 	          @"startFormInstanceWithKey:reply:": start,
 	          @"correlateMessageWithName:businessKey:processInstanceId:variables:reply:": @[ WFODataScopeOperationsManage ],
@@ -197,6 +267,52 @@ WFODataValue(id value)
 		return nil;
 	}
 	return deployment.deploymentId;
+}
+
+- (NSArray *)fetchAndLockWithWorkerId:(NSString *)workerId
+                             maxTasks:(int32_t)maxTasks
+                               topics:(NSDictionary *)topics
+                                reply:(ODataReply *)reply
+{
+	NSString *problem = nil;
+	if ([WFODataValue(workerId) length] == 0) {
+		problem = @"a worker needs an id";
+	} else if (maxTasks <= 0) {
+		problem = @"MaxTasks must be above 0";
+	} else if (![WFODataValue(topics) isKindOfClass:[NSDictionary class]] || [topics count] == 0) {
+		problem = @"Topics is an object of topic to lock duration in seconds";
+	}
+	for (id topic in [topics isKindOfClass:[NSDictionary class]] ? topics : @{}) {
+		id duration = [topics objectForKey:topic];
+		if (problem == nil && (![duration isKindOfClass:[NSNumber class]] || [duration doubleValue] <= 0)) {
+			problem = [NSString stringWithFormat:@"the lock duration of %@ is not a number of seconds above 0", topic];
+		}
+	}
+	if (problem != nil) {
+		[reply failWithError:ODataServiceError(400, problem)];
+		return nil;
+	}
+	NSError *error = nil;
+	NSArray *locked = [_engine.externalTaskService fetchAndLock:(NSUInteger)maxTasks workerId:workerId topics:topics
+	                                                      error:&error];
+	if (locked == nil) {
+		[reply failWithError:WFODataError(error)];
+		return nil;
+	}
+	NSMutableArray *tasks = [NSMutableArray array];
+	for (WFExternalTask *task in locked) {
+		[tasks addObject:@{ @"ExternalTaskId": task.externalTaskId, @"Topic": task.topic,
+		                    @"ProcessInstanceId": WFODataJSONValue(task.processInstanceId),
+		                    @"ProcessDefinitionId": WFODataJSONValue(task.definitionId),
+		                    @"BusinessKey": WFODataJSONValue(task.businessKey),
+		                    @"ActivityId": WFODataJSONValue(task.activityId),
+		                    @"Retries": WFODataJSONValue(task.retries),
+		                    @"ErrorMessage": WFODataJSONValue(task.errorMessage),
+		                    @"Priority": [NSNumber numberWithInteger:task.priority],
+		                    @"LockExpiration": WFODataJSONValue(task.lockExpiration),
+		                    @"Variables": WFODataJSONValue(task.variables ?: @{}) }];
+	}
+	return tasks;
 }
 
 - (WFExecutionEntity *)submitStartFormWithKey:(NSString *)key
@@ -423,6 +539,102 @@ WFODataValue(id value)
 {
 	NSError *error = nil;
 	BOOL done = [[self wf_managementServiceFor:reply] setRetries:retries forJob:self.jobId error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+@end
+
+@interface WFExternalTaskEntity (WFOData) <WFODataExternalTaskActions>
+@end
+
+@implementation WFExternalTaskEntity (WFOData)
+
++ (NSDictionary *)ODataOperationScopes
+{
+	NSArray *work = @[ WFODataScopeExternalWork ];
+	NSArray *manage = @[ WFODataScopeOperationsManage ];
+	return @{ @"completeWithWorkerId:variables:reply:": work,
+	          @"handleFailureWithWorkerId:errorMessage:retries:retryTimeout:reply:": work,
+	          @"handleBpmnErrorWithWorkerId:errorCode:variables:reply:": work,
+	          @"extendLockWithWorkerId:duration:reply:": work,
+	          @"unlock:": manage, @"setRetriesWithRetries:reply:": manage };
+}
+
+- (WFExternalTaskService *)wf_externalTaskServiceFor:(ODataReply *)reply
+{
+	return [WFODataOperations operationsOf:reply.request].engine.externalTaskService;
+}
+
+- (void)completeWithWorkerId:(NSString *)workerId variables:(NSDictionary *)variables reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[self wf_externalTaskServiceFor:reply] complete:self.externalTaskId workerId:WFODataValue(workerId)
+	                                                   variables:WFODataValue(variables) error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (void)handleFailureWithWorkerId:(NSString *)workerId
+                     errorMessage:(NSString *)errorMessage
+                          retries:(int32_t)retries
+                     retryTimeout:(int32_t)retryTimeout
+                            reply:(ODataReply *)reply
+{
+	if (retries < 0 || retryTimeout < 0) {
+		[reply failWithError:ODataServiceError(400, @"Retries and RetryTimeout are 0 or more")];
+		return;
+	}
+	NSError *error = nil;
+	BOOL done = [[self wf_externalTaskServiceFor:reply] handleFailure:self.externalTaskId
+	                                                         workerId:WFODataValue(workerId)
+	                                                     errorMessage:WFODataValue(errorMessage)
+	                                                          retries:retries
+	                                                     retryTimeout:retryTimeout
+	                                                            error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (void)handleBpmnErrorWithWorkerId:(NSString *)workerId
+                          errorCode:(NSString *)errorCode
+                          variables:(NSDictionary *)variables
+                              reply:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[self wf_externalTaskServiceFor:reply] handleBpmnError:self.externalTaskId
+	                                                           workerId:WFODataValue(workerId)
+	                                                          errorCode:WFODataValue(errorCode)
+	                                                          variables:WFODataValue(variables)
+	                                                              error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (void)extendLockWithWorkerId:(NSString *)workerId duration:(int32_t)duration reply:(ODataReply *)reply
+{
+	if (duration <= 0) {
+		[reply failWithError:ODataServiceError(400, @"Duration is a number of seconds above 0")];
+		return;
+	}
+	NSError *error = nil;
+	BOOL done = [[self wf_externalTaskServiceFor:reply] extendLock:self.externalTaskId workerId:WFODataValue(workerId)
+	                                                      duration:duration error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (void)unlock:(ODataReply *)reply
+{
+	NSError *error = nil;
+	BOOL done = [[self wf_externalTaskServiceFor:reply] unlock:self.externalTaskId error:&error];
+	WFODataFinish(reply, done, error);
+}
+
+- (void)setRetriesWithRetries:(int32_t)retries reply:(ODataReply *)reply
+{
+	if (retries < 0) {
+		[reply failWithError:ODataServiceError(400, @"Retries is 0 or more")];
+		return;
+	}
+	NSError *error = nil;
+	BOOL done = [[self wf_externalTaskServiceFor:reply] setRetries:retries forExternalTask:self.externalTaskId
+	                                                         error:&error];
 	WFODataFinish(reply, done, error);
 }
 

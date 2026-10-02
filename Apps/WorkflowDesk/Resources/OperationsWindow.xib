@@ -13,6 +13,7 @@
                 <outlet property="definitionsTable" destination="WDo-tb-001" id="WDo-ol-306"/>
                 <outlet property="instancesTable" destination="WDo-tb-002" id="WDo-ol-307"/>
                 <outlet property="jobsTable" destination="WDo-tb-006" id="WDo-ol-308"/>
+                <outlet property="incidentsTable" destination="WDo-tb-243" id="WDo-ol-316"/>
                 <outlet property="definitions" destination="WDo-ac-001" id="WDo-ol-309"/>
                 <outlet property="instances" destination="WDo-ac-002" id="WDo-ol-310"/>
                 <outlet property="variables" destination="WDo-ac-003" id="WDo-ol-311"/>
@@ -599,14 +600,14 @@
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
                                         <scrollView fixedFrame="YES" autohidesScrollers="YES" horizontalLineScroll="22" horizontalPageScroll="10" verticalLineScroll="22" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-sv-260">
-                                            <rect key="frame" x="6" y="6" width="640" height="272"/>
+                                            <rect key="frame" x="6" y="44" width="640" height="234"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                             <clipView key="contentView" id="WDo-cv-261">
-                                                <rect key="frame" x="1" y="1" width="638" height="270"/>
+                                                <rect key="frame" x="1" y="1" width="638" height="232"/>
                                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                 <subviews>
                                                     <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" columnReordering="NO" multipleSelection="NO" autosaveColumns="NO" typeSelect="NO" rowHeight="20" headerView="WDo-hd-244" id="WDo-tb-243">
-                                                        <rect key="frame" x="0" y="0" width="638" height="245"/>
+                                                        <rect key="frame" x="0" y="0" width="638" height="207"/>
                                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                         <size key="intercellSpacing" width="3" height="2"/>
                                                         <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -686,11 +687,11 @@
                                                 </subviews>
                                             </clipView>
                                             <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="WDo-sr-262">
-                                                <rect key="frame" x="1" y="255" width="638" height="16"/>
+                                                <rect key="frame" x="1" y="217" width="638" height="16"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
                                             <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="NO" id="WDo-sr-263">
-                                                <rect key="frame" x="623" y="26" width="16" height="245"/>
+                                                <rect key="frame" x="623" y="26" width="16" height="207"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
                                             <tableHeaderView key="headerView" wantsLayer="YES" id="WDo-hd-244">
@@ -698,6 +699,18 @@
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </tableHeaderView>
                                         </scrollView>
+                                        <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-bt-298">
+                                            <rect key="frame" x="526" y="4" width="120" height="32"/>
+                                            <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                                            <buttonCell key="cell" type="push" title="Retry" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="WDo-bc-299">
+                                                <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                                <font key="font" metaFont="system"/>
+                                            </buttonCell>
+                                            <connections>
+                                                <action selector="retryIncident:" target="-2" id="WDo-ac-298"/>
+                                                <binding destination="-2" name="enabled" keyPath="incidentRetryable" id="WDo-bd-299"/>
+                                            </connections>
+                                        </button>
                                     </subviews>
                                 </view>
                             </tabViewItem>

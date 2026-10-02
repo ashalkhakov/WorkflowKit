@@ -229,4 +229,11 @@
 @implementation WFODataInMemoryTests
 #include "WFODataTests.inc"
 @end
+
+@interface WFODataExternalTasksInMemoryTests : WFInMemoryTestCase
+@end
+
+@implementation WFODataExternalTasksInMemoryTests
+#include "WFODataExternalTasksTests.inc"
+@end
 #endif

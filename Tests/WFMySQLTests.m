@@ -227,4 +227,11 @@
 @implementation WFODataMySQLTests
 #include "WFODataTests.inc"
 @end
+
+@interface WFODataExternalTasksMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFODataExternalTasksMySQLTests
+#include "WFODataExternalTasksTests.inc"
+@end
 #endif

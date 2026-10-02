@@ -43,7 +43,7 @@ WFServerURL(id text)
 - (void)authenticateRequest:(HSRequest *)request reply:(HSAuthenticationReply *)reply
 {
 	NSString *every = [@[ WFODataScopeWork, WFODataScopeOperationsRead, WFODataScopeOperationsManage,
-	                      WFODataScopeDeploy, WFODataScopeReadAllTasks, WFODataScopeAssignTasks,
+	                      WFODataScopeDeploy, WFODataScopeExternalWork, WFODataScopeReadAllTasks, WFODataScopeAssignTasks,
 	                      WFODataScopeReadAllDefinitions, WFODataScopeStartAny ] componentsJoinedByString:@" "];
 	[reply finishWithPrincipal:[[HSPrincipal alloc] initWithSubject:self.user
 	                                                         claims:@{ @"groups": self.groups ?: @[], @"scope": every }]];

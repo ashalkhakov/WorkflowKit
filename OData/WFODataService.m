@@ -8,6 +8,7 @@ NSString * const WFODataScopeWork = @"Tasks.Work";
 NSString * const WFODataScopeOperationsRead = @"Operations.Read";
 NSString * const WFODataScopeOperationsManage = @"Operations.Manage";
 NSString * const WFODataScopeDeploy = @"Deployments.Create";
+NSString * const WFODataScopeExternalWork = @"ExternalTasks.Work";
 NSString * const WFODataScopeReadAllTasks = @"Tasks.ReadAll";
 NSString * const WFODataScopeAssignTasks = @"Tasks.Assign";
 NSString * const WFODataScopeReadAllDefinitions = @"ProcessDefinitions.ReadAll";
@@ -190,7 +191,10 @@ WFODataIsNil(NSString *key, BOOL isNil)
 	                        @"HistoricTaskInstances": @"WFHistoricTaskInstance" };
 	for (NSString *set in sets) {
 		WFODataHandler *handler = [[WFODataHandler alloc] initWithEntity:[entities objectForKey:[sets objectForKey:set]]];
-		handler.readScopes = [set isEqualToString:@"Forms"] ? working : operating;
+		handler.readScopes = [set isEqualToString:@"Forms"] ? working
+			: [set isEqualToString:@"ExternalTasks"] ? [NSSet setWithObjects:WFODataScopeOperationsRead,
+			                                              WFODataScopeExternalWork, nil]
+			: operating;
 		[service setHandler:handler forEntitySet:set];
 	}
 	/* A process instance is the root of its execution tree, and its

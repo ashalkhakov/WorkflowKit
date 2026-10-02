@@ -43,6 +43,26 @@
  *   Tasks(id)/WorkflowKit.SubmitForm(Instance)
  *   SubmitStartForm(Key, BusinessKey, Instance)
  *
+ * External tasks are worked through it as through WFExternalTaskService,
+ * by workers anywhere:
+ *
+ *   FetchAndLock(WorkerId, MaxTasks, Topics)
+ *       Topics a JSON object of topic to lock duration in seconds; the
+ *       tasks locked, a JSON array: each task's ExternalTaskId, Topic,
+ *       ProcessInstanceId, ProcessDefinitionId, BusinessKey, ActivityId,
+ *       Retries, ErrorMessage, Priority, LockExpiration and Variables,
+ *       those visible at the task (a date as ISO 8601 text, bytes as
+ *       base64)
+ *   ExternalTasks(id)/WorkflowKit.Complete(WorkerId, Variables),
+ *       .HandleFailure(WorkerId, ErrorMessage, Retries, RetryTimeout),
+ *       .HandleBpmnError(WorkerId, ErrorCode, Variables),
+ *       .ExtendLock(WorkerId, Duration), .Unlock, .SetRetries(Retries)
+ *
+ * RetryTimeout and Duration are seconds. A failure with no retries left
+ * raises an incident (Incidents, its Configuration the task's id), which
+ * SetRetries above 0 resolves. A worker that does not hold the lock is
+ * answered 409.
+ *
  * An instance that is not XML, or that the handler refuses, answers 400;
  * a form without a handler, 500.
  *
@@ -80,6 +100,9 @@
  *   Operations.Manage   the rest of the actions: on instances, jobs and
  *                       definitions, CorrelateMessage
  *   Deployments.Create  Deploy
+ *   ExternalTasks.Work  a worker's: ExternalTasks, FetchAndLock and what
+ *                       the worker holding a lock does with it; Unlock
+ *                       and SetRetries are Operations.Manage
  *
  * The service requires a signed-in caller: without an authenticator, or a
  * principal, a request is answered 401.
@@ -88,6 +111,7 @@ FOUNDATION_EXPORT NSString * const WFODataScopeWork;                /* Tasks.Wor
 FOUNDATION_EXPORT NSString * const WFODataScopeOperationsRead;      /* Operations.Read */
 FOUNDATION_EXPORT NSString * const WFODataScopeOperationsManage;    /* Operations.Manage */
 FOUNDATION_EXPORT NSString * const WFODataScopeDeploy;              /* Deployments.Create */
+FOUNDATION_EXPORT NSString * const WFODataScopeExternalWork;        /* ExternalTasks.Work */
 FOUNDATION_EXPORT NSString * const WFODataScopeReadAllTasks;        /* Tasks.ReadAll */
 FOUNDATION_EXPORT NSString * const WFODataScopeAssignTasks;         /* Tasks.Assign */
 FOUNDATION_EXPORT NSString * const WFODataScopeReadAllDefinitions;  /* ProcessDefinitions.ReadAll */

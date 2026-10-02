@@ -227,4 +227,11 @@
 @implementation WFODataPostgreSQLTests
 #include "WFODataTests.inc"
 @end
+
+@interface WFODataExternalTasksPostgreSQLTests : WFPostgreSQLTestCase
+@end
+
+@implementation WFODataExternalTasksPostgreSQLTests
+#include "WFODataExternalTasksTests.inc"
+@end
 #endif

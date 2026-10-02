@@ -58,7 +58,7 @@ own, and its instance comes and goes as XML through the form's handler
 Who may use the API is twofold. What a caller may do at all is the OAuth
 scopes its identity provider grants, named for what they allow
 (`Tasks.Work`, `Operations.Read`, `Operations.Manage`,
-`Deployments.Create`), declared on the sets and operations and checked by
+`Deployments.Create`, and `ExternalTasks.Work` for workers), declared on the sets and operations and checked by
 ODataKit before anything runs. Which rows it sees is the processes': a
 person's tasks and those offered to them, and the definitions they may
 start, matched by user, group or claim; a few scopes lift those limits for
