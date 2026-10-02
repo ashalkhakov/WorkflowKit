@@ -39,7 +39,7 @@
     <bpmn:businessRuleTask id="assess" name="Assess risk" camunda:decisionRef="loan-risk" camunda:resultVariable="risk" camunda:mapDecisionResult="singleEntry"/>
     <bpmn:businessRuleTask id="limit" name="Work out limit" camunda:decisionRef="loan-limit" camunda:resultVariable="maxLoan" camunda:mapDecisionResult="singleEntry"/>
     <bpmn:exclusiveGateway id="byRisk" name="Risk?" default="highRisk"/>
-    <bpmn:userTask id="underwrite" name="Underwrite loan" camunda:candidateGroups="underwriters" camunda:dueDate="=now() + duration(&quot;P2D&quot;)">
+    <bpmn:userTask id="underwrite" name="Underwrite loan" camunda:candidateGroups="underwriters" camunda:dueDate="=now() + duration(&quot;P2D&quot;)" camunda:formKey="embedded:deployment:underwrite.xhtml">
       <bpmn:extensionElements>
         <camunda:taskListener event="create" delegateExpression="${workload}">
           <camunda:field name="queue" stringValue="underwriting"/>
@@ -61,7 +61,7 @@
               <camunda:constraint name="readonly"/>
             </camunda:validation>
           </camunda:formField>
-          <camunda:formField id="amount" label="Amount" type="long">
+          <camunda:formField id="employedSince" label="Employed since" type="date">
             <camunda:validation>
               <camunda:constraint name="readonly"/>
             </camunda:validation>
@@ -71,9 +71,34 @@
               <camunda:constraint name="readonly"/>
             </camunda:validation>
           </camunda:formField>
+          <camunda:formField id="debts" label="Other debts" type="long">
+            <camunda:validation>
+              <camunda:constraint name="readonly"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="amount" label="Amount" type="long">
+            <camunda:validation>
+              <camunda:constraint name="readonly"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="risk" label="Risk" type="string">
+            <camunda:validation>
+              <camunda:constraint name="readonly"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="maxLoan" label="Limit" type="string">
+            <camunda:validation>
+              <camunda:constraint name="readonly"/>
+            </camunda:validation>
+          </camunda:formField>
           <camunda:formField id="approved" label="Approve" type="boolean">
             <camunda:validation>
               <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="comment" label="Reason" type="string">
+            <camunda:validation>
+              <camunda:constraint name="maxlength" config="500"/>
             </camunda:validation>
           </camunda:formField>
         </camunda:formData>

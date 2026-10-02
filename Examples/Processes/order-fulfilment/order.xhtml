@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The order form that starts the process. Its instance is the order
+  handler's (orderForm, in Examples/Plugins): it opens blank, with one line,
+  and the handler takes the order back, checking it again and working
+  out the total itself, as the variables orderNumber, customer, express,
+  lines and total, with the order number as the business key.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xf="http://www.w3.org/2002/xforms"
+      xmlns:ev="http://www.w3.org/2001/xml-events"
+      xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <head>
+    <title>New order</title>
+    <xf:model>
+      <xf:instance>
+        <order xmlns="">
+          <orderNumber/>
+          <customer/>
+          <express>false</express>
+          <lines>
+            <line><item/><quantity>1</quantity><price/><amount/></line>
+          </lines>
+          <total/>
+        </order>
+      </xf:instance>
+      <!-- What Add line copies. -->
+      <xf:instance id="blank">
+        <blank xmlns="">
+          <line><item/><quantity>1</quantity><price/><amount/></line>
+        </blank>
+      </xf:instance>
+      <xf:bind ref="orderNumber" required="true()"/>
+      <xf:bind ref="customer" required="true()"/>
+      <xf:bind ref="express" type="xsd:boolean"/>
+      <xf:bind ref="lines/line/item" required="true()"/>
+      <xf:bind ref="lines/line/quantity" type="xsd:integer" required="true()" constraint=". &gt;= 1"/>
+      <xf:bind ref="lines/line/price" type="xsd:decimal" required="true()" constraint=". &gt;= 0"/>
+      <!-- Worked out once a line has a quantity and a price. -->
+      <xf:bind ref="lines/line/amount"
+               calculate="if(../quantity = '' or ../price = '', '', ../quantity * ../price)"/>
+      <xf:bind ref="total" calculate="sum(../lines/line/amount[. != ''])"/>
+    </xf:model>
+  </head>
+  <body>
+    <xf:group>
+      <xf:label>Order</xf:label>
+      <xf:input ref="orderNumber">
+        <xf:label>Order number</xf:label>
+        <xf:hint>As the shop gave it: SO-1042.</xf:hint>
+      </xf:input>
+      <xf:input ref="customer"><xf:label>Customer</xf:label></xf:input>
+      <xf:input ref="express"><xf:label>Express delivery</xf:label></xf:input>
+    </xf:group>
+    <xf:group>
+      <xf:label>Lines</xf:label>
+      <xf:repeat id="lines" nodeset="lines/line">
+        <xf:input ref="item"><xf:label>Item</xf:label></xf:input>
+        <xf:input ref="quantity">
+          <xf:label>Quantity</xf:label>
+          <xf:alert>At least one, a whole number.</xf:alert>
+        </xf:input>
+        <xf:input ref="price">
+          <xf:label>Price</xf:label>
+          <xf:alert>A price, not below zero.</xf:alert>
+        </xf:input>
+        <xf:output ref="amount"><xf:label>Amount</xf:label></xf:output>
+        <xf:trigger>
+          <xf:label>Remove</xf:label>
+          <xf:delete ev:event="DOMActivate" nodeset="../line" at="index('lines')"/>
+        </xf:trigger>
+      </xf:repeat>
+      <xf:trigger>
+        <xf:label>Add line</xf:label>
+        <xf:insert ev:event="DOMActivate" context="lines" nodeset="line" at="last()" position="after"
+                   origin="instance('blank')/line"/>
+      </xf:trigger>
+      <xf:output ref="total"><xf:label>Total</xf:label></xf:output>
+    </xf:group>
+  </body>
+</html>

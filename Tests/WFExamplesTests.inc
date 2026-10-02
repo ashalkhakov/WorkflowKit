@@ -92,8 +92,39 @@
 	XCTAssertTrue([engine waitUntilSettled:processInstanceId timeout:10.0]);
 }
 
-/* In stock and express: charged and packed at once, by courier; not in
- * stock: back-ordered. */
+/* A child of the instance's root: its text, and a new one set. */
+- (NSString *)field:(NSString *)name of:(NSXMLDocument *)instance
+{
+	return [[[[instance rootElement] elementsForName:name] firstObject] stringValue];
+}
+
+- (void)setField:(NSString *)name of:(NSXMLDocument *)instance to:(NSString *)text
+{
+	[(NSXMLElement *)[[[instance rootElement] elementsForName:name] firstObject] setStringValue:text];
+}
+
+- (NSXMLDocument *)XML:(NSString *)text
+{
+	NSError *error = nil;
+	NSXMLDocument *document = [[NSXMLDocument alloc] initWithXMLString:text options:0 error:&error];
+	XCTAssertNotNil(document, @"%@", error);
+	return document;
+}
+
+/* A task's form: deployed with the process, the handler's instance in it. */
+- (WFFormData *)form:(NSString *)taskId deployedAs:(NSString *)marker engine:(WFProcessEngine *)engine
+{
+	NSError *error = nil;
+	WFFormData *form = [engine.formService formDataForTask:taskId error:&error];
+	XCTAssertNotNil(form, @"%@", error);
+	XCTAssertTrue([[form.document XMLString] rangeOfString:marker].location != NSNotFound,
+	              @"the form deployed with the process: %@", [form.document XMLString]);
+	XCTAssertNotNil(form.instance);
+	return form;
+}
+
+/* Entered on the order form, in stock and express: charged and packed at
+ * once, by courier; not in stock: back-ordered. */
 - (void)testOrderFulfilment
 {
 	WFMapHandler *handler = [[WFMapHandler alloc] init];
@@ -102,9 +133,45 @@
 	WFProcessEngine *engine = [self engineWithHandler:handler];
 	[self deployExample:@"order-fulfilment" engine:engine];
 
-	NSDictionary *order = @{ @"orderNumber": @"SO-1", @"customer": @"Ann", @"total": @120, @"express": @YES,
-	                         @"items": @[ @"lamp", @"desk" ] };
-	NSString *express = [self startExample:@"order-fulfilment" businessKey:@"SO-1" variables:order engine:engine];
+	/* The order form opens blank, with a line to fill in. */
+	NSError *error = nil;
+	WFFormData *form = [engine.formService startFormDataForKey:@"order-fulfilment" error:&error];
+	XCTAssertNotNil(form, @"%@", error);
+	XCTAssertTrue([[form.document XMLString] rangeOfString:@"Add line"].location != NSNotFound, @"order.xhtml");
+	XCTAssertEqual([[[[[form.instance rootElement] elementsForName:@"lines"] firstObject] elementsForName:@"line"] count],
+	               (NSUInteger)1);
+	XCTAssertEqualObjects([self field:@"express" of:form.instance], @"false");
+
+	/* The handler checks the order again, whatever the form let through. */
+	NSString *lines = @"<lines><line><item>lamp</item><quantity>2</quantity><price>40</price><amount>80</amount></line>"
+		@"<line><item>desk</item><quantity>1</quantity><price>40.00</price><amount>40</amount></line></lines>";
+	NSDictionary *refusals = @{
+		@"<order><orderNumber>SO-1</orderNumber><customer>Ann</customer><lines/></order>": @"an order needs a line",
+		@"<order><orderNumber>SO-1</orderNumber><customer/><lines/></order>": @"an order needs its customer",
+		@"<order><orderNumber>SO-1</orderNumber><customer>Ann</customer><lines><line><item>lamp</item>"
+			@"<quantity>0</quantity><price>40</price></line></lines></order>":
+			@"line 1: the quantity is a whole number, at least 1",
+		@"<order><orderNumber>SO-1</orderNumber><customer>Ann</customer><lines><line><item>lamp</item>"
+			@"<quantity>1</quantity><price>cheap</price></line></lines></order>":
+			@"line 1: the price is a number, not below 0" };
+	for (NSString *refused in refusals) {
+		XCTAssertNil([engine.formService submitStartFormForKey:@"order-fulfilment" businessKey:nil
+		                                              instance:[self XML:refused] error:&error]);
+		XCTAssertEqualObjects([error localizedDescription], [refusals objectForKey:refused]);
+	}
+	NSString *entered = [NSString stringWithFormat:@"<order><orderNumber>SO-1</orderNumber><customer>Ann</customer>"
+		@"<express>true</express>%@<total>999</total></order>", lines];
+	WFProcessInstance *started = [engine.formService submitStartFormForKey:@"order-fulfilment" businessKey:nil
+	                                                              instance:[self XML:entered] error:&error];
+	XCTAssertNotNil(started, @"%@", error);
+	XCTAssertEqualObjects(started.businessKey, @"SO-1", @"the order number");
+	NSString *express = started.processInstanceId;
+	XCTAssertTrue([engine waitUntilSettled:express timeout:10.0]);
+	NSDictionary *begun = [self variables:express engine:engine];
+	XCTAssertEqual([[begun objectForKey:@"total"] doubleValue], 120.0, @"worked out again, not the form's");
+	XCTAssertEqualObjects([[begun objectForKey:@"lines"] valueForKey:@"item"], (@[ @"lamp", @"desk" ]));
+	XCTAssertEqualObjects([begun objectForKey:@"express"], @YES);
+
 	WFWorkItem *pack = [self task:@"pack" of:express engine:engine];
 	XCTAssertEqual(pack.priority, (NSInteger)80, @"express orders first");
 	XCTAssertEqualObjects(pack.candidateGroups, @[ @"warehouse" ]);
@@ -119,11 +186,13 @@
 	                                                           @"subject": @"Order SO-1 is on its way" } ]));
 	XCTAssertEqualObjects([done objectForKey:@"auditTrail"], (@[ @"start process", @"end process: order closed" ]));
 	/* The packing task's list and map inputs, read back through its output. */
-	XCTAssertEqualObjects([done objectForKey:@"packingSlip"], (@{ @"customer": @"Ann", @"items": @2, @"tape": @"red tape" }));
+	XCTAssertEqualObjects([done objectForKey:@"packingSlip"], (@{ @"customer": @"Ann", @"items": @3, @"tape": @"red tape" }));
 
 	NSString *standard = [self startExample:@"order-fulfilment" businessKey:@"SO-2"
 	                              variables:@{ @"orderNumber": @"SO-2", @"customer": @"Bob", @"total": @30,
-	                                           @"express": @NO, @"items": @[ @"rug" ] } engine:engine];
+	                                           @"express": @NO,
+	                                           @"lines": @[ @{ @"item": @"rug", @"quantity": @1, @"price": @30 } ] }
+	                                 engine:engine];
 	WFWorkItem *slow = [self task:@"pack" of:standard engine:engine];
 	XCTAssertEqual(slow.priority, (NSInteger)50);
 	XCTAssertTrue([slow.dueDate timeIntervalSinceNow] > 23 * 3600, @"due in a day");
@@ -180,12 +249,34 @@
 	XCTAssertNotNil(underwrite);
 	XCTAssertNil(underwrite.assignee, @"left to the underwriters");
 	XCTAssertTrue([underwrite.dueDate timeIntervalSinceNow] > 47 * 3600, @"due in two days");
-	[self complete:@"underwrite" of:medium engine:engine variables:@{ @"approved": @YES }];
+	/* On the underwriter's form: the task's fields in it, the decision taken
+	 * back, what is read-only left as it was. */
+	WFFormData *form = [self form:underwrite.taskId deployedAs:@"Share of income" engine:engine];
+	XCTAssertEqualObjects([self field:@"applicant" of:form.instance], @"Dee");
+	XCTAssertEqualObjects([self field:@"debts" of:form.instance], @"15000");
+	XCTAssertEqualObjects([self field:@"risk" of:form.instance], @"medium");
+	XCTAssertEqualObjects([self field:@"employedSince" of:form.instance], @"2023-06-01T00:00:00Z");
+	NSError *error = nil;
+	NSXMLDocument *answer = [form.instance copy];
+	[self setField:@"approved" of:answer to:@"true"];
+	[self setField:@"amount" of:answer to:@"1"];
+	XCTAssertTrue([engine.formService submitTaskForm:underwrite.taskId instance:answer error:&error], @"%@", error);
+	XCTAssertTrue([engine waitUntilSettled:medium timeout:10.0]);
 	XCTAssertEqualObjects([handler topicsFor:medium], @[ @"pay-out" ]);
+	XCTAssertEqualObjects([[self variables:medium engine:engine] objectForKey:@"amount"], @20000, @"read-only");
 
 	NSString *large = [self startExample:@"loan-application" businessKey:@"L-4"
 	                           variables:applying(@60000, @100000, @30000, @"2023-06-01", @NO) engine:engine];
-	XCTAssertEqualObjects([self task:@"underwrite" of:large engine:engine].assignee, @"senior-underwriter");
+	WFWorkItem *senior = [self task:@"underwrite" of:large engine:engine];
+	XCTAssertEqualObjects(senior.assignee, @"senior-underwriter");
+	/* Declined, with the reason the form asks for. */
+	NSXMLDocument *declined = [[self form:senior.taskId deployedAs:@"Share of income" engine:engine].instance copy];
+	[self setField:@"approved" of:declined to:@"false"];
+	[self setField:@"comment" of:declined to:@"debts too high for now"];
+	XCTAssertTrue([engine.formService submitTaskForm:senior.taskId instance:declined error:&error], @"%@", error);
+	XCTAssertTrue([engine waitUntilSettled:large timeout:10.0]);
+	XCTAssertTrue([[self passed:large engine:engine] containsObject:@"declined"]);
+	XCTAssertEqualObjects([[self variables:large engine:engine] objectForKey:@"comment"], @"debts too high for now");
 
 	/* A default outweighs everything. */
 	NSString *defaulted = [self startExample:@"loan-application" businessKey:@"L-5"
@@ -261,13 +352,30 @@
 	NSArray *reviews = [engine.taskService tasksForProcessInstance:pid];
 	XCTAssertEqualObjects([[reviews valueForKey:@"assignee"] sortedArrayUsingSelector:@selector(compare:)],
 	                      (@[ @"ann", @"bob", @"cy" ]));
+	/* On the review form: the claim's lines, the total and the largest. */
+	WFWorkItem *annsReview = [[engine.taskService tasksForAssignee:@"ann"] firstObject];
+	WFFormData *form = [self form:annsReview.taskId deployedAs:@"Your review" engine:engine];
+	NSArray *shown = [[[[form.instance rootElement] elementsForName:@"lines"] firstObject] elementsForName:@"line"];
+	XCTAssertEqualObjects([shown valueForKey:@"stringValue"], (@[ @"taxi40", @"hotel620" ]));
+	XCTAssertEqualObjects([self field:@"total" of:form.instance], @"660");
+	XCTAssertEqualObjects([self field:@"largest" of:form.instance], @"620");
+	XCTAssertEqualObjects([self field:@"reviewer" of:form.instance], @"ann");
 	NSError *error = nil;
-	for (NSString *reviewer in @[ @"ann", @"bob" ]) {
-		WFWorkItem *review = [[engine.taskService tasksForAssignee:reviewer] firstObject];
-		XCTAssertTrue([engine.taskService completeTask:review.taskId variables:@{ @"approved": @YES } error:&error],
-		              @"%@", error);
-		XCTAssertTrue([engine waitUntilSettled:pid timeout:10.0]);
-	}
+	NSXMLDocument *answer = [form.instance copy];
+	XCTAssertFalse([engine.formService submitTaskForm:annsReview.taskId instance:answer error:&error]);
+	XCTAssertEqualObjects([error localizedDescription], @"approve or reject the claim");
+	[self setField:@"decision" of:answer to:@"reject"];
+	XCTAssertFalse([engine.formService submitTaskForm:annsReview.taskId instance:answer error:&error]);
+	XCTAssertEqualObjects([error localizedDescription], @"a rejection needs a reason");
+	[self setField:@"decision" of:answer to:@"approve"];
+	[self setField:@"reason" of:answer to:@"hotel receipt seen"];
+	XCTAssertTrue([engine.formService submitTaskForm:annsReview.taskId instance:answer error:&error], @"%@", error);
+	XCTAssertTrue([engine waitUntilSettled:pid timeout:10.0]);
+	WFWorkItem *bobsReview = [[engine.taskService tasksForAssignee:@"bob"] firstObject];
+	NSXMLDocument *bobs = [[self form:bobsReview.taskId deployedAs:@"Your review" engine:engine].instance copy];
+	[self setField:@"decision" of:bobs to:@"approve"];
+	XCTAssertTrue([engine.formService submitTaskForm:bobsReview.taskId instance:bobs error:&error], @"%@", error);
+	XCTAssertTrue([engine waitUntilSettled:pid timeout:10.0]);
 	XCTAssertEqual([[engine.taskService tasksForProcessInstance:pid] count], (NSUInteger)0, @"cy's review withdrawn");
 	XCTAssertTrue([self ended:pid engine:engine]);
 	XCTAssertEqualObjects([handler topicsFor:pid], @[ @"reimburse" ]);
@@ -275,6 +383,7 @@
 	                      (@[ @"ann", @"bob", @"cy" ]), @"mailed one after another");
 	XCTAssertEqualObjects([[[[self variables:pid engine:engine] objectForKey:@"outbox"] firstObject] objectForKey:@"subject"],
 	                      @"Claim approved");
+	XCTAssertEqualObjects([[self variables:pid engine:engine] objectForKey:@"notes"], @[ @"ann: hotel receipt seen" ]);
 
 	/* Every line small: straight to the reviewers. */
 	NSString *small = [self startExample:@"expense-review" businessKey:@"E-2"

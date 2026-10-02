@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A reviewer's form. Its instance is the review handler's (expenseReview,
+  in Examples/Plugins): the claim's lines, and the total and largest line
+  the task's inputs worked out, for the reviewer to approve or reject,
+  with a reason to reject. The handler takes back approved, and adds the
+  reason, if any, to the claim's notes.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xf="http://www.w3.org/2002/xforms">
+  <head>
+    <title>Review claim</title>
+    <xf:model>
+      <xf:instance>
+        <review xmlns="">
+          <reviewer/>
+          <lines>
+            <line><item/><amount/></line>
+          </lines>
+          <total/>
+          <largest/>
+          <decision/>
+          <reason/>
+        </review>
+      </xf:instance>
+      <xf:bind ref="reviewer" readonly="true()"/>
+      <xf:bind ref="lines" readonly="true()"/>
+      <xf:bind ref="total" readonly="true()"/>
+      <xf:bind ref="largest" readonly="true()"/>
+      <xf:bind ref="decision" required="true()"/>
+      <xf:bind ref="reason" required="../decision = 'reject'" constraint="string-length(.) &lt;= 500"/>
+    </xf:model>
+  </head>
+  <body>
+    <xf:group>
+      <xf:label>Claim</xf:label>
+      <xf:repeat id="lines" nodeset="lines/line">
+        <xf:output ref="item"><xf:label>Item</xf:label></xf:output>
+        <xf:output ref="amount"><xf:label>Amount</xf:label></xf:output>
+        <!-- Shown only for a line over 500, whose receipt finance checked. -->
+        <xf:group ref="self::line[number(amount) &gt; 500]">
+          <xf:output value="'checked by finance'"><xf:label>Receipt</xf:label></xf:output>
+        </xf:group>
+      </xf:repeat>
+      <xf:output value="count(lines/line)"><xf:label>Lines</xf:label></xf:output>
+      <xf:output ref="total"><xf:label>Total</xf:label></xf:output>
+      <xf:output ref="largest"><xf:label>Largest line</xf:label></xf:output>
+    </xf:group>
+    <xf:group>
+      <xf:label>Your review</xf:label>
+      <xf:output ref="reviewer"><xf:label>Reviewer</xf:label></xf:output>
+      <xf:select1 ref="decision" appearance="full">
+        <xf:label>Decision</xf:label>
+        <xf:item><xf:label>Approve</xf:label><xf:value>approve</xf:value></xf:item>
+        <xf:item><xf:label>Reject</xf:label><xf:value>reject</xf:value></xf:item>
+      </xf:select1>
+      <xf:textarea ref="reason">
+        <xf:label>Reason</xf:label>
+        <xf:hint>Kept with the claim's notes; needed to reject.</xf:hint>
+        <xf:alert>A rejection needs a reason, of at most 500 characters.</xf:alert>
+      </xf:textarea>
+    </xf:group>
+  </body>
+</html>

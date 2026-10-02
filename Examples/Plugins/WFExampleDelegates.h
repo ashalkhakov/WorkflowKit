@@ -15,6 +15,15 @@
  *   ${workload}  a task listener: the task routed as its fields say --
  *                assignTo its assignee, dueIn (a duration, PT4H) from now
  *                its due date -- and the task's queue recorded
+ *
+ * and the form handlers (camunda:formHandlerClass) of their embedded forms:
+ *
+ *   orderForm      order-fulfilment's start form: an order of lines, each
+ *                  an item, a quantity and a price, checked and totalled
+ *                  again, its order number the business key
+ *   expenseReview  expense-review's review form: the claim's lines shown,
+ *                  approved taken back, and a reason (needed to reject)
+ *                  added to the notes variable as "reviewer: reason"
  */
 
 @interface WFExampleAudit : NSObject <WFExecutionListener>
@@ -26,7 +35,13 @@
 @interface WFExampleWorkload : NSObject <WFTaskListener>
 @end
 
-/* Registers the three under their names. The plugin bundle's principal
+@interface WFExampleOrderForm : NSObject <WFFormHandler>
+@end
+
+@interface WFExampleExpenseReview : NSObject <WFFormHandler>
+@end
+
+/* Registers them under their names. The plugin bundle's principal
  * class. */
 @interface WFExamplePlugin : NSObject <WFEnginePlugin>
 @end

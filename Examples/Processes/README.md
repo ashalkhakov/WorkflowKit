@@ -1,7 +1,7 @@
 # Example processes
 
 Each directory is one deployment: its BPMN files, with the decisions
-(`.dmn`) they use. Together they cover the subset the engine runs
+(`.dmn`) and the forms (`.xhtml`, XForms) they use. Together they cover the subset the engine runs
 (`WorkflowKit-BPMN-Subset.md`). They are runnable as they are:
 
 - `Tests/WFExamplesTests.inc` deploys each directory and runs it through
@@ -15,7 +15,20 @@ names is what a worker answers. The delegates and listeners the processes
 call by name are in `Examples/Plugins` (`WFExampleDelegates.h`), as an
 application's would be: `${audit}` keeps an audit trail, `${mailer}` puts a
 message together from its fields, and `${workload}` routes a task and
-sets its due date from its fields.
+sets its due date from its fields. Its form handlers, `orderForm` and
+`expenseReview`, give two of the forms their instances and take them back.
+
+Three tasks have forms of their own, written in XForms and deployed beside
+the process (`camunda:formKey="embedded:deployment:..."`): open them in
+WorkflowDesk, or in the designer with Edit Form. They show the two ways a
+form gets its data:
+
+- `loan-application/underwrite.xhtml` lays out the task's fields
+  (`camunda:formData`), which the engine fills and checks itself.
+- `order-fulfilment/order.xhtml` and `expense-review/review.xhtml` hold
+  lists, which fields cannot, so a form handler (`camunda:formHandlerClass`)
+  builds their instance from the variables and turns what is submitted
+  back into variables.
 
 The diagrams are laid out by the designer's own Arrange, and the pictures
 are drawn by its renderer: after changing a file, run
@@ -29,7 +42,10 @@ are drawn by its renderer: after changing a file, run
 
 ![Order fulfilment](../../docs/examples/order-fulfilment.png)
 
-- A start form (`camunda:formData`) whose `orderNumber` field is the
+- A start form, `order.xhtml`: repeated lines of an item, a quantity and a
+  price, added and removed in the form, with each line's amount and the
+  total worked out as they are typed. Its handler checks the order again,
+  works the total out itself, sets `lines`, and makes the order number the
   business key.
 - Exclusive gateways splitting by FEEL conditions (`inStock`,
   `express = true`), with default flows, and one merging.
@@ -61,9 +77,13 @@ are drawn by its renderer: after changing a file, run
 - Two business rule tasks, each result mapped to one value (`singleEntry`),
   and a condition using both (`risk = "low" and amount <= maxLoan`).
 - Conditions in FEEL and in Camunda 7's `${...}`, side by side.
+- A start form generated from its fields (`camunda:formData`), with
+  `applicationId` as the business key.
 - An underwriter's task with a due date two days ahead
-  (`=now() + duration("P2D")`) and a generated form with read-only and
-  required fields.
+  (`=now() + duration("P2D")`) and a form, `underwrite.xhtml`, over its
+  fields: the applicant and the loan in groups, the loan's share of income
+  worked out, the amount compared with the limit, and a reason that is
+  required only to decline.
 - Candidate starters on the process (`branch-staff`).
 - A task listener routing large loans to a senior underwriter
   (`=if amount > 50000 then "senior-underwriter" else null`), and a
@@ -109,8 +129,12 @@ needs.
   each instance assigned to its element variable (`${reviewer}`), with
   inputs computed from the lines (`=sum(lines.amount)`,
   `=max(lines.amount)`).
-- An output mapping counting approvals, and a completion condition
-  (`approvals >= 2`) that withdraws the reviews still open.
+- A review form, `review.xhtml`, listing the claim's lines, with a note on
+  those over 500 that finance checked: a reviewer approves or rejects, and
+  a rejection needs a reason, which the handler adds to `notes`.
+- Output mappings counting approvals and carrying the notes out, and a
+  completion condition (`approvals >= 2`) that withdraws the reviews still
+  open.
 - A sequential multi-instance send task, a delegate whose fields read
   each instance's element variable.
 

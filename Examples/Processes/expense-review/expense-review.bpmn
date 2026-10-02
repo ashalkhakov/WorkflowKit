@@ -1,17 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="expense-review-definitions" targetNamespace="http://example.com/workflowkit">
   <bpmn:process id="expense-review" name="Expense review" isExecutable="true">
-    <bpmn:documentation>An expense claim -- lines, each an item and an amount -- has its receipts checked by finance first when any line is over 500. It then goes to every reviewer named in it at once, with the total and the largest line worked out for them; two approvals are enough, and the reviews still open are withdrawn then. Each reviewer is mailed the outcome in turn, one after another.</bpmn:documentation>
+    <bpmn:documentation>An expense claim -- lines, each an item and an amount -- has its receipts checked by finance first when any line is over 500. It then goes to every reviewer named in it at once, with the total and the largest line worked out for them; each reviews it on the review form, which shows the lines and asks for a reason to reject; two approvals are enough, and the reviews still open are withdrawn then. Each reviewer is mailed the outcome in turn, one after another.</bpmn:documentation>
     <bpmn:startEvent id="claimed" name="Expense claimed"/>
     <bpmn:exclusiveGateway id="receiptsNeeded" name="Any line over 500?" default="noReceiptsFlow"/>
     <bpmn:userTask id="checkReceipts" name="Check receipts" camunda:candidateGroups="finance"/>
     <bpmn:exclusiveGateway id="receiptsDone"/>
-    <bpmn:userTask id="review" name="Review claim" camunda:assignee="${reviewer}">
+    <bpmn:userTask id="review" name="Review claim" camunda:assignee="${reviewer}" camunda:formKey="embedded:deployment:review.xhtml" camunda:formHandlerClass="expenseReview">
       <bpmn:extensionElements>
         <camunda:inputOutput>
           <camunda:inputParameter name="total">=sum(lines.amount)</camunda:inputParameter>
           <camunda:inputParameter name="largest">=max(lines.amount)</camunda:inputParameter>
           <camunda:outputParameter name="approvals">=approvals + (if approved then 1 else 0)</camunda:outputParameter>
+          <camunda:outputParameter name="notes">=notes</camunda:outputParameter>
         </camunda:inputOutput>
       </bpmn:extensionElements>
       <bpmn:multiInstanceLoopCharacteristics camunda:collection="reviewers" camunda:elementVariable="reviewer">

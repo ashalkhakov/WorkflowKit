@@ -1,35 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:wf="https://workflowkit.local/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="order-fulfilment-definitions" targetNamespace="http://example.com/workflowkit">
   <bpmn:process id="order-fulfilment" name="Order fulfilment" isExecutable="true">
-    <bpmn:documentation>An order from the web shop: stock is checked, and an order in stock is charged and packed at the same time, then shipped by courier or by post. One out of stock waits for the warehouse to back-order it. The packing task is routed and given its due date by the workload listener, with a checklist and packing notes as its inputs, from which its packing slip is made as it completes; the customer is mailed when the order has gone; and the audit listener records the order from start to end.</bpmn:documentation>
+    <bpmn:documentation>An order from the web shop, entered on its order form -- lines of an item, a quantity and a price -- which the order form handler checks and totals: stock is checked, and an order in stock is charged and packed at the same time, then shipped by courier or by post. One out of stock waits for the warehouse to back-order it. The packing task is routed and given its due date by the workload listener, with a checklist and packing notes as its inputs, from which its packing slip is made as it completes; the customer is mailed when the order has gone; and the audit listener records the order from start to end.</bpmn:documentation>
     <bpmn:extensionElements>
       <camunda:executionListener event="start" delegateExpression="${audit}"/>
       <camunda:executionListener event="end" delegateExpression="${audit}">
         <camunda:field name="note" stringValue="order closed"/>
       </camunda:executionListener>
     </bpmn:extensionElements>
-    <bpmn:startEvent id="received" name="Order received">
-      <bpmn:extensionElements>
-        <camunda:formData businessKey="orderNumber">
-          <camunda:formField id="orderNumber" label="Order number" type="string">
-            <camunda:validation>
-              <camunda:constraint name="required"/>
-            </camunda:validation>
-          </camunda:formField>
-          <camunda:formField id="customer" label="Customer" type="string">
-            <camunda:validation>
-              <camunda:constraint name="required"/>
-            </camunda:validation>
-          </camunda:formField>
-          <camunda:formField id="total" label="Total" type="long">
-            <camunda:validation>
-              <camunda:constraint name="min" config="1"/>
-            </camunda:validation>
-          </camunda:formField>
-          <camunda:formField id="express" label="Express delivery" type="boolean" defaultValue="false"/>
-        </camunda:formData>
-      </bpmn:extensionElements>
-    </bpmn:startEvent>
+    <bpmn:startEvent id="received" name="Order received" camunda:formKey="embedded:deployment:order.xhtml" camunda:formHandlerClass="orderForm"/>
     <bpmn:serviceTask id="checkStock" name="Check stock" camunda:type="external" camunda:topic="check-stock"/>
     <bpmn:exclusiveGateway id="inStock" name="In stock?" default="outOfStockFlow"/>
     <bpmn:userTask id="backOrder" name="Back-order items" camunda:candidateGroups="warehouse"/>
@@ -54,7 +33,7 @@
             <camunda:map>
               <camunda:entry key="customer">${customer}</camunda:entry>
               <camunda:entry key="express">${express}</camunda:entry>
-              <camunda:entry key="items">=count(items)</camunda:entry>
+              <camunda:entry key="items">=sum(lines.quantity)</camunda:entry>
             </camunda:map>
           </camunda:inputParameter>
           <camunda:outputParameter name="packingSlip">={customer: packing.customer, items: packing.items, tape: checklist[3]}</camunda:outputParameter>

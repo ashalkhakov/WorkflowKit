@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The underwriter's form. Its instance is the task's fields
+  (camunda:formData): the engine fills <data> from the variables and takes
+  the decision back checked against the fields. The form adds what the
+  fields cannot say: the applicant and the loan grouped, the shares of
+  income worked out, the limit compared, and a reason required to decline.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xf="http://www.w3.org/2002/xforms"
+      xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <head>
+    <title>Underwrite loan</title>
+    <xf:model>
+      <xf:instance>
+        <data xmlns="">
+          <applicant/>
+          <employedSince/>
+          <income/>
+          <debts/>
+          <amount/>
+          <risk/>
+          <maxLoan/>
+          <approved/>
+          <comment/>
+        </data>
+      </xf:instance>
+      <xf:bind ref="applicant" readonly="true()"/>
+      <xf:bind ref="employedSince" readonly="true()"/>
+      <xf:bind ref="income" type="xsd:long" readonly="true()"/>
+      <xf:bind ref="debts" type="xsd:long" readonly="true()"/>
+      <xf:bind ref="amount" type="xsd:long" readonly="true()"/>
+      <xf:bind ref="risk" readonly="true()"/>
+      <xf:bind ref="maxLoan" readonly="true()"/>
+      <xf:bind ref="approved" required="true()"/>
+      <xf:bind ref="comment" required="../approved = 'false'" constraint="string-length(.) &lt;= 500"/>
+    </xf:model>
+  </head>
+  <body>
+    <xf:group>
+      <xf:label>Applicant</xf:label>
+      <xf:output ref="applicant"><xf:label>Name</xf:label></xf:output>
+      <xf:output value="substring(employedSince, 1, 10)"><xf:label>Employed since</xf:label></xf:output>
+      <xf:output ref="income"><xf:label>Yearly income</xf:label></xf:output>
+      <xf:output ref="debts"><xf:label>Other debts</xf:label></xf:output>
+    </xf:group>
+    <xf:group>
+      <xf:label>Loan</xf:label>
+      <xf:output ref="amount"><xf:label>Amount asked for</xf:label></xf:output>
+      <xf:output value="concat(round(amount div income * 100), ' %')">
+        <xf:label>Share of income</xf:label>
+      </xf:output>
+      <xf:output value="concat(round((amount + debts) div income * 100), ' %')">
+        <xf:label>With other debts</xf:label>
+      </xf:output>
+      <xf:output ref="risk"><xf:label>Risk</xf:label></xf:output>
+      <xf:output ref="maxLoan"><xf:label>Limit</xf:label></xf:output>
+      <xf:output value="if(number(amount) &gt; number(maxLoan), concat('Over the limit by ', number(amount) - number(maxLoan)), 'Within the limit')">
+        <xf:label>Against the limit</xf:label>
+      </xf:output>
+    </xf:group>
+    <xf:group>
+      <xf:label>Decision</xf:label>
+      <xf:select1 ref="approved" appearance="full">
+        <xf:label>Decision</xf:label>
+        <xf:item><xf:label>Approve</xf:label><xf:value>true</xf:value></xf:item>
+        <xf:item><xf:label>Decline</xf:label><xf:value>false</xf:value></xf:item>
+      </xf:select1>
+      <xf:textarea ref="comment">
+        <xf:label>Reason</xf:label>
+        <xf:hint>Sent to the applicant with a decline: say what would change the answer.</xf:hint>
+        <xf:alert>A declined loan needs a reason, of at most 500 characters.</xf:alert>
+      </xf:textarea>
+    </xf:group>
+  </body>
+</html>
