@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="travel-booking-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:error id="cardDeclined" name="Card declined" errorCode="card-declined"/>
+  <bpmn:process id="travel-booking" name="Travel booking" isExecutable="true">
+    <bpmn:documentation>A trip is a flight and a hotel, booked one after the other and then paid for. When the card is declined, what was booked is cancelled again: each booking's compensation handler runs, the hotel's first.</bpmn:documentation>
+    <bpmn:startEvent id="requested" name="Trip requested"/>
+    <bpmn:serviceTask id="bookFlight" name="Book flight" camunda:type="external" camunda:topic="book-flight"/>
+    <bpmn:boundaryEvent id="undoFlight" attachedToRef="bookFlight">
+      <bpmn:compensateEventDefinition/>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="cancelFlight" name="Cancel flight" isForCompensation="true" camunda:type="external" camunda:topic="cancel-flight"/>
+    <bpmn:serviceTask id="bookHotel" name="Book hotel" camunda:type="external" camunda:topic="book-hotel"/>
+    <bpmn:boundaryEvent id="undoHotel" attachedToRef="bookHotel">
+      <bpmn:compensateEventDefinition/>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="cancelHotel" name="Cancel hotel" isForCompensation="true" camunda:type="external" camunda:topic="cancel-hotel"/>
+    <bpmn:serviceTask id="charge" name="Charge card" camunda:type="external" camunda:topic="charge-card"/>
+    <bpmn:boundaryEvent id="declined" name="Card declined" attachedToRef="charge">
+      <bpmn:errorEventDefinition errorRef="cardDeclined"/>
+    </bpmn:boundaryEvent>
+    <bpmn:intermediateThrowEvent id="undoAll" name="Cancel bookings">
+      <bpmn:compensateEventDefinition/>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="failed" name="Trip not booked"/>
+    <bpmn:endEvent id="booked" name="Trip booked"/>
+    <bpmn:sequenceFlow id="toFlight" sourceRef="requested" targetRef="bookFlight"/>
+    <bpmn:sequenceFlow id="toHotel" sourceRef="bookFlight" targetRef="bookHotel"/>
+    <bpmn:sequenceFlow id="toCharge" sourceRef="bookHotel" targetRef="charge"/>
+    <bpmn:sequenceFlow id="toBooked" sourceRef="charge" targetRef="booked"/>
+    <bpmn:sequenceFlow id="toUndo" sourceRef="declined" targetRef="undoAll"/>
+    <bpmn:sequenceFlow id="toFailed" sourceRef="undoAll" targetRef="failed"/>
+    <bpmn:association id="undoFlightHandler" associationDirection="One" sourceRef="undoFlight" targetRef="cancelFlight"/>
+    <bpmn:association id="undoHotelHandler" associationDirection="One" sourceRef="undoHotel" targetRef="cancelHotel"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_m67pa99">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_ddgqqyf" bpmnElement="travel-booking">
+      <bpmndi:BPMNShape id="requested_Shape" bpmnElement="requested">
+        <dc:Bounds x="80" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bookFlight_Shape" bpmnElement="bookFlight">
+        <dc:Bounds x="186" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="cancelFlight_Shape" bpmnElement="cancelFlight">
+        <dc:Bounds x="356" y="220" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bookHotel_Shape" bpmnElement="bookHotel">
+        <dc:Bounds x="356" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="cancelHotel_Shape" bpmnElement="cancelHotel">
+        <dc:Bounds x="526" y="220" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="charge_Shape" bpmnElement="charge">
+        <dc:Bounds x="526" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="undoAll_Shape" bpmnElement="undoAll">
+        <dc:Bounds x="696" y="220" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="failed_Shape" bpmnElement="failed">
+        <dc:Bounds x="802" y="220" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="booked_Shape" bpmnElement="booked">
+        <dc:Bounds x="696" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="declined_Shape" bpmnElement="declined">
+        <dc:Bounds x="558" y="142" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="undoFlight_Shape" bpmnElement="undoFlight">
+        <dc:Bounds x="218" y="142" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="undoHotel_Shape" bpmnElement="undoHotel">
+        <dc:Bounds x="388" y="142" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toFlight_Edge" bpmnElement="toFlight">
+        <di:waypoint x="116" y="120"/>
+        <di:waypoint x="186" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toHotel_Edge" bpmnElement="toHotel">
+        <di:waypoint x="286" y="120"/>
+        <di:waypoint x="356" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toCharge_Edge" bpmnElement="toCharge">
+        <di:waypoint x="456" y="120"/>
+        <di:waypoint x="526" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toBooked_Edge" bpmnElement="toBooked">
+        <di:waypoint x="626" y="120"/>
+        <di:waypoint x="696" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toUndo_Edge" bpmnElement="toUndo">
+        <di:waypoint x="576" y="178"/>
+        <di:waypoint x="576" y="198"/>
+        <di:waypoint x="645" y="198"/>
+        <di:waypoint x="645" y="238"/>
+        <di:waypoint x="696" y="238"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toFailed_Edge" bpmnElement="toFailed">
+        <di:waypoint x="732" y="238"/>
+        <di:waypoint x="802" y="238"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="undoFlightHandler_Edge" bpmnElement="undoFlightHandler">
+        <di:waypoint x="236" y="178"/>
+        <di:waypoint x="236" y="260"/>
+        <di:waypoint x="356" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="undoHotelHandler_Edge" bpmnElement="undoHotelHandler">
+        <di:waypoint x="406" y="178"/>
+        <di:waypoint x="406" y="198"/>
+        <di:waypoint x="475" y="198"/>
+        <di:waypoint x="475" y="260"/>
+        <di:waypoint x="526" y="260"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

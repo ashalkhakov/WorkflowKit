@@ -2,6 +2,7 @@
 #import "WKDDiagram.h"
 #import "WKDEditor.h"
 #import "WKDRenderer.h"
+#import "WKDXML.h"
 
 typedef NS_ENUM(NSInteger, WKDGesture) {
 	WKDGestureNone,
@@ -233,13 +234,19 @@ WKDResizeHandle(NSRect bounds)
 		if (moved || resized) {
 			points = [WKDEditor routeFrom:[self movedBounds:connection.source] to:[self movedBounds:connection.target]
 			                 fromBoundary:connection.source.host != nil
-			                  fromGateway:connection.source.kind == WKDShapeGateway];
+			                  fromGateway:connection.source.kind == WKDShapeGateway
+			                   toActivity:connection.target.kind == WKDShapeActivity];
 		}
 		if ([_selection containsObject:connection.elementId]) {
 			[WKDSelectionColor() setStroke];
 		}
-		WKDDrawFlow(points, connection.isDefault,
-		            connection.hasCondition && connection.source.kind == WKDShapeActivity, connection.name);
+		if (connection.isAssociation) {
+			WKDDrawAssociation(points, ![WKDAttribute(connection.element, @"associationDirection") ?: @"None"
+			                              isEqualToString:@"None"]);
+		} else {
+			WKDDrawFlow(points, connection.isDefault,
+			            connection.hasCondition && connection.source.kind == WKDShapeActivity, connection.name);
+		}
 		[WKDInkColor() setStroke];
 	}
 	for (NSString *elementId in _selection) {

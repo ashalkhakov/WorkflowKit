@@ -22,6 +22,9 @@
 void WKDDrawNode(WKDLook *look, NSRect rect, BOOL names);
 /* A sequence flow through the points, its arrowhead at the last. */
 void WKDDrawFlow(NSArray<NSValue *> *points, BOOL isDefault, BOOL conditionalFromActivity, NSString *name);
+/* An association through the points: dotted, with an open arrowhead
+ * when it is directed. */
+void WKDDrawAssociation(NSArray<NSValue *> *points, BOOL directed);
 /* A selection outline around the rectangle. */
 void WKDDrawSelection(NSRect rect);
 /* The distance from the point to the polyline. */

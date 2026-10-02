@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="loan-application-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:process id="loan-application" name="Loan application" isExecutable="true" camunda:candidateStarterGroups="branch-staff">
+    <bpmn:documentation>A loan application is scored by the Loan risk decision table (risk.dmn): a low risk is paid out at once, a medium one goes to an underwriter, and a high one is declined.</bpmn:documentation>
+    <bpmn:startEvent id="applied" name="Application received">
+      <bpmn:extensionElements>
+        <camunda:formData businessKey="applicationId">
+          <camunda:formField id="applicationId" label="Application" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="applicant" label="Applicant" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="amount" label="Amount" type="long">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+              <camunda:constraint name="min" config="500"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="income" label="Yearly income" type="long">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="hasDefaulted" label="Has defaulted before" type="boolean" defaultValue="false"/>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:startEvent>
+    <bpmn:businessRuleTask id="assess" name="Assess risk" camunda:decisionRef="loan-risk" camunda:resultVariable="risk" camunda:mapDecisionResult="singleEntry"/>
+    <bpmn:exclusiveGateway id="byRisk" name="Risk?" default="highRisk"/>
+    <bpmn:userTask id="underwrite" name="Underwrite loan" camunda:candidateGroups="underwriters" camunda:dueDate="=now() + duration(&quot;P2D&quot;)">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="applicant" label="Applicant" type="string">
+            <camunda:validation>
+              <camunda:constraint name="readonly"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="amount" label="Amount" type="long">
+            <camunda:validation>
+              <camunda:constraint name="readonly"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="income" label="Yearly income" type="long">
+            <camunda:validation>
+              <camunda:constraint name="readonly"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="approved" label="Approve" type="boolean">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="byUnderwriter" name="Approved?" default="refusedFlow"/>
+    <bpmn:exclusiveGateway id="payable"/>
+    <bpmn:serviceTask id="payOut" name="Pay out" camunda:type="external" camunda:topic="pay-out"/>
+    <bpmn:endEvent id="paid" name="Loan paid out"/>
+    <bpmn:exclusiveGateway id="refusable"/>
+    <bpmn:sendTask id="decline" name="Send decline letter" camunda:type="external" camunda:topic="letters"/>
+    <bpmn:endEvent id="declined" name="Declined"/>
+    <bpmn:sequenceFlow id="toAssess" sourceRef="applied" targetRef="assess"/>
+    <bpmn:sequenceFlow id="toRisk" sourceRef="assess" targetRef="byRisk"/>
+    <bpmn:sequenceFlow id="lowRisk" name="low" sourceRef="byRisk" targetRef="payable">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">risk = "low"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="mediumRisk" name="medium" sourceRef="byRisk" targetRef="underwrite">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${risk == 'medium'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="highRisk" name="high" sourceRef="byRisk" targetRef="refusable"/>
+    <bpmn:sequenceFlow id="toDecide" sourceRef="underwrite" targetRef="byUnderwriter"/>
+    <bpmn:sequenceFlow id="approvedFlow" name="yes" sourceRef="byUnderwriter" targetRef="payable">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">approved</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="refusedFlow" name="no" sourceRef="byUnderwriter" targetRef="refusable"/>
+    <bpmn:sequenceFlow id="toPayOut" sourceRef="payable" targetRef="payOut"/>
+    <bpmn:sequenceFlow id="toPaid" sourceRef="payOut" targetRef="paid"/>
+    <bpmn:sequenceFlow id="toDecline" sourceRef="refusable" targetRef="decline"/>
+    <bpmn:sequenceFlow id="toDeclined" sourceRef="decline" targetRef="declined"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_l83cvc8">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_6goxkfm" bpmnElement="loan-application">
+      <bpmndi:BPMNShape id="applied_Shape" bpmnElement="applied">
+        <dc:Bounds x="80" y="172" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="assess_Shape" bpmnElement="assess">
+        <dc:Bounds x="186" y="150" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="byRisk_Shape" bpmnElement="byRisk">
+        <dc:Bounds x="356" y="165" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="underwrite_Shape" bpmnElement="underwrite">
+        <dc:Bounds x="476" y="150" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="byUnderwriter_Shape" bpmnElement="byUnderwriter">
+        <dc:Bounds x="646" y="165" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="payable_Shape" bpmnElement="payable">
+        <dc:Bounds x="766" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="payOut_Shape" bpmnElement="payOut">
+        <dc:Bounds x="886" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="paid_Shape" bpmnElement="paid">
+        <dc:Bounds x="1056" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="refusable_Shape" bpmnElement="refusable">
+        <dc:Bounds x="766" y="235" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="decline_Shape" bpmnElement="decline">
+        <dc:Bounds x="886" y="220" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="declined_Shape" bpmnElement="declined">
+        <dc:Bounds x="1056" y="242" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toAssess_Edge" bpmnElement="toAssess">
+        <di:waypoint x="116" y="190"/>
+        <di:waypoint x="186" y="190"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toRisk_Edge" bpmnElement="toRisk">
+        <di:waypoint x="286" y="190"/>
+        <di:waypoint x="356" y="190"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="lowRisk_Edge" bpmnElement="lowRisk">
+        <di:waypoint x="381" y="165"/>
+        <di:waypoint x="381" y="120"/>
+        <di:waypoint x="766" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mediumRisk_Edge" bpmnElement="mediumRisk">
+        <di:waypoint x="406" y="190"/>
+        <di:waypoint x="476" y="190"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="highRisk_Edge" bpmnElement="highRisk">
+        <di:waypoint x="381" y="215"/>
+        <di:waypoint x="381" y="260"/>
+        <di:waypoint x="766" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toDecide_Edge" bpmnElement="toDecide">
+        <di:waypoint x="576" y="190"/>
+        <di:waypoint x="646" y="190"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="approvedFlow_Edge" bpmnElement="approvedFlow">
+        <di:waypoint x="671" y="165"/>
+        <di:waypoint x="671" y="120"/>
+        <di:waypoint x="766" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="refusedFlow_Edge" bpmnElement="refusedFlow">
+        <di:waypoint x="671" y="215"/>
+        <di:waypoint x="671" y="260"/>
+        <di:waypoint x="766" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toPayOut_Edge" bpmnElement="toPayOut">
+        <di:waypoint x="816" y="120"/>
+        <di:waypoint x="886" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toPaid_Edge" bpmnElement="toPaid">
+        <di:waypoint x="986" y="120"/>
+        <di:waypoint x="1056" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toDecline_Edge" bpmnElement="toDecline">
+        <di:waypoint x="816" y="260"/>
+        <di:waypoint x="886" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toDeclined_Edge" bpmnElement="toDeclined">
+        <di:waypoint x="986" y="260"/>
+        <di:waypoint x="1056" y="260"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

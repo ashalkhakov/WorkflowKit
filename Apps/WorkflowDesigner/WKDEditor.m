@@ -252,8 +252,14 @@ WKDPoint(double x, double y)
 	return [self routeFrom:source to:target fromBoundary:fromBoundary fromGateway:NO];
 }
 
-+ (NSArray<NSValue *> *)routeFrom:(NSRect)s to:(NSRect)t fromBoundary:(BOOL)fromBoundary
++ (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary
                       fromGateway:(BOOL)fromGateway
+{
+	return [self routeFrom:source to:target fromBoundary:fromBoundary fromGateway:fromGateway toActivity:NO];
+}
+
++ (NSArray<NSValue *> *)routeFrom:(NSRect)s to:(NSRect)t fromBoundary:(BOOL)fromBoundary
+                      fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity
 {
 	if (fromGateway && NSMinX(t) >= NSMaxX(s) && fabs(NSMidY(t) - NSMidY(s)) >= 1) {
 		/* Up or down out of the corner, then across into the target. */
@@ -267,6 +273,16 @@ WKDPoint(double x, double y)
 		if (NSMidY(t) > NSMaxY(s)) {
 			return @[ [NSValue valueWithPoint:start], WKDPoint(NSMidX(s), NSMidY(t)),
 				WKDPoint(NSMidX(t) > NSMidX(s) ? NSMinX(t) : NSMaxX(t), NSMidY(t)) ];
+		}
+	}
+	if (NSMinX(t) >= NSMaxX(s) && !fromBoundary && toActivity) {
+		/* Level enough to go straight across: the source's middle within
+		 * the target, or an activity's side facing the target's middle. */
+		if (NSMidY(s) >= NSMinY(t) + 6 && NSMidY(s) <= NSMaxY(t) - 6) {
+			return @[ WKDPoint(NSMaxX(s), NSMidY(s)), WKDPoint(NSMinX(t), NSMidY(s)) ];
+		}
+		if (!fromGateway && NSWidth(s) > 40 && NSMidY(t) >= NSMinY(s) + 6 && NSMidY(t) <= NSMaxY(s) - 6) {
+			return @[ WKDPoint(NSMaxX(s), NSMidY(t)), WKDPoint(NSMinX(t), NSMidY(t)) ];
 		}
 	}
 	if (NSMinX(t) >= NSMaxX(s)) {
@@ -304,13 +320,104 @@ WKDPoint(double x, double y)
 		[NSValue valueWithPoint:end] ];
 }
 
+/* Whether a horizontal or vertical segment passes through the rectangle. */
+static BOOL
+WKDSegmentCrosses(NSPoint a, NSPoint b, NSRect rect)
+{
+	NSRect segment = NSMakeRect(MIN(a.x, b.x), MIN(a.y, b.y), fabs(a.x - b.x), fabs(a.y - b.y));
+	return NSIntersectsRect(NSInsetRect(segment, -0.5, -0.5), rect);
+}
+
+/* How many of the shapes in the way the route passes through. */
+static NSUInteger
+WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
+{
+	NSUInteger crossings = 0;
+	for (NSValue *obstacle in obstacles) {
+		NSRect rect = NSInsetRect([obstacle rectValue], -4, -4);
+		for (NSUInteger i = 1; i < [route count]; i++) {
+			if (WKDSegmentCrosses([route[i - 1] pointValue], [route[i] pointValue], rect)) {
+				crossings++;
+				break;
+			}
+		}
+	}
+	return crossings;
+}
+
+/* The shapes a flow must not pass through: all but its ends, the
+ * activity its source is on, and the subprocesses either end is in. */
+- (NSArray<NSValue *> *)obstaclesFor:(WKDConnection *)connection
+{
+	NSMutableSet *allowed = [NSMutableSet set];
+	for (WKDShape *end in @[ connection.source, connection.target ]) {
+		for (WKDShape *shape = end; shape != nil; shape = shape.parent) {
+			[allowed addObject:shape.elementId];
+		}
+	}
+	if (connection.source.host != nil) {
+		[allowed addObject:connection.source.host.elementId];
+		for (WKDShape *shape = connection.source.host.parent; shape != nil; shape = shape.parent) {
+			[allowed addObject:shape.elementId];
+		}
+	}
+	NSMutableArray *obstacles = [NSMutableArray array];
+	for (WKDShape *shape in _diagram.shapes) {
+		if (shape.hasBounds && ![allowed containsObject:shape.elementId]) {
+			[obstacles addObject:[NSValue valueWithRect:shape.bounds]];
+		}
+	}
+	return obstacles;
+}
+
+/* The route the router would take, unless it passes through other
+ * shapes: then the first of the other ways round that does not, or that
+ * passes through fewest. */
+- (NSArray<NSValue *> *)routeFor:(WKDConnection *)connection
+{
+	NSRect s = connection.source.bounds, t = connection.target.bounds;
+	BOOL fromBoundary = connection.source.host != nil, fromGateway = connection.source.kind == WKDShapeGateway;
+	NSArray *primary = [WKDEditor routeFrom:s to:t fromBoundary:fromBoundary fromGateway:fromGateway
+	                             toActivity:connection.target.kind == WKDShapeActivity];
+	NSArray *obstacles = [self obstaclesFor:connection];
+	if (WKDCrossings(primary, obstacles) == 0) {
+		return primary;
+	}
+	NSMutableArray *candidates = [NSMutableArray arrayWithObject:primary];
+	if (NSMinX(t) >= NSMaxX(s) + 20) {
+		NSPoint start = fromBoundary ? NSMakePoint(NSMidX(s), NSMaxY(s)) : NSMakePoint(NSMaxX(s), NSMidY(s));
+		NSPoint end = NSMakePoint(NSMinX(t), NSMidY(t));
+		double between = (NSMaxX(s) + NSMinX(t)) / 2, late = NSMinX(t) - 20, early = NSMaxX(s) + 20;
+		for (NSNumber *x in @[ @(between), @(late), @(early) ]) {
+			double turn = [x doubleValue];
+			if (fromBoundary) {
+				/* Down out of the event, across under it, and up or down. */
+				double under = NSMaxY(s) + 20;
+				[candidates addObject:@[ [NSValue valueWithPoint:start], WKDPoint(start.x, under), WKDPoint(turn, under),
+				                         WKDPoint(turn, end.y), [NSValue valueWithPoint:end] ]];
+			} else {
+				[candidates addObject:@[ [NSValue valueWithPoint:start], WKDPoint(turn, start.y), WKDPoint(turn, end.y),
+				                         [NSValue valueWithPoint:end] ]];
+			}
+		}
+	}
+	NSArray *best = primary;
+	NSUInteger fewest = NSUIntegerMax;
+	for (NSArray *candidate in candidates) {
+		NSUInteger crossings = WKDCrossings(candidate, obstacles);
+		if (crossings < fewest) {
+			fewest = crossings;
+			best = candidate;
+		}
+	}
+	return best;
+}
+
 - (void)reroute:(WKDConnection *)connection
 {
 	WKDShape *source = connection.source, *target = connection.target;
 	if (source.hasBounds && target.hasBounds) {
-		[self setWaypoints:[WKDEditor routeFrom:source.bounds to:target.bounds fromBoundary:source.host != nil
-		                            fromGateway:source.kind == WKDShapeGateway]
-		                of:connection.elementId];
+		[self setWaypoints:[self routeFor:connection] of:connection.elementId];
 	}
 }
 
@@ -326,6 +433,10 @@ WKDPoint(double x, double y)
 	layout.layerSpacing = 70;
 	layout.nodeSpacing = 60;
 	NSMutableDictionary *sizes = [NSMutableDictionary dictionary];
+	/* Event subprocesses are joined to nothing: a row of their own,
+	 * under the rest. */
+	NSMutableArray<WKDShape *> *eventSubProcesses = [NSMutableArray array];
+	NSMutableSet *laidOut = [NSMutableSet set];
 	for (WKDShape *shape in shapes) {
 		NSSize size = [WKDEditor sizeOfType:shape.type];
 		if (WKDIsContainerType(shape.type)) {
@@ -336,11 +447,24 @@ WKDPoint(double x, double y)
 			size = shape.bounds.size;
 		}
 		[sizes setObject:[NSValue valueWithSize:size] forKey:shape.elementId];
+		if (shape.eventSubProcess) {
+			[eventSubProcesses addObject:shape];
+			continue;
+		}
 		[layout addNode:shape.elementId size:size];
+		[laidOut addObject:shape.elementId];
 	}
 	for (WKDConnection *connection in _diagram.connections) {
+		/* A boundary event's flows, and its compensation handler, leave
+		 * from the bottom of its activity; an annotation is not laid out
+		 * by what it is joined to. */
 		WKDShape *source = connection.source.host ?: connection.source;
-		[layout addEdgeFrom:source.elementId to:connection.target.elementId];
+		if (connection.isAssociation && connection.source.host == nil) {
+			continue;
+		}
+		if ([laidOut containsObject:source.elementId] && [laidOut containsObject:connection.target.elementId]) {
+			[layout addEdgeFrom:source.elementId to:connection.target.elementId below:connection.source.host != nil];
+		}
 	}
 	NSDictionary *origins = [layout layout];
 	for (NSString *elementId in origins) {
@@ -349,7 +473,18 @@ WKDPoint(double x, double y)
 		[frames setObject:[NSValue valueWithRect:NSMakeRect(origin.x, origin.y, size.width, size.height)]
 		           forKey:elementId];
 	}
-	return layout.size;
+	NSSize size = layout.size;
+	if ([eventSubProcesses count] > 0) {
+		double x = 0, top = [origins count] > 0 ? size.height + 60 : 0, bottom = top;
+		for (WKDShape *shape in eventSubProcesses) {
+			NSSize box = [[sizes objectForKey:shape.elementId] sizeValue];
+			[frames setObject:[NSValue valueWithRect:NSMakeRect(x, top, box.width, box.height)] forKey:shape.elementId];
+			x += box.width + 40;
+			bottom = MAX(bottom, top + box.height);
+		}
+		size = NSMakeSize(MAX(size.width, x - 40), bottom);
+	}
+	return size;
 }
 
 /* Frames relative to their containers made absolute, outermost first;
@@ -381,9 +516,24 @@ WKDPoint(double x, double y)
 			[events addObject:shape];
 		}
 	}
+	/* Leftmost the event whose flows go lowest, so that the routes
+	 * down and across out of them do not cross. */
+	double (^depth)(WKDShape *) = ^double(WKDShape *event) {
+		double lowest = 0;
+		for (WKDConnection *connection in [self->_diagram connectionsOf:event]) {
+			if (connection.source == event && connection.target.hasBounds) {
+				lowest = MAX(lowest, NSMidY(connection.target.bounds));
+			}
+		}
+		return lowest;
+	};
 	for (NSString *hostId in byHost) {
 		NSRect host = [_diagram shapeWithId:hostId].bounds;
-		NSArray *events = [byHost objectForKey:hostId];
+		NSArray *events = [[byHost objectForKey:hostId] sortedArrayWithOptions:NSSortStable
+		                                                      usingComparator:^NSComparisonResult(WKDShape *a, WKDShape *b) {
+			double da = depth(a), db = depth(b);
+			return da > db ? NSOrderedAscending : da < db ? NSOrderedDescending : NSOrderedSame;
+		}];
 		NSUInteger count = [events count];
 		for (NSUInteger i = 0; i < count; i++) {
 			WKDShape *event = [events objectAtIndex:i];
@@ -568,7 +718,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 		refusal = @"A flow stays within its process or subprocess.";
 	} else {
 		for (WKDConnection *connection in _diagram.connections) {
-			if (connection.source == source && connection.target == target) {
+			if (!connection.isAssociation && connection.source == source && connection.target == target) {
 				refusal = @"The two are joined already.";
 			}
 		}
@@ -589,7 +739,8 @@ WKDOnEdge(NSRect host, NSPoint point)
 		[self addReference:@"outgoing" to:flowId in:source.element];
 		[self addReference:@"incoming" to:flowId in:target.element];
 		[self setWaypoints:[WKDEditor routeFrom:source.bounds to:target.bounds fromBoundary:source.host != nil
-		                            fromGateway:source.kind == WKDShapeGateway]
+		                            fromGateway:source.kind == WKDShapeGateway
+		                             toActivity:target.kind == WKDShapeActivity]
 		                of:flowId];
 	}];
 	return flowId;

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="stock-report-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:signal id="stockCounted" name="stock-counted"/>
+  <bpmn:process id="stock-report" name="Stock report" isExecutable="true">
+    <bpmn:documentation>Started by the stock-counted signal, which the weekly stock count throws as it ends.</bpmn:documentation>
+    <bpmn:startEvent id="countIn" name="Stock counted">
+      <bpmn:signalEventDefinition signalRef="stockCounted"/>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="publish" name="Publish stock report" camunda:type="external" camunda:topic="stock-report"/>
+    <bpmn:endEvent id="published" name="Report published"/>
+    <bpmn:sequenceFlow id="toPublish" sourceRef="countIn" targetRef="publish"/>
+    <bpmn:sequenceFlow id="toPublished" sourceRef="publish" targetRef="published"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_jmx2eym">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_ytx27rl" bpmnElement="stock-report">
+      <bpmndi:BPMNShape id="countIn_Shape" bpmnElement="countIn">
+        <dc:Bounds x="80" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="publish_Shape" bpmnElement="publish">
+        <dc:Bounds x="186" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="published_Shape" bpmnElement="published">
+        <dc:Bounds x="356" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toPublish_Edge" bpmnElement="toPublish">
+        <di:waypoint x="116" y="120"/>
+        <di:waypoint x="186" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toPublished_Edge" bpmnElement="toPublished">
+        <di:waypoint x="286" y="120"/>
+        <di:waypoint x="356" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

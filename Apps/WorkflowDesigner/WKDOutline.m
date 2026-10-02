@@ -75,9 +75,10 @@ WKDTitle(WKDShape *shape)
 		if (connection.source == shape) {
 			WKDOutlineItem *flow = [[WKDOutlineItem alloc] init];
 			flow.elementId = connection.elementId;
+			NSString *arrow = connection.isAssociation ? @"⇢" : @"→";
 			flow.title = [connection.name length] > 0
-				? [NSString stringWithFormat:@"%@ → %@", connection.name, WKDTitle(connection.target)]
-				: [NSString stringWithFormat:@"→ %@", WKDTitle(connection.target)];
+				? [NSString stringWithFormat:@"%@ %@ %@", connection.name, arrow, WKDTitle(connection.target)]
+				: [NSString stringWithFormat:@"%@ %@", arrow, WKDTitle(connection.target)];
 			[item.children addObject:flow];
 		}
 	}

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="shipment-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:process id="shipment" name="Shipment" isExecutable="true">
+    <bpmn:documentation>A shipment of an order's items: its parcels are counted, and packing and handing over to the carrier is a process of its own (pack-and-ship.bpmn), called with the items and the order's business key, which answers with the tracking number.</bpmn:documentation>
+    <bpmn:startEvent id="ready" name="Order ready"/>
+    <bpmn:task id="prepare" name="Prepare shipment">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="parcelCount">=count(items)</camunda:inputParameter>
+          <camunda:outputParameter name="parcels">=parcelCount</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+    </bpmn:task>
+    <bpmn:callActivity id="packAndShip" name="Pack and ship" calledElement="pack-and-ship">
+      <bpmn:extensionElements>
+        <camunda:in businessKey="#{execution.processBusinessKey}"/>
+        <camunda:in source="items" target="items"/>
+        <camunda:in source="parcels" target="parcels"/>
+        <camunda:out source="trackingNumber" target="tracking"/>
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:sendTask id="tellCustomer" name="Send tracking number" camunda:type="external" camunda:topic="mail"/>
+    <bpmn:endEvent id="sent" name="Shipped"/>
+    <bpmn:sequenceFlow id="toPrepare" sourceRef="ready" targetRef="prepare"/>
+    <bpmn:sequenceFlow id="toPack" sourceRef="prepare" targetRef="packAndShip"/>
+    <bpmn:sequenceFlow id="toTell" sourceRef="packAndShip" targetRef="tellCustomer"/>
+    <bpmn:sequenceFlow id="toSent" sourceRef="tellCustomer" targetRef="sent"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_eocmjuj">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_btn7f30" bpmnElement="shipment">
+      <bpmndi:BPMNShape id="ready_Shape" bpmnElement="ready">
+        <dc:Bounds x="80" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="prepare_Shape" bpmnElement="prepare">
+        <dc:Bounds x="186" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="packAndShip_Shape" bpmnElement="packAndShip">
+        <dc:Bounds x="356" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="tellCustomer_Shape" bpmnElement="tellCustomer">
+        <dc:Bounds x="526" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sent_Shape" bpmnElement="sent">
+        <dc:Bounds x="696" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toPrepare_Edge" bpmnElement="toPrepare">
+        <di:waypoint x="116" y="120"/>
+        <di:waypoint x="186" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toPack_Edge" bpmnElement="toPack">
+        <di:waypoint x="286" y="120"/>
+        <di:waypoint x="356" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toTell_Edge" bpmnElement="toTell">
+        <di:waypoint x="456" y="120"/>
+        <di:waypoint x="526" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toSent_Edge" bpmnElement="toSent">
+        <di:waypoint x="626" y="120"/>
+        <di:waypoint x="696" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

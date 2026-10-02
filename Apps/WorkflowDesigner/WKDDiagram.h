@@ -50,6 +50,9 @@ typedef NS_ENUM(NSInteger, WKDShapeKind) {
 @property (nonatomic, readonly, weak) WKDShape *target;
 /* NSValue points, in the diagram's coordinates; two at least. */
 @property (nonatomic, readonly, copy) NSArray<NSValue *> *waypoints;
+/* An association -- a compensation handler's, an annotation's -- rather
+ * than a sequence flow: drawn dotted. */
+@property (nonatomic, readonly) BOOL isAssociation;
 /* Its source's default flow. */
 @property (nonatomic, readonly) BOOL isDefault;
 @property (nonatomic, readonly) BOOL hasCondition;

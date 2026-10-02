@@ -66,6 +66,13 @@
 #include "WFTracingTests.inc"
 @end
 
+@interface WFExamplesMySQLTests : WFMySQLTestCase
+@end
+
+@implementation WFExamplesMySQLTests
+#include "WFExamplesTests.inc"
+@end
+
 @interface WFHistoryMySQLTests : WFMySQLTestCase
 @end
 

@@ -13,6 +13,10 @@
 /* Nodes in the order they are added: the order ties are broken in. */
 - (void)addNode:(NSString *)nodeId size:(NSSize)size;
 - (void)addEdgeFrom:(NSString *)sourceId to:(NSString *)targetId;
+/* An edge out of the source's bottom -- a boundary event's flow, a
+ * compensation handler's association: what it leads to goes below the
+ * source's other successors, a row lower. */
+- (void)addEdgeFrom:(NSString *)sourceId to:(NSString *)targetId below:(BOOL)below;
 
 /* Between the layers, and between the nodes of a layer. */
 @property (nonatomic) double layerSpacing;

@@ -2,7 +2,9 @@
 
 A BPMN 2.0 workflow engine in Objective-C (ARC, libdispatch) for GNUstep and
 Cocoa. `Headers/` and `Source/` are the engine library, `OData/` its API,
-`Server/` `wf-serve`, `Apps/` the desktop apps, `Examples/` the demo tools,
+`Server/` `wf-serve`, `Apps/` the desktop apps, `Examples/` the demo tools
+and `Examples/Processes` the example BPMN processes, one deployment each,
+which `Tests/WFExamplesTests.inc` runs (see its README),
 `Tests/` the XCTest suite. `WorkflowKit-BPMN-Subset.md` is the scope:
 what the engine loads, persists and fires, and what it rejects.
 

@@ -45,7 +45,8 @@ jobs:
       # which the engine's joins rely on.
       FREECOREDATA_REF: c0404dbea20eb74fc2c278e24680098d9e354690
       # ODataKit, for the OData API (WorkflowKitOData), wf-serve and the
-      # apps' client: #6, whose HTTPServerKit is the server
+      # apps' client: #7, whose operations' calls are spans the engine's
+      # go under, on #6, whose HTTPServerKit is the server
       # (WFServerApplication an application of it) and whose OTelKit traces
       # it and the client, on #5, whose client asks for no to-one the
       # service does not serve and reads a key segment of several tokens (a
@@ -53,7 +54,7 @@ jobs:
       # operation need, and #3, which leaves what the engine keeps for
       # itself out of what it serves (OData.served NO). Built in its
       # checkout, not installed.
-      ODATAKIT_REF: 1d8ef5b3b7c3fa94b4a092eee08c6cbd3dbb7e1f
+      ODATAKIT_REF: 8334447fd7a102a10d76becd03386fbfed8773ec
       ODATAKIT: ${{ github.workspace }}/ODataKit
       # XFormsKit, for WorkflowDesk's forms: built in its checkout.
       XFORMSKIT_REF: 30d4fd054d57c1878d2f9b016ad0e6aae02f3849
@@ -243,6 +244,7 @@ jobs:
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make -C Apps/WorkflowDesigner
           make -C Apps/WorkflowDesigner check
+          make -C Apps/WorkflowDesigner/Tools
 
       - name: Purchase request demo
         run: |

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="stock-count-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:signal id="stockCounted" name="stock-counted"/>
+  <bpmn:process id="stock-count" name="Weekly stock count" isExecutable="true">
+    <bpmn:documentation>Every week the warehouse counts its stock; when the count is in, the stock-counted signal starts the report (stock-report.bpmn).</bpmn:documentation>
+    <bpmn:startEvent id="weekly" name="Every week">
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle>R/P7D</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:userTask id="count" name="Count stock" camunda:candidateGroups="warehouse"/>
+    <bpmn:endEvent id="counted" name="Stock counted">
+      <bpmn:signalEventDefinition signalRef="stockCounted"/>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="toCount" sourceRef="weekly" targetRef="count"/>
+    <bpmn:sequenceFlow id="toCounted" sourceRef="count" targetRef="counted"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1l6vxph">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_8kykbia" bpmnElement="stock-count">
+      <bpmndi:BPMNShape id="weekly_Shape" bpmnElement="weekly">
+        <dc:Bounds x="80" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="count_Shape" bpmnElement="count">
+        <dc:Bounds x="186" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="counted_Shape" bpmnElement="counted">
+        <dc:Bounds x="356" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toCount_Edge" bpmnElement="toCount">
+        <di:waypoint x="116" y="120"/>
+        <di:waypoint x="186" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toCounted_Edge" bpmnElement="toCounted">
+        <di:waypoint x="286" y="120"/>
+        <di:waypoint x="356" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

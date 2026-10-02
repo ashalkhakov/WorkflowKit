@@ -47,7 +47,7 @@
 
 - (NSData *)dataOfType:(NSString *)type error:(NSError **)error
 {
-	return [_editor.document XMLDataWithOptions:NSXMLNodePrettyPrint];
+	return [_editor.document XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement];
 }
 
 - (NSString *)displayName

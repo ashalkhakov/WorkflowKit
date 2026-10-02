@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:wf="https://workflowkit.local/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="restock-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:message id="deliveryArrived" name="delivery-arrived"/>
+  <bpmn:process id="restock" name="Restock" isExecutable="true">
+    <bpmn:documentation>One product's stock, watched: when it falls below its reorder level, more is ordered, and the delivery is booked in when it arrives. The link events carry the flow from the ordering half of the diagram to the receiving half without a long line between them.</bpmn:documentation>
+    <bpmn:startEvent id="watching" name="Watch product"/>
+    <bpmn:intermediateCatchEvent id="low" name="Stock below reorder level">
+      <bpmn:conditionalEventDefinition camunda:variableName="stock">
+        <bpmn:condition xsi:type="bpmn:tFormalExpression">stock &lt; reorderLevel</bpmn:condition>
+      </bpmn:conditionalEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="reorder" name="Place reorder" camunda:type="external" camunda:topic="reorder"/>
+    <bpmn:intermediateThrowEvent id="toReceiving" name="Receiving">
+      <bpmn:linkEventDefinition name="receiving"/>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateCatchEvent id="fromOrdering" name="Receiving">
+      <bpmn:linkEventDefinition name="receiving"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="delivered" name="Delivery arrived">
+      <bpmn:messageEventDefinition messageRef="deliveryArrived"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:scriptTask id="bookIn" name="Book stock in" wf:action="book-in"/>
+    <bpmn:endEvent id="restocked" name="Restocked"/>
+    <bpmn:sequenceFlow id="toLow" sourceRef="watching" targetRef="low"/>
+    <bpmn:sequenceFlow id="toReorder" sourceRef="low" targetRef="reorder"/>
+    <bpmn:sequenceFlow id="toLink" sourceRef="reorder" targetRef="toReceiving"/>
+    <bpmn:sequenceFlow id="toDelivered" sourceRef="fromOrdering" targetRef="delivered"/>
+    <bpmn:sequenceFlow id="toBookIn" sourceRef="delivered" targetRef="bookIn"/>
+    <bpmn:sequenceFlow id="toRestocked" sourceRef="bookIn" targetRef="restocked"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_g6c9t1n">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_6ap5fcm" bpmnElement="restock">
+      <bpmndi:BPMNShape id="watching_Shape" bpmnElement="watching">
+        <dc:Bounds x="80" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="low_Shape" bpmnElement="low">
+        <dc:Bounds x="186" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="reorder_Shape" bpmnElement="reorder">
+        <dc:Bounds x="292" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="toReceiving_Shape" bpmnElement="toReceiving">
+        <dc:Bounds x="462" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="fromOrdering_Shape" bpmnElement="fromOrdering">
+        <dc:Bounds x="80" y="242" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="delivered_Shape" bpmnElement="delivered">
+        <dc:Bounds x="186" y="242" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bookIn_Shape" bpmnElement="bookIn">
+        <dc:Bounds x="292" y="220" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="restocked_Shape" bpmnElement="restocked">
+        <dc:Bounds x="462" y="242" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toLow_Edge" bpmnElement="toLow">
+        <di:waypoint x="116" y="120"/>
+        <di:waypoint x="186" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toReorder_Edge" bpmnElement="toReorder">
+        <di:waypoint x="222" y="120"/>
+        <di:waypoint x="292" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toLink_Edge" bpmnElement="toLink">
+        <di:waypoint x="392" y="120"/>
+        <di:waypoint x="462" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toDelivered_Edge" bpmnElement="toDelivered">
+        <di:waypoint x="116" y="260"/>
+        <di:waypoint x="186" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toBookIn_Edge" bpmnElement="toBookIn">
+        <di:waypoint x="222" y="260"/>
+        <di:waypoint x="292" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toRestocked_Edge" bpmnElement="toRestocked">
+        <di:waypoint x="392" y="260"/>
+        <di:waypoint x="462" y="260"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

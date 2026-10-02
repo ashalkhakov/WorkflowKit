@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="expense-review-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:process id="expense-review" name="Expense review" isExecutable="true">
+    <bpmn:documentation>An expense claim goes to every reviewer named in it at once; two approvals are enough, and the reviews still open are withdrawn then. Each reviewer is told the outcome in turn, one after another.</bpmn:documentation>
+    <bpmn:startEvent id="claimed" name="Expense claimed"/>
+    <bpmn:userTask id="review" name="Review claim" camunda:assignee="${reviewer}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:outputParameter name="approvals">=approvals + (if approved then 1 else 0)</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics camunda:collection="reviewers" camunda:elementVariable="reviewer">
+        <bpmn:completionCondition xsi:type="bpmn:tFormalExpression">approvals &gt;= 2</bpmn:completionCondition>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="approvedEnough" name="Two approvals?" default="rejectedFlow"/>
+    <bpmn:serviceTask id="reimburse" name="Reimburse" camunda:type="external" camunda:topic="reimburse"/>
+    <bpmn:exclusiveGateway id="decided"/>
+    <bpmn:sendTask id="notify" name="Tell reviewer" camunda:type="external" camunda:topic="notify">
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" camunda:collection="reviewers" camunda:elementVariable="reviewer"/>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="done" name="Claim settled"/>
+    <bpmn:sequenceFlow id="toReview" sourceRef="claimed" targetRef="review"/>
+    <bpmn:sequenceFlow id="toDecision" sourceRef="review" targetRef="approvedEnough"/>
+    <bpmn:sequenceFlow id="approvedFlow" name="yes" sourceRef="approvedEnough" targetRef="reimburse">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">approvals &gt;= 2</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="rejectedFlow" name="no" sourceRef="approvedEnough" targetRef="decided"/>
+    <bpmn:sequenceFlow id="reimbursed" sourceRef="reimburse" targetRef="decided"/>
+    <bpmn:sequenceFlow id="toNotify" sourceRef="decided" targetRef="notify"/>
+    <bpmn:sequenceFlow id="toDone" sourceRef="notify" targetRef="done"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_tb1f54i">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_1bt2liv" bpmnElement="expense-review">
+      <bpmndi:BPMNShape id="claimed_Shape" bpmnElement="claimed">
+        <dc:Bounds x="80" y="155" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="review_Shape" bpmnElement="review">
+        <dc:Bounds x="186" y="133" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="approvedEnough_Shape" bpmnElement="approvedEnough">
+        <dc:Bounds x="356" y="148" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="reimburse_Shape" bpmnElement="reimburse">
+        <dc:Bounds x="476" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="decided_Shape" bpmnElement="decided">
+        <dc:Bounds x="646" y="155" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="notify_Shape" bpmnElement="notify">
+        <dc:Bounds x="766" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="done_Shape" bpmnElement="done">
+        <dc:Bounds x="936" y="162" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toReview_Edge" bpmnElement="toReview">
+        <di:waypoint x="116" y="173"/>
+        <di:waypoint x="186" y="173"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toDecision_Edge" bpmnElement="toDecision">
+        <di:waypoint x="286" y="173"/>
+        <di:waypoint x="356" y="173"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="approvedFlow_Edge" bpmnElement="approvedFlow">
+        <di:waypoint x="381" y="148"/>
+        <di:waypoint x="381" y="120"/>
+        <di:waypoint x="476" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="rejectedFlow_Edge" bpmnElement="rejectedFlow">
+        <di:waypoint x="381" y="198"/>
+        <di:waypoint x="381" y="180"/>
+        <di:waypoint x="646" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="reimbursed_Edge" bpmnElement="reimbursed">
+        <di:waypoint x="576" y="120"/>
+        <di:waypoint x="671" y="120"/>
+        <di:waypoint x="671" y="155"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toNotify_Edge" bpmnElement="toNotify">
+        <di:waypoint x="696" y="180"/>
+        <di:waypoint x="766" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toDone_Edge" bpmnElement="toDone">
+        <di:waypoint x="866" y="180"/>
+        <di:waypoint x="936" y="180"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

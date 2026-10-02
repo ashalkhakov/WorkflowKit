@@ -74,6 +74,7 @@ WKDIsContainerType(NSString *type)
 @property (nonatomic, readwrite, copy) NSArray<NSValue *> *waypoints;
 @property (nonatomic, readwrite) BOOL isDefault;
 @property (nonatomic, readwrite) BOOL hasCondition;
+@property (nonatomic, readwrite) BOOL isAssociation;
 @end
 
 @implementation WKDConnection
@@ -179,6 +180,7 @@ WKDPointValue(double x, double y)
 		if (connection.elementId == nil || connection.source == nil || connection.target == nil) {
 			continue;
 		}
+		connection.isAssociation = [[flow localName] isEqualToString:@"association"];
 		connection.hasCondition = WKDChild(flow, WKDBpmnNamespace, @"conditionExpression") != nil;
 		connection.isDefault = [WKDAttribute(connection.source.element, @"default") isEqualToString:connection.elementId];
 		NSArray *points = [edges objectForKey:connection.elementId];
@@ -205,7 +207,7 @@ WKDPointValue(double x, double y)
 		}
 		NSXMLElement *element = (NSXMLElement *)node;
 		NSString *type = [element localName];
-		if ([type isEqualToString:@"sequenceFlow"]) {
+		if ([type isEqualToString:@"sequenceFlow"] || [type isEqualToString:@"association"]) {
 			[flows addObject:element];
 			continue;
 		}

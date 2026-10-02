@@ -108,8 +108,10 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	XCTAssertEqualObjects(WKDReferences([diagram shapeWithId:taskId].element, @"incoming"), @[ flowId ]);
 	WKDConnection *flow = [diagram connectionWithId:flowId];
 	XCTAssertTrue(NSEqualPoints([[flow.waypoints firstObject] pointValue], NSMakePoint(NSMaxX(flow.source.bounds), NSMidY(flow.source.bounds))));
+	/* Level with the task: straight across into its side. */
+	XCTAssertEqual([flow.waypoints count], (NSUInteger)2, @"%@", flow.waypoints);
 	XCTAssertTrue(NSEqualPoints([[flow.waypoints lastObject] pointValue],
-	                            NSMakePoint(NSMidX(task.bounds), NSMinY(task.bounds))), @"%@", flow.waypoints);
+	                            NSMakePoint(NSMinX(task.bounds), NSMidY(flow.source.bounds))), @"%@", flow.waypoints);
 	__block NSString *endId = nil;
 	[self step:^{
 		endId = [editor insertNodeOfType:@"endEvent" eventDefinition:nil at:NSMakePoint(560, 200) error:NULL];

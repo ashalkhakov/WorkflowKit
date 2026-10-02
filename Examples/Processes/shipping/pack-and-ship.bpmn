@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="pack-and-ship-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:process id="pack-and-ship" name="Pack and ship" isExecutable="true">
+    <bpmn:documentation>Called by Shipment. Printing the label talks to the carrier, which is often down: it runs in a job of its own, retried three times five minutes apart before an incident is raised.</bpmn:documentation>
+    <bpmn:startEvent id="start" name="Items to ship"/>
+    <bpmn:userTask id="pack" name="Pack parcels" camunda:candidateGroups="warehouse"/>
+    <bpmn:serviceTask id="label" name="Print label" camunda:type="external" camunda:topic="carrier-label" camunda:asyncBefore="true">
+      <bpmn:extensionElements>
+        <camunda:failedJobRetryTimeCycle>R3/PT5M</camunda:failedJobRetryTimeCycle>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:manualTask id="handOver" name="Hand to carrier"/>
+    <bpmn:endEvent id="end" name="With carrier"/>
+    <bpmn:sequenceFlow id="toPack" sourceRef="start" targetRef="pack"/>
+    <bpmn:sequenceFlow id="toLabel" sourceRef="pack" targetRef="label"/>
+    <bpmn:sequenceFlow id="toHandOver" sourceRef="label" targetRef="handOver"/>
+    <bpmn:sequenceFlow id="toEnd" sourceRef="handOver" targetRef="end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_57dp08a">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_gemgs5b" bpmnElement="pack-and-ship">
+      <bpmndi:BPMNShape id="start_Shape" bpmnElement="start">
+        <dc:Bounds x="80" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pack_Shape" bpmnElement="pack">
+        <dc:Bounds x="186" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="label_Shape" bpmnElement="label">
+        <dc:Bounds x="356" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="handOver_Shape" bpmnElement="handOver">
+        <dc:Bounds x="526" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_Shape" bpmnElement="end">
+        <dc:Bounds x="696" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toPack_Edge" bpmnElement="toPack">
+        <di:waypoint x="116" y="120"/>
+        <di:waypoint x="186" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toLabel_Edge" bpmnElement="toLabel">
+        <di:waypoint x="286" y="120"/>
+        <di:waypoint x="356" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toHandOver_Edge" bpmnElement="toHandOver">
+        <di:waypoint x="456" y="120"/>
+        <di:waypoint x="526" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toEnd_Edge" bpmnElement="toEnd">
+        <di:waypoint x="626" y="120"/>
+        <di:waypoint x="696" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

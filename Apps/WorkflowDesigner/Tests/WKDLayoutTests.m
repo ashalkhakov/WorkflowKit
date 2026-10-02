@@ -13,6 +13,32 @@ WKDFrame(NSDictionary *origins, NSString *nodeId, NSSize size)
 	return NSMakeRect(origin.x, origin.y, size.width, size.height);
 }
 
+/* What a boundary event leads to hangs below its activity -- even when
+ * it then joins the activity's own path again -- and below the
+ * activity's other successors. */
+- (void)testABoundaryBranchHangsBelow
+{
+	WKDLayout *layout = [[WKDLayout alloc] init];
+	NSSize big = NSMakeSize(300, 230), task = NSMakeSize(100, 80);
+	[layout addNode:@"start" size:NSMakeSize(36, 36)];
+	[layout addNode:@"work" size:big];
+	[layout addNode:@"late" size:task];
+	[layout addNode:@"next" size:task];
+	[layout addNode:@"join" size:NSMakeSize(50, 50)];
+	[layout addEdgeFrom:@"start" to:@"work"];
+	[layout addEdgeFrom:@"work" to:@"next"];
+	[layout addEdgeFrom:@"work" to:@"late" below:YES];
+	[layout addEdgeFrom:@"late" to:@"join"];
+	[layout addEdgeFrom:@"next" to:@"join"];
+	NSDictionary *origins = [layout layout];
+	NSRect work = WKDFrame(origins, @"work", big), late = WKDFrame(origins, @"late", task);
+	NSRect next = WKDFrame(origins, @"next", task);
+	XCTAssertGreaterThan(NSMinY(late), NSMaxY(work), @"below the activity: %@ %@",
+	                     NSStringFromRect(work), NSStringFromRect(late));
+	XCTAssertGreaterThan(NSMinY(late), NSMaxY(next), @"and below its other successor");
+	XCTAssertEqual(NSMidY(next), NSMidY(work), @"which stays level with it");
+}
+
 - (void)testAChainIsOneStraightLine
 {
 	WKDLayout *layout = [[WKDLayout alloc] init];

@@ -110,7 +110,14 @@ write.
   are cleaned up: `incoming`, `outgoing` and a gateway's `default`.
 - **Diagram ▸ Arrange** lays the whole process out afresh, left to right.
   A file without a diagram, such as the engine's example deployment, is laid
-  out like this when it opens.
+  out like this when it opens. Each node is placed level with what it
+  follows where it can, so flows run straight, and a gateway sits between
+  its branches. What a boundary event leads to, and a compensation handler,
+  hangs below its activity. Event subprocesses go in a row beneath the
+  rest. Flows bend at right angles, enter an activity straight across
+  where the two face each other, and go round other shapes.
+- **Associations**, such as a compensation boundary's link to its handler,
+  are drawn dotted and listed in the outline with ⇢.
 - **Undo and Redo** cover every change. **View** zooms in and out.
 
 ## The server
@@ -144,6 +151,15 @@ directory:
                               # deployments, and that the engine reads what
                               # the designer writes
 
+`Tools/` has the designer without a window, for BPMN files kept in a
+repository, such as `Examples/Processes`. They build on GNUstep with
+`make -C Tools`:
+
+    Tools/obj/wkd-arrange file.bpmn...         # Diagram ▸ Arrange, written back
+    Tools/obj/wkd-render file.bpmn out.png [scale]
+                                               # the diagram as a picture; it
+                                               # needs a display, Xvfb will do
+
 **On macOS**, use the `WorkflowDesigner` scheme of `WorkflowKit.xcworkspace`.
 
 ## Inside
@@ -152,7 +168,7 @@ directory:
 | --- | --- |
 | `WKDDiagram` | What the canvas draws, read from the XML: shapes with their bounds, subprocess and boundary host, and flows with their waypoints. It is read again after every change. |
 | `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. |
-| `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's. |
+| `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's: layers by longest path, ordered to cross as little as they can, then placed by sweeps that move each layer as near its neighbours as its order and spacing allow (isotonic regression). Edges can leave a node's bottom. |
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
 | `WKDExpressionField` | The expression field and the text storage that colours it, ported from the XForms Designer's XPath field, over the engine's `+[WFFeelExpression tokensOfText:place:]` and `+problemInText:place:`. |
 | `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with its DMTabBar (`ThirdParty/`). |

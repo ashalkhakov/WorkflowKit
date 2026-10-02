@@ -354,6 +354,33 @@ WKDDrawNode(WKDLook *look, NSRect rect, BOOL names)
 #pragma mark Flows
 
 void
+WKDDrawAssociation(NSArray<NSValue *> *points, BOOL directed)
+{
+	if ([points count] < 2) {
+		return;
+	}
+	NSBezierPath *line = [NSBezierPath bezierPath];
+	[line moveToPoint:[[points objectAtIndex:0] pointValue]];
+	for (NSUInteger i = 1; i < [points count]; i++) {
+		[line lineToPoint:[[points objectAtIndex:i] pointValue]];
+	}
+	CGFloat dots[2] = { 1.5, 3 };
+	[line setLineDash:dots count:2 phase:0];
+	[line setLineWidth:1.5];
+	[line stroke];
+	if (directed) {
+		NSPoint end = [[points lastObject] pointValue];
+		NSPoint before = [[points objectAtIndex:[points count] - 2] pointValue];
+		double angle = atan2(end.y - before.y, end.x - before.x);
+		NSBezierPath *head = [NSBezierPath bezierPath];
+		[head moveToPoint:NSMakePoint(end.x - 9 * cos(angle - 0.45), end.y - 9 * sin(angle - 0.45))];
+		[head lineToPoint:end];
+		[head lineToPoint:NSMakePoint(end.x - 9 * cos(angle + 0.45), end.y - 9 * sin(angle + 0.45))];
+		WKDStroke(head, 1.2, NO);
+	}
+}
+
+void
 WKDDrawFlow(NSArray<NSValue *> *points, BOOL isDefault, BOOL conditionalFromActivity, NSString *name)
 {
 	if ([points count] < 2) {

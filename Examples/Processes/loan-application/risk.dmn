@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:camunda="http://camunda.org/schema/1.0/dmn"
+             id="risk-definitions" name="Loan risk" namespace="http://example.com/workflowkit">
+  <decision id="loan-risk" name="Loan risk">
+    <decisionTable id="riskTable" hitPolicy="FIRST">
+      <input id="amountInput" label="Amount">
+        <inputExpression id="amountExpression" typeRef="long"><text>amount</text></inputExpression>
+      </input>
+      <input id="incomeInput" label="Yearly income">
+        <inputExpression id="incomeExpression" typeRef="long"><text>income</text></inputExpression>
+      </input>
+      <input id="defaultsInput" label="Earlier defaults">
+        <inputExpression id="defaultsExpression" typeRef="boolean"><text>hasDefaulted</text></inputExpression>
+      </input>
+      <output id="riskOutput" name="risk" typeRef="string"/>
+      <rule id="defaulted">
+        <description>Anyone who has defaulted before is declined.</description>
+        <inputEntry id="defaultedAmount"><text>-</text></inputEntry>
+        <inputEntry id="defaultedIncome"><text>-</text></inputEntry>
+        <inputEntry id="defaultedFlag"><text>true</text></inputEntry>
+        <outputEntry id="defaultedRisk"><text>"high"</text></outputEntry>
+      </rule>
+      <rule id="small">
+        <description>A tenth of a year's income or less.</description>
+        <inputEntry id="smallAmount"><text>&lt;= income / 10</text></inputEntry>
+        <inputEntry id="smallIncome"><text>-</text></inputEntry>
+        <inputEntry id="smallFlag"><text>-</text></inputEntry>
+        <outputEntry id="smallRisk"><text>"low"</text></outputEntry>
+      </rule>
+      <rule id="affordable">
+        <description>Up to half a year's income.</description>
+        <inputEntry id="affordableAmount"><text>&lt;= income / 2</text></inputEntry>
+        <inputEntry id="affordableIncome"><text>-</text></inputEntry>
+        <inputEntry id="affordableFlag"><text>-</text></inputEntry>
+        <outputEntry id="affordableRisk"><text>"medium"</text></outputEntry>
+      </rule>
+      <rule id="otherwise">
+        <inputEntry id="otherAmount"><text>-</text></inputEntry>
+        <inputEntry id="otherIncome"><text>-</text></inputEntry>
+        <inputEntry id="otherFlag"><text>-</text></inputEntry>
+        <outputEntry id="otherRisk"><text>"high"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

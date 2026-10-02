@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:wf="https://workflowkit.local/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="order-fulfilment-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:process id="order-fulfilment" name="Order fulfilment" isExecutable="true">
+    <bpmn:documentation>An order from the web shop: stock is checked, and an order in stock is charged and packed at the same time, then shipped by courier or by post. One out of stock waits for the warehouse to back-order it.</bpmn:documentation>
+    <bpmn:startEvent id="received" name="Order received">
+      <bpmn:extensionElements>
+        <camunda:formData businessKey="orderNumber">
+          <camunda:formField id="orderNumber" label="Order number" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="customer" label="Customer" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="total" label="Total" type="long">
+            <camunda:validation>
+              <camunda:constraint name="min" config="1"/>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="express" label="Express delivery" type="boolean" defaultValue="false"/>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="checkStock" name="Check stock" camunda:type="external" camunda:topic="check-stock"/>
+    <bpmn:exclusiveGateway id="inStock" name="In stock?" default="outOfStockFlow"/>
+    <bpmn:userTask id="backOrder" name="Back-order items" camunda:candidateGroups="warehouse"/>
+    <bpmn:endEvent id="backOrdered" name="Back-ordered"/>
+    <bpmn:parallelGateway id="fork"/>
+    <bpmn:serviceTask id="charge" name="Charge card" camunda:type="external" camunda:topic="payment"/>
+    <bpmn:userTask id="pack" name="Pick and pack" camunda:candidateGroups="warehouse" camunda:priority="=if express then 80 else 50"/>
+    <bpmn:parallelGateway id="join"/>
+    <bpmn:scriptTask id="shippingCost" name="Work out shipping" wf:action="shipping-cost"/>
+    <bpmn:exclusiveGateway id="how" name="Express?" default="postFlow"/>
+    <bpmn:serviceTask id="courier" name="Book courier" camunda:type="external" camunda:topic="courier"/>
+    <bpmn:serviceTask id="post" name="Send by post" camunda:type="external" camunda:topic="post"/>
+    <bpmn:exclusiveGateway id="sent"/>
+    <bpmn:endEvent id="shipped" name="Shipped"/>
+    <bpmn:sequenceFlow id="toCheck" sourceRef="received" targetRef="checkStock"/>
+    <bpmn:sequenceFlow id="toInStock" sourceRef="checkStock" targetRef="inStock"/>
+    <bpmn:sequenceFlow id="inStockFlow" name="yes" sourceRef="inStock" targetRef="fork">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">inStock</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="outOfStockFlow" name="no" sourceRef="inStock" targetRef="backOrder"/>
+    <bpmn:sequenceFlow id="toBackOrdered" sourceRef="backOrder" targetRef="backOrdered"/>
+    <bpmn:sequenceFlow id="toCharge" sourceRef="fork" targetRef="charge"/>
+    <bpmn:sequenceFlow id="toPack" sourceRef="fork" targetRef="pack"/>
+    <bpmn:sequenceFlow id="chargedFlow" sourceRef="charge" targetRef="join"/>
+    <bpmn:sequenceFlow id="packedFlow" sourceRef="pack" targetRef="join"/>
+    <bpmn:sequenceFlow id="toCost" sourceRef="join" targetRef="shippingCost"/>
+    <bpmn:sequenceFlow id="toHow" sourceRef="shippingCost" targetRef="how"/>
+    <bpmn:sequenceFlow id="expressFlow" name="express" sourceRef="how" targetRef="courier">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">express = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="postFlow" name="standard" sourceRef="how" targetRef="post"/>
+    <bpmn:sequenceFlow id="courierSent" sourceRef="courier" targetRef="sent"/>
+    <bpmn:sequenceFlow id="postSent" sourceRef="post" targetRef="sent"/>
+    <bpmn:sequenceFlow id="toShipped" sourceRef="sent" targetRef="shipped"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_zhrq6i5">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_lfx6tmu" bpmnElement="order-fulfilment">
+      <bpmndi:BPMNShape id="received_Shape" bpmnElement="received">
+        <dc:Bounds x="80" y="196" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="checkStock_Shape" bpmnElement="checkStock">
+        <dc:Bounds x="186" y="174" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="inStock_Shape" bpmnElement="inStock">
+        <dc:Bounds x="356" y="189" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="backOrder_Shape" bpmnElement="backOrder">
+        <dc:Bounds x="476" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="backOrdered_Shape" bpmnElement="backOrdered">
+        <dc:Bounds x="678" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="fork_Shape" bpmnElement="fork">
+        <dc:Bounds x="501" y="283" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="charge_Shape" bpmnElement="charge">
+        <dc:Bounds x="646" y="198" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pack_Shape" bpmnElement="pack">
+        <dc:Bounds x="646" y="338" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_Shape" bpmnElement="join">
+        <dc:Bounds x="816" y="283" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shippingCost_Shape" bpmnElement="shippingCost">
+        <dc:Bounds x="936" y="268" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="how_Shape" bpmnElement="how">
+        <dc:Bounds x="1106" y="283" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="courier_Shape" bpmnElement="courier">
+        <dc:Bounds x="1226" y="198" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="post_Shape" bpmnElement="post">
+        <dc:Bounds x="1226" y="338" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sent_Shape" bpmnElement="sent">
+        <dc:Bounds x="1396" y="283" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shipped_Shape" bpmnElement="shipped">
+        <dc:Bounds x="1516" y="290" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toCheck_Edge" bpmnElement="toCheck">
+        <di:waypoint x="116" y="214"/>
+        <di:waypoint x="186" y="214"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toInStock_Edge" bpmnElement="toInStock">
+        <di:waypoint x="286" y="214"/>
+        <di:waypoint x="356" y="214"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="inStockFlow_Edge" bpmnElement="inStockFlow">
+        <di:waypoint x="381" y="239"/>
+        <di:waypoint x="381" y="308"/>
+        <di:waypoint x="501" y="308"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="outOfStockFlow_Edge" bpmnElement="outOfStockFlow">
+        <di:waypoint x="381" y="189"/>
+        <di:waypoint x="381" y="120"/>
+        <di:waypoint x="476" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toBackOrdered_Edge" bpmnElement="toBackOrdered">
+        <di:waypoint x="576" y="120"/>
+        <di:waypoint x="678" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toCharge_Edge" bpmnElement="toCharge">
+        <di:waypoint x="526" y="283"/>
+        <di:waypoint x="526" y="238"/>
+        <di:waypoint x="646" y="238"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toPack_Edge" bpmnElement="toPack">
+        <di:waypoint x="526" y="333"/>
+        <di:waypoint x="526" y="378"/>
+        <di:waypoint x="646" y="378"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="chargedFlow_Edge" bpmnElement="chargedFlow">
+        <di:waypoint x="746" y="238"/>
+        <di:waypoint x="841" y="238"/>
+        <di:waypoint x="841" y="283"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="packedFlow_Edge" bpmnElement="packedFlow">
+        <di:waypoint x="746" y="378"/>
+        <di:waypoint x="841" y="378"/>
+        <di:waypoint x="841" y="333"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toCost_Edge" bpmnElement="toCost">
+        <di:waypoint x="866" y="308"/>
+        <di:waypoint x="936" y="308"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toHow_Edge" bpmnElement="toHow">
+        <di:waypoint x="1036" y="308"/>
+        <di:waypoint x="1106" y="308"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="expressFlow_Edge" bpmnElement="expressFlow">
+        <di:waypoint x="1131" y="283"/>
+        <di:waypoint x="1131" y="238"/>
+        <di:waypoint x="1226" y="238"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="postFlow_Edge" bpmnElement="postFlow">
+        <di:waypoint x="1131" y="333"/>
+        <di:waypoint x="1131" y="378"/>
+        <di:waypoint x="1226" y="378"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="courierSent_Edge" bpmnElement="courierSent">
+        <di:waypoint x="1326" y="238"/>
+        <di:waypoint x="1421" y="238"/>
+        <di:waypoint x="1421" y="283"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="postSent_Edge" bpmnElement="postSent">
+        <di:waypoint x="1326" y="378"/>
+        <di:waypoint x="1421" y="378"/>
+        <di:waypoint x="1421" y="333"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toShipped_Edge" bpmnElement="toShipped">
+        <di:waypoint x="1446" y="308"/>
+        <di:waypoint x="1516" y="308"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

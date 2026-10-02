@@ -403,6 +403,7 @@
 		A5A4B14A73EEEFB6BCA19F09 /* WDTasksWindowController.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WDTasksWindowController.m; sourceTree = "<group>"; };
 		A8873E1C1321C3B62799DE75 /* TasksWindow.xib */ = { isa = PBXFileReference; lastKnownFileType = file.xib; path = TasksWindow.xib; sourceTree = "<group>"; };
 		A89B0E83D105E87C5D232DBA /* WFDecisionService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFDecisionService.h; sourceTree = "<group>"; };
+		A8EFB2AC521D2DE7D0D253BA /* WFExamplesTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFExamplesTests.inc; sourceTree = "<group>"; };
 		A9464F12C40389720351CF71 /* OTelKit.framework */ = { isa = PBXFileReference; explicitFileType = wrapper.framework; path = OTelKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		A99FA1FDB589AA19D5B73BB8 /* WFServices.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFServices.m; sourceTree = "<group>"; };
 		A9B0C42046EF49A1107A930C /* WFTaskService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFTaskService.h; sourceTree = "<group>"; };
@@ -669,6 +670,7 @@
 				E81A3EB28D88B3BBE1E1A474 /* WFEscalationTests.inc */,
 				B866FAA5349791DCA0D5B61E /* WFEventSubProcessTests.inc */,
 				3F88955DF8B2C3DF38CA75CE /* WFEventTests.inc */,
+				A8EFB2AC521D2DE7D0D253BA /* WFExamplesTests.inc */,
 				07FA1FC571B99B65CA32CD45 /* WFExternalTaskTests.inc */,
 				EDD63D31A43371902BBDA6BB /* WFFormTests.inc */,
 				D83E2818811F67EF54938FC7 /* WFGatewayTests.inc */,

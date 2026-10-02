@@ -15,8 +15,12 @@
 /* Invocations taken and never finished, as if the process died mid-call. */
 @property (nonatomic) BOOL drops;
 @property (nonatomic, strong) NSMutableArray *taskIds;
+/* Every invocation taken, in order. */
+@property (nonatomic, strong) NSMutableArray<WFServiceInvocation *> *invocations;
 /* How many invocations it has taken. */
 - (NSUInteger)calls;
+/* The topics invoked, in order: for one process instance, or for all. */
+- (NSArray<NSString *> *)topicsFor:(NSString *)processInstanceId;
 @end
 
 /* A delegate that completes every task as it is created and records the

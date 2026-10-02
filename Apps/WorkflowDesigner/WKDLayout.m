@@ -6,8 +6,15 @@
 @property (nonatomic) NSSize size;
 @property (nonatomic) NSInteger layer;
 @property (nonatomic) double order;
+/* Its vertical centre, as the layers are placed. */
+@property (nonatomic) double centre;
 @property (nonatomic, strong) NSMutableArray<WKDLayoutNode *> *successors;
 @property (nonatomic, strong) NSMutableArray<WKDLayoutNode *> *predecessors;
+/* The predecessors whose edge to it leaves from their bottom. */
+@property (nonatomic, strong) NSHashTable<WKDLayoutNode *> *lowered;
+/* The predecessors joined to it by an edge reversed to break a cycle: a
+ * loop going back, which does not pull it into line. */
+@property (nonatomic, strong) NSHashTable<WKDLayoutNode *> *looped;
 @end
 
 @implementation WKDLayoutNode
@@ -17,6 +24,8 @@
 	if ((self = [super init])) {
 		_successors = [NSMutableArray array];
 		_predecessors = [NSMutableArray array];
+		_lowered = [NSHashTable hashTableWithOptions:NSPointerFunctionsObjectPointerPersonality];
+		_looped = [NSHashTable hashTableWithOptions:NSPointerFunctionsObjectPointerPersonality];
 	}
 	return self;
 }
@@ -28,6 +37,7 @@
 	NSMutableArray<WKDLayoutNode *> *_nodes;
 	NSMutableDictionary<NSString *, WKDLayoutNode *> *_byId;
 	NSMutableArray<NSArray<NSString *> *> *_edges;
+	NSMutableSet<NSString *> *_belowEdges;
 	NSMutableDictionary<NSString *, NSNumber *> *_layers;
 }
 
@@ -37,6 +47,7 @@
 		_nodes = [NSMutableArray array];
 		_byId = [NSMutableDictionary dictionary];
 		_edges = [NSMutableArray array];
+		_belowEdges = [NSMutableSet set];
 		_layerSpacing = 60;
 		_nodeSpacing = 40;
 		_sweeps = 12;
@@ -58,8 +69,16 @@
 
 - (void)addEdgeFrom:(NSString *)sourceId to:(NSString *)targetId
 {
+	[self addEdgeFrom:sourceId to:targetId below:NO];
+}
+
+- (void)addEdgeFrom:(NSString *)sourceId to:(NSString *)targetId below:(BOOL)below
+{
 	if (![sourceId isEqualToString:targetId]) {
 		[_edges addObject:@[ sourceId, targetId ]];
+		if (below) {
+			[_belowEdges addObject:[NSString stringWithFormat:@"%@\x02%@", sourceId, targetId]];
+		}
 	}
 }
 
@@ -106,7 +125,8 @@
 		[onPath addObject:nodeId];
 		for (NSString *next in [out objectForKey:nodeId]) {
 			if ([onPath containsObject:next]) {
-				[result addObject:@[ next, nodeId ]];
+				/* Reversed, and marked so: a loop going back. */
+				[result addObject:@[ next, nodeId, @YES ]];
 			} else {
 				[result addObject:@[ nodeId, next ]];
 				if (![done containsObject:next]) {
@@ -138,6 +158,12 @@
 		WKDLayoutNode *source = [_byId objectForKey:edge[0]], *target = [_byId objectForKey:edge[1]];
 		[source.successors addObject:target];
 		[target.predecessors addObject:source];
+		if ([_belowEdges containsObject:[NSString stringWithFormat:@"%@\x02%@", edge[0], edge[1]]]) {
+			[target.lowered addObject:source];
+		}
+		if ([edge count] > 2) {
+			[target.looped addObject:source];
+		}
 	}
 	NSMutableArray *ready = [NSMutableArray array];
 	for (WKDLayoutNode *node in _nodes) {
@@ -169,8 +195,11 @@
 			if (next.layer - node.layer <= 1) {
 				continue;
 			}
+			BOOL lowered = [next.lowered containsObject:node], looped = [next.looped containsObject:node];
 			[node.successors removeObject:next];
 			[next.predecessors removeObject:node];
+			[next.lowered removeObject:node];
+			[next.looped removeObject:node];
 			WKDLayoutNode *previous = node;
 			for (NSInteger layer = node.layer + 1; layer < next.layer; layer++) {
 				WKDLayoutNode *placeholder = [[WKDLayoutNode alloc] init];
@@ -179,11 +208,20 @@
 				placeholder.layer = layer;
 				[previous.successors addObject:placeholder];
 				[placeholder.predecessors addObject:previous];
+				if (lowered && previous == node) {
+					[placeholder.lowered addObject:node];
+				}
+				if (looped) {
+					[placeholder.looped addObject:previous];
+				}
 				[all addObject:placeholder];
 				previous = placeholder;
 			}
 			[previous.successors addObject:next];
 			[next.predecessors addObject:previous];
+			if (looped) {
+				[next.looped addObject:previous];
+			}
 		}
 	}
 	return all;
@@ -241,7 +279,10 @@ WKDCrossings(NSArray<NSArray<WKDLayoutNode *> *> *layers)
 		}
 	};
 	remember();
-	for (NSInteger sweep = 0; sweep < _sweeps && best > 0; sweep++) {
+	/* Sweep even when nothing crosses: the order nodes were added in is
+	 * not yet one that follows their neighbours (a boundary event's
+	 * successor below the others). */
+	for (NSInteger sweep = 0; sweep < _sweeps && (best > 0 || sweep < 2); sweep++) {
 		BOOL forward = sweep % 2 == 0;
 		NSInteger count = (NSInteger)[layers count];
 		for (NSInteger step = 1; step < count; step++) {
@@ -249,10 +290,18 @@ WKDCrossings(NSArray<NSArray<WKDLayoutNode *> *> *layers)
 			NSMutableArray<WKDLayoutNode *> *layer = [layers objectAtIndex:index];
 			NSMutableDictionary *centre = [NSMutableDictionary dictionary];
 			for (WKDLayoutNode *node in layer) {
-				NSArray *neighbours = forward ? node.predecessors : node.successors;
+				/* An edge out of a node's bottom puts what it leads to after
+				 * the node's other successors; going back, it does not pull
+				 * the node. */
+				NSMutableArray *neighbours = [NSMutableArray array];
 				double sum = 0;
-				for (WKDLayoutNode *neighbour in neighbours) {
-					sum += neighbour.order;
+				for (WKDLayoutNode *neighbour in forward ? node.predecessors : node.successors) {
+					BOOL lowered = forward ? [node.lowered containsObject:neighbour] : [neighbour.lowered containsObject:node];
+					if (!forward && lowered) {
+						continue;
+					}
+					[neighbours addObject:neighbour];
+					sum += neighbour.order + (lowered ? 0.5 : 0);
 				}
 				[centre setObject:@([neighbours count] > 0 ? sum / [neighbours count] : node.order) forKey:node.nodeId];
 			}
@@ -264,7 +313,7 @@ WKDCrossings(NSArray<NSArray<WKDLayoutNode *> *> *layers)
 			}
 		}
 		NSInteger crossings = WKDCrossings(layers);
-		if (crossings < best) {
+		if (crossings <= best) {
 			best = crossings;
 			remember();
 		}
@@ -279,46 +328,203 @@ WKDCrossings(NSArray<NSArray<WKDLayoutNode *> *> *layers)
 	}
 }
 
+#pragma mark Placing the layers
+
+/* The median of the neighbours' centres, or nil when there are none: of
+ * two, their middle, so that a gateway sits between its branches. */
+static NSNumber *
+WKDMedianCentre(NSArray<NSNumber *> *unsorted)
+{
+	if ([unsorted count] == 0) {
+		return nil;
+	}
+	NSArray *centres = [unsorted sortedArrayUsingSelector:@selector(compare:)];
+	NSUInteger n = [centres count];
+	double median = n % 2 == 1 ? [centres[n / 2] doubleValue]
+		: ([centres[n / 2 - 1] doubleValue] + [centres[n / 2] doubleValue]) / 2;
+	return @(median);
+}
+
+/* The layer moved as near as it can be to where each node wants to be,
+ * keeping its order and the spacing between its nodes: each node's centre
+ * less the room the nodes above it need is then a sequence that may not
+ * fall, and the nearest such sequence, in least squares, is found by
+ * pooling adjacent values that would (isotonic regression). */
+- (void)place:(NSArray<WKDLayoutNode *> *)layer towards:(NSArray<NSNumber *> *)wanted
+{
+	NSUInteger n = [layer count];
+	if (n == 0) {
+		return;
+	}
+	double offsets[n], targets[n], weights[n];
+	double offset = 0;
+	for (NSUInteger k = 0; k < n; k++) {
+		WKDLayoutNode *node = [layer objectAtIndex:k];
+		if (k > 0) {
+			WKDLayoutNode *above = [layer objectAtIndex:k - 1];
+			offset += above.size.height / 2 + _nodeSpacing + node.size.height / 2;
+		}
+		offsets[k] = offset;
+		targets[k] = [wanted[k] doubleValue] - offset;
+		/* A long edge's placeholders hold it straight; a node with many
+		 * flows matters more than one with few. */
+		weights[k] = [node.nodeId hasPrefix:@"\x01"] ? 2.0
+			: 1.0 + (double)([node.predecessors count] + [node.successors count]) / 4.0;
+	}
+	/* Blocks of pooled values: their mean, weight and extent. */
+	double means[n], blockWeights[n];
+	NSUInteger starts[n], blocks = 0;
+	for (NSUInteger k = 0; k < n; k++) {
+		means[blocks] = targets[k];
+		blockWeights[blocks] = weights[k];
+		starts[blocks] = k;
+		blocks++;
+		while (blocks > 1 && means[blocks - 2] > means[blocks - 1]) {
+			double weight = blockWeights[blocks - 2] + blockWeights[blocks - 1];
+			means[blocks - 2] = (means[blocks - 2] * blockWeights[blocks - 2]
+			                     + means[blocks - 1] * blockWeights[blocks - 1]) / weight;
+			blockWeights[blocks - 2] = weight;
+			blocks--;
+		}
+	}
+	for (NSUInteger b = 0; b < blocks; b++) {
+		NSUInteger to = b + 1 < blocks ? starts[b + 1] : n;
+		for (NSUInteger k = starts[b]; k < to; k++) {
+			[[layer objectAtIndex:k] setCentre:means[b] + offsets[k]];
+		}
+	}
+}
+
+/* Each layer packed, then moved, sweep by sweep, towards its neighbours in
+ * the layer before it and then in the layer after it: a node level with
+ * the node it follows, a gateway between its branches, so that flows run
+ * straight where they can. */
+- (void)placeVertically:(NSArray<NSArray<WKDLayoutNode *> *> *)layers
+{
+	for (NSArray<WKDLayoutNode *> *layer in layers) {
+		double y = 0;
+		for (WKDLayoutNode *node in layer) {
+			node.centre = y + node.size.height / 2;
+			y += node.size.height + _nodeSpacing;
+		}
+	}
+	NSUInteger count = [layers count];
+	for (NSInteger sweep = 0; sweep < MAX((NSInteger)4, _sweeps / 2); sweep++) {
+		for (NSUInteger pass = 0; pass < 2; pass++) {
+			BOOL forward = pass == 0;
+			for (NSUInteger step = 1; step < count; step++) {
+				NSArray<WKDLayoutNode *> *layer = [layers objectAtIndex:forward ? step : count - 1 - step];
+				NSMutableArray *wanted = [NSMutableArray array];
+				for (WKDLayoutNode *node in layer) {
+					/* Below a node whose bottom an edge leaves: a row lower. */
+					NSMutableArray *centres = [NSMutableArray array];
+					double floor = -1.0e9;
+					for (WKDLayoutNode *predecessor in node.predecessors) {
+						if ([node.lowered containsObject:predecessor]) {
+							floor = MAX(floor, predecessor.centre + predecessor.size.height / 2 + _nodeSpacing
+							                   + node.size.height / 2);
+						}
+					}
+					for (WKDLayoutNode *neighbour in forward ? node.predecessors : node.successors) {
+						BOOL lowered = forward ? [node.lowered containsObject:neighbour]
+							: [neighbour.lowered containsObject:node];
+						BOOL looped = forward ? [node.looped containsObject:neighbour]
+							: [neighbour.looped containsObject:node];
+						if (looped) {
+							continue;
+						}
+						if (!lowered) {
+							[centres addObject:@(neighbour.centre)];
+						} else if (forward) {
+							[centres addObject:@(neighbour.centre + neighbour.size.height / 2 + _nodeSpacing
+							                     + node.size.height / 2)];
+						}
+					}
+					NSNumber *median = WKDMedianCentre(centres);
+					/* Below what it hangs from, whatever follows it. */
+					[wanted addObject:@(MAX(median != nil ? [median doubleValue] : node.centre, floor))];
+				}
+				[self place:layer towards:wanted];
+			}
+		}
+	}
+	/* Last, what hangs below an activity is put below where the activity
+	 * ended up, and what follows only it goes with it; the rest stays. */
+	NSHashTable *moved = [NSHashTable hashTableWithOptions:NSPointerFunctionsObjectPointerPersonality];
+	for (NSUInteger index = 1; index < count; index++) {
+		NSArray<WKDLayoutNode *> *layer = [layers objectAtIndex:index];
+		NSMutableArray *wanted = [NSMutableArray array];
+		NSMutableArray *before = [NSMutableArray array];
+		for (WKDLayoutNode *node in layer) {
+			double want = node.centre;
+			NSArray *ahead = node.predecessors;
+			for (WKDLayoutNode *predecessor in ahead) {
+				if ([node.lowered containsObject:predecessor]) {
+					want = MAX(want, predecessor.centre + predecessor.size.height / 2 + _nodeSpacing
+					                 + node.size.height / 2);
+				} else if ([ahead count] == 1 && [moved containsObject:predecessor]) {
+					want = predecessor.centre;
+				}
+			}
+			[wanted addObject:@(want)];
+			[before addObject:@(node.centre)];
+		}
+		[self place:layer towards:wanted];
+		for (NSUInteger k = 0; k < [layer count]; k++) {
+			if (fabs([layer objectAtIndex:k].centre - [before[k] doubleValue]) > 0.5) {
+				[moved addObject:[layer objectAtIndex:k]];
+			}
+		}
+	}
+}
+
 - (NSDictionary<NSString *, NSValue *> *)layout
 {
 	for (WKDLayoutNode *node in _nodes) {
 		[node.successors removeAllObjects];
 		[node.predecessors removeAllObjects];
+		[node.lowered removeAllObjects];
+		[node.looped removeAllObjects];
 	}
 	[self assignLayers:[self acyclicEdges]];
 	NSArray *all = [self addPlaceholders];
 	NSMutableArray<NSMutableArray<WKDLayoutNode *> *> *layers = [self layersOf:all];
 	[self orderLayers:layers];
 
-	/* Columns as wide as their widest node; each column's nodes stacked
-	 * and centred on the tallest column's middle. */
-	double x = 0, tallest = 0;
+	/* Columns as wide as their widest node. */
+	double x = 0;
 	NSMutableArray *columnX = [NSMutableArray array], *columnWidth = [NSMutableArray array];
-	NSMutableArray *columnHeight = [NSMutableArray array];
 	for (NSArray<WKDLayoutNode *> *layer in layers) {
-		double width = 0, height = 0;
+		double width = 0;
 		for (WKDLayoutNode *node in layer) {
 			width = MAX(width, node.size.width);
-			height += node.size.height;
 		}
-		height += _nodeSpacing * MAX(0, (double)[layer count] - 1);
 		[columnX addObject:@(x)];
 		[columnWidth addObject:@(width)];
-		[columnHeight addObject:@(height)];
-		tallest = MAX(tallest, height);
 		x += width + _layerSpacing;
 	}
+	[self placeVertically:layers];
+	double top = 0, bottom = 0;
+	BOOL first = YES;
+	for (NSArray<WKDLayoutNode *> *layer in layers) {
+		for (WKDLayoutNode *node in layer) {
+			double nodeTop = node.centre - node.size.height / 2, nodeBottom = node.centre + node.size.height / 2;
+			top = first ? nodeTop : MIN(top, nodeTop);
+			bottom = first ? nodeBottom : MAX(bottom, nodeBottom);
+			first = NO;
+		}
+	}
+	double tallest = bottom - top;
 	NSMutableDictionary *origins = [NSMutableDictionary dictionary];
 	_layers = [NSMutableDictionary dictionary];
 	for (NSUInteger i = 0; i < [layers count]; i++) {
-		double y = (tallest - [columnHeight[i] doubleValue]) / 2;
 		for (WKDLayoutNode *node in [layers objectAtIndex:i]) {
 			if (![node.nodeId hasPrefix:@"\x01"]) {
 				double left = [columnX[i] doubleValue] + ([columnWidth[i] doubleValue] - node.size.width) / 2;
+				double y = round(node.centre - node.size.height / 2 - top);
 				[origins setObject:[NSValue valueWithPoint:NSMakePoint(left, y)] forKey:node.nodeId];
 				[_layers setObject:@(node.layer) forKey:node.nodeId];
 			}
-			y += node.size.height + _nodeSpacing;
 		}
 	}
 	_size = NSMakeSize(MAX(0, x - _layerSpacing), tallest);

@@ -9,14 +9,28 @@
 		_bpmnErrors = [NSMutableDictionary dictionary];
 		_failures = [NSMutableDictionary dictionary];
 		_taskIds = [NSMutableArray array];
+		_invocations = [NSMutableArray array];
 	}
 	return self;
+}
+- (NSArray<NSString *> *)topicsFor:(NSString *)processInstanceId
+{
+	NSMutableArray *topics = [NSMutableArray array];
+	@synchronized (self) {
+		for (WFServiceInvocation *invocation in self.invocations) {
+			if (processInstanceId == nil || [invocation.processInstanceId isEqualToString:processInstanceId]) {
+				[topics addObject:invocation.topic];
+			}
+		}
+	}
+	return topics;
 }
 - (void)performInvocation:(WFServiceInvocation *)invocation
 {
 	NSInteger failuresLeft = 0;
 	@synchronized (self) {
 		[self.taskIds addObject:invocation.externalTaskId];
+		[self.invocations addObject:invocation];
 		failuresLeft = [[self.failures objectForKey:invocation.topic] integerValue];
 		if (failuresLeft > 0) {
 			[self.failures setObject:[NSNumber numberWithInteger:failuresLeft - 1]

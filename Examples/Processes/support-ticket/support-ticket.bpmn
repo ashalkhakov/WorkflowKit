@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="support-ticket-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:message id="customerReplied" name="customer-replied"/>
+  <bpmn:message id="ticketWithdrawn" name="ticket-withdrawn"/>
+  <bpmn:escalation id="needsEngineering" name="Needs engineering" escalationCode="engineering"/>
+  <bpmn:process id="support-ticket" name="Support ticket" isExecutable="true">
+    <bpmn:documentation>Support resolves a ticket within eight hours, or a supervisor takes it over. A ticket that needs a product fix is escalated: engineering is told while support goes on. The customer may write in at any time, and may withdraw the ticket, which ends everything.</bpmn:documentation>
+    <bpmn:startEvent id="opened" name="Ticket opened"/>
+    <bpmn:subProcess id="resolve" name="Resolve ticket">
+      <bpmn:startEvent id="resolveStart"/>
+      <bpmn:userTask id="diagnose" name="Diagnose" camunda:candidateGroups="support"/>
+      <bpmn:exclusiveGateway id="productBug" name="Product bug?" default="noBugFlow"/>
+      <bpmn:intermediateThrowEvent id="escalate" name="Needs engineering">
+        <bpmn:escalationEventDefinition escalationRef="needsEngineering"/>
+      </bpmn:intermediateThrowEvent>
+      <bpmn:userTask id="workaround" name="Give workaround" camunda:candidateGroups="support"/>
+      <bpmn:exclusiveGateway id="answered"/>
+      <bpmn:endEvent id="resolveEnd"/>
+      <bpmn:sequenceFlow id="toDiagnose" sourceRef="resolveStart" targetRef="diagnose"/>
+      <bpmn:sequenceFlow id="toBug" sourceRef="diagnose" targetRef="productBug"/>
+      <bpmn:sequenceFlow id="bugFlow" name="yes" sourceRef="productBug" targetRef="escalate">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">bug = true</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="toWorkaround" sourceRef="escalate" targetRef="workaround"/>
+      <bpmn:sequenceFlow id="noBugFlow" name="no" sourceRef="productBug" targetRef="answered"/>
+      <bpmn:sequenceFlow id="workedAround" sourceRef="workaround" targetRef="answered"/>
+      <bpmn:sequenceFlow id="toResolveEnd" sourceRef="answered" targetRef="resolveEnd"/>
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="sla" name="8 hours" attachedToRef="resolve">
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT8H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:userTask id="takeOver" name="Take over ticket" camunda:candidateGroups="supervisors"/>
+    <bpmn:boundaryEvent id="toEngineering" name="Needs engineering" attachedToRef="resolve" cancelActivity="false">
+      <bpmn:escalationEventDefinition escalationRef="needsEngineering"/>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="fileBug" name="File bug report" camunda:type="external" camunda:topic="file-bug"/>
+    <bpmn:endEvent id="filed" name="Bug filed"/>
+    <bpmn:exclusiveGateway id="closing"/>
+    <bpmn:endEvent id="closed" name="Ticket closed"/>
+    <bpmn:subProcess id="onReply" name="Customer replied" triggeredByEvent="true">
+      <bpmn:startEvent id="replied" name="Reply received" isInterrupting="false">
+        <bpmn:messageEventDefinition messageRef="customerReplied"/>
+      </bpmn:startEvent>
+      <bpmn:userTask id="readReply" name="Read reply" camunda:candidateGroups="support"/>
+      <bpmn:endEvent id="read"/>
+      <bpmn:sequenceFlow id="toRead" sourceRef="replied" targetRef="readReply"/>
+      <bpmn:sequenceFlow id="toReadEnd" sourceRef="readReply" targetRef="read"/>
+    </bpmn:subProcess>
+    <bpmn:subProcess id="onWithdraw" name="Ticket withdrawn" triggeredByEvent="true">
+      <bpmn:startEvent id="withdrawn" name="Withdrawn">
+        <bpmn:messageEventDefinition messageRef="ticketWithdrawn"/>
+      </bpmn:startEvent>
+      <bpmn:endEvent id="cancelled" name="Cancelled">
+        <bpmn:terminateEventDefinition/>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="toCancelled" sourceRef="withdrawn" targetRef="cancelled"/>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="toResolve" sourceRef="opened" targetRef="resolve"/>
+    <bpmn:sequenceFlow id="resolved" sourceRef="resolve" targetRef="closing"/>
+    <bpmn:sequenceFlow id="toTakeOver" sourceRef="sla" targetRef="takeOver"/>
+    <bpmn:sequenceFlow id="takenOver" sourceRef="takeOver" targetRef="closing"/>
+    <bpmn:sequenceFlow id="toFileBug" sourceRef="toEngineering" targetRef="fileBug"/>
+    <bpmn:sequenceFlow id="toFiled" sourceRef="fileBug" targetRef="filed"/>
+    <bpmn:sequenceFlow id="toClosed" sourceRef="closing" targetRef="closed"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1ecc6tk">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_pdvr2ly" bpmnElement="support-ticket">
+      <bpmndi:BPMNShape id="opened_Shape" bpmnElement="opened">
+        <dc:Bounds x="80" y="177" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="resolve_Shape" bpmnElement="resolve" isExpanded="true">
+        <dc:Bounds x="186" y="80" width="908" height="230"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="resolveStart_Shape" bpmnElement="resolveStart">
+        <dc:Bounds x="226" y="195" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="diagnose_Shape" bpmnElement="diagnose">
+        <dc:Bounds x="332" y="173" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="productBug_Shape" bpmnElement="productBug">
+        <dc:Bounds x="502" y="188" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="escalate_Shape" bpmnElement="escalate">
+        <dc:Bounds x="622" y="142" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="workaround_Shape" bpmnElement="workaround">
+        <dc:Bounds x="728" y="120" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="answered_Shape" bpmnElement="answered">
+        <dc:Bounds x="898" y="195" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="resolveEnd_Shape" bpmnElement="resolveEnd">
+        <dc:Bounds x="1018" y="202" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="takeOver_Shape" bpmnElement="takeOver">
+        <dc:Bounds x="1164" y="316" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="fileBug_Shape" bpmnElement="fileBug">
+        <dc:Bounds x="1164" y="456" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="filed_Shape" bpmnElement="filed">
+        <dc:Bounds x="1341" y="478" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="closing_Shape" bpmnElement="closing">
+        <dc:Bounds x="1334" y="170" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="closed_Shape" bpmnElement="closed">
+        <dc:Bounds x="1454" y="177" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="onReply_Shape" bpmnElement="onReply" isExpanded="true">
+        <dc:Bounds x="80" y="596" width="392" height="200"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="replied_Shape" bpmnElement="replied">
+        <dc:Bounds x="120" y="658" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="readReply_Shape" bpmnElement="readReply">
+        <dc:Bounds x="226" y="636" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="read_Shape" bpmnElement="read">
+        <dc:Bounds x="396" y="658" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="onWithdraw_Shape" bpmnElement="onWithdraw" isExpanded="true">
+        <dc:Bounds x="512" y="596" width="350" height="200"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="withdrawn_Shape" bpmnElement="withdrawn">
+        <dc:Bounds x="552" y="636" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="cancelled_Shape" bpmnElement="cancelled">
+        <dc:Bounds x="658" y="636" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sla_Shape" bpmnElement="sla">
+        <dc:Bounds x="773" y="292" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="toEngineering_Shape" bpmnElement="toEngineering">
+        <dc:Bounds x="471" y="292" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toDiagnose_Edge" bpmnElement="toDiagnose">
+        <di:waypoint x="262" y="213"/>
+        <di:waypoint x="332" y="213"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toBug_Edge" bpmnElement="toBug">
+        <di:waypoint x="432" y="213"/>
+        <di:waypoint x="502" y="213"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bugFlow_Edge" bpmnElement="bugFlow">
+        <di:waypoint x="527" y="188"/>
+        <di:waypoint x="527" y="160"/>
+        <di:waypoint x="622" y="160"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toWorkaround_Edge" bpmnElement="toWorkaround">
+        <di:waypoint x="658" y="160"/>
+        <di:waypoint x="728" y="160"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="noBugFlow_Edge" bpmnElement="noBugFlow">
+        <di:waypoint x="527" y="238"/>
+        <di:waypoint x="527" y="220"/>
+        <di:waypoint x="898" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="workedAround_Edge" bpmnElement="workedAround">
+        <di:waypoint x="828" y="160"/>
+        <di:waypoint x="923" y="160"/>
+        <di:waypoint x="923" y="195"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toResolveEnd_Edge" bpmnElement="toResolveEnd">
+        <di:waypoint x="948" y="220"/>
+        <di:waypoint x="1018" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toRead_Edge" bpmnElement="toRead">
+        <di:waypoint x="156" y="676"/>
+        <di:waypoint x="226" y="676"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toReadEnd_Edge" bpmnElement="toReadEnd">
+        <di:waypoint x="326" y="676"/>
+        <di:waypoint x="396" y="676"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toCancelled_Edge" bpmnElement="toCancelled">
+        <di:waypoint x="588" y="654"/>
+        <di:waypoint x="658" y="654"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toResolve_Edge" bpmnElement="toResolve">
+        <di:waypoint x="116" y="195"/>
+        <di:waypoint x="186" y="195"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="resolved_Edge" bpmnElement="resolved">
+        <di:waypoint x="1094" y="195"/>
+        <di:waypoint x="1334" y="195"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toTakeOver_Edge" bpmnElement="toTakeOver">
+        <di:waypoint x="791" y="328"/>
+        <di:waypoint x="791" y="356"/>
+        <di:waypoint x="1164" y="356"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="takenOver_Edge" bpmnElement="takenOver">
+        <di:waypoint x="1264" y="356"/>
+        <di:waypoint x="1359" y="356"/>
+        <di:waypoint x="1359" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toFileBug_Edge" bpmnElement="toFileBug">
+        <di:waypoint x="489" y="328"/>
+        <di:waypoint x="489" y="496"/>
+        <di:waypoint x="1164" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toFiled_Edge" bpmnElement="toFiled">
+        <di:waypoint x="1264" y="496"/>
+        <di:waypoint x="1341" y="496"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toClosed_Edge" bpmnElement="toClosed">
+        <di:waypoint x="1384" y="195"/>
+        <di:waypoint x="1454" y="195"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

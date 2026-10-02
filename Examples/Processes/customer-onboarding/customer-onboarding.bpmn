@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="customer-onboarding-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:message id="documentsReceived" name="documents-received"/>
+  <bpmn:process id="customer-onboarding" name="Customer onboarding" isExecutable="true">
+    <bpmn:documentation>A new business customer is sent a welcome pack and waits for their documents, reminded every week until they come. The checks the customer needs run side by side -- credit for a large account, sanctions for one abroad, identity always -- and an account manager is chased when verifying them takes more than two days.</bpmn:documentation>
+    <bpmn:startEvent id="signedUp" name="Customer signed up"/>
+    <bpmn:sendTask id="welcome" name="Send welcome pack" camunda:type="external" camunda:topic="mail"/>
+    <bpmn:eventBasedGateway id="waiting"/>
+    <bpmn:intermediateCatchEvent id="documents" name="Documents received">
+      <bpmn:messageEventDefinition messageRef="documentsReceived"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="aWeek" name="A week">
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>P7D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sendTask id="remind" name="Send reminder" camunda:type="external" camunda:topic="mail"/>
+    <bpmn:inclusiveGateway id="checks" name="Checks needed"/>
+    <bpmn:serviceTask id="creditCheck" name="Check credit" camunda:type="external" camunda:topic="credit-check"/>
+    <bpmn:serviceTask id="sanctionsCheck" name="Screen for sanctions" camunda:type="external" camunda:topic="sanctions"/>
+    <bpmn:userTask id="verify" name="Verify identity" camunda:candidateGroups="compliance"/>
+    <bpmn:boundaryEvent id="slow" name="2 days" attachedToRef="verify" cancelActivity="false">
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>P2D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sendTask id="chase" name="Chase account manager" camunda:type="external" camunda:topic="mail"/>
+    <bpmn:endEvent id="chased" name="Chased"/>
+    <bpmn:inclusiveGateway id="checked"/>
+    <bpmn:endEvent id="onboarded" name="Customer onboarded"/>
+    <bpmn:sequenceFlow id="toWelcome" sourceRef="signedUp" targetRef="welcome"/>
+    <bpmn:sequenceFlow id="toWaiting" sourceRef="welcome" targetRef="waiting"/>
+    <bpmn:sequenceFlow id="toDocuments" sourceRef="waiting" targetRef="documents"/>
+    <bpmn:sequenceFlow id="toWeek" sourceRef="waiting" targetRef="aWeek"/>
+    <bpmn:sequenceFlow id="toRemind" sourceRef="aWeek" targetRef="remind"/>
+    <bpmn:sequenceFlow id="waitAgain" sourceRef="remind" targetRef="waiting"/>
+    <bpmn:sequenceFlow id="toChecks" sourceRef="documents" targetRef="checks"/>
+    <bpmn:sequenceFlow id="creditFlow" name="large account" sourceRef="checks" targetRef="creditCheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">expectedVolume &gt; 100000</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="sanctionsFlow" name="abroad" sourceRef="checks" targetRef="sanctionsCheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">not(country in ["DE", "FR", "NL"])</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="identityFlow" name="always" sourceRef="checks" targetRef="verify">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="creditDone" sourceRef="creditCheck" targetRef="checked"/>
+    <bpmn:sequenceFlow id="sanctionsDone" sourceRef="sanctionsCheck" targetRef="checked"/>
+    <bpmn:sequenceFlow id="identityDone" sourceRef="verify" targetRef="checked"/>
+    <bpmn:sequenceFlow id="toChase" sourceRef="slow" targetRef="chase"/>
+    <bpmn:sequenceFlow id="toChased" sourceRef="chase" targetRef="chased"/>
+    <bpmn:sequenceFlow id="toOnboarded" sourceRef="checked" targetRef="onboarded"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_74v0yaq">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_h51z59k" bpmnElement="customer-onboarding">
+      <bpmndi:BPMNShape id="signedUp_Shape" bpmnElement="signedUp">
+        <dc:Bounds x="80" y="312" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="welcome_Shape" bpmnElement="welcome">
+        <dc:Bounds x="186" y="290" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="waiting_Shape" bpmnElement="waiting">
+        <dc:Bounds x="356" y="305" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="documents_Shape" bpmnElement="documents">
+        <dc:Bounds x="476" y="242" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="aWeek_Shape" bpmnElement="aWeek">
+        <dc:Bounds x="476" y="382" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="remind_Shape" bpmnElement="remind">
+        <dc:Bounds x="582" y="360" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="checks_Shape" bpmnElement="checks">
+        <dc:Bounds x="607" y="235" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="creditCheck_Shape" bpmnElement="creditCheck">
+        <dc:Bounds x="752" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sanctionsCheck_Shape" bpmnElement="sanctionsCheck">
+        <dc:Bounds x="752" y="220" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="verify_Shape" bpmnElement="verify">
+        <dc:Bounds x="752" y="360" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="chase_Shape" bpmnElement="chase">
+        <dc:Bounds x="922" y="507" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="chased_Shape" bpmnElement="chased">
+        <dc:Bounds x="1092" y="529" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="checked_Shape" bpmnElement="checked">
+        <dc:Bounds x="947" y="242" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="onboarded_Shape" bpmnElement="onboarded">
+        <dc:Bounds x="1092" y="249" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="slow_Shape" bpmnElement="slow">
+        <dc:Bounds x="784" y="422" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toWelcome_Edge" bpmnElement="toWelcome">
+        <di:waypoint x="116" y="330"/>
+        <di:waypoint x="186" y="330"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toWaiting_Edge" bpmnElement="toWaiting">
+        <di:waypoint x="286" y="330"/>
+        <di:waypoint x="356" y="330"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toDocuments_Edge" bpmnElement="toDocuments">
+        <di:waypoint x="381" y="305"/>
+        <di:waypoint x="381" y="260"/>
+        <di:waypoint x="476" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toWeek_Edge" bpmnElement="toWeek">
+        <di:waypoint x="381" y="355"/>
+        <di:waypoint x="381" y="400"/>
+        <di:waypoint x="476" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toRemind_Edge" bpmnElement="toRemind">
+        <di:waypoint x="512" y="400"/>
+        <di:waypoint x="582" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="waitAgain_Edge" bpmnElement="waitAgain">
+        <di:waypoint x="632" y="440"/>
+        <di:waypoint x="632" y="470"/>
+        <di:waypoint x="381" y="470"/>
+        <di:waypoint x="381" y="355"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toChecks_Edge" bpmnElement="toChecks">
+        <di:waypoint x="512" y="260"/>
+        <di:waypoint x="607" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="creditFlow_Edge" bpmnElement="creditFlow">
+        <di:waypoint x="632" y="235"/>
+        <di:waypoint x="632" y="120"/>
+        <di:waypoint x="752" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="sanctionsFlow_Edge" bpmnElement="sanctionsFlow">
+        <di:waypoint x="657" y="260"/>
+        <di:waypoint x="752" y="260"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="identityFlow_Edge" bpmnElement="identityFlow">
+        <di:waypoint x="657" y="260"/>
+        <di:waypoint x="705" y="260"/>
+        <di:waypoint x="705" y="400"/>
+        <di:waypoint x="752" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="creditDone_Edge" bpmnElement="creditDone">
+        <di:waypoint x="852" y="120"/>
+        <di:waypoint x="972" y="120"/>
+        <di:waypoint x="972" y="242"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="sanctionsDone_Edge" bpmnElement="sanctionsDone">
+        <di:waypoint x="852" y="260"/>
+        <di:waypoint x="972" y="260"/>
+        <di:waypoint x="972" y="242"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="identityDone_Edge" bpmnElement="identityDone">
+        <di:waypoint x="852" y="400"/>
+        <di:waypoint x="972" y="400"/>
+        <di:waypoint x="972" y="292"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toChase_Edge" bpmnElement="toChase">
+        <di:waypoint x="802" y="458"/>
+        <di:waypoint x="802" y="547"/>
+        <di:waypoint x="922" y="547"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toChased_Edge" bpmnElement="toChased">
+        <di:waypoint x="1022" y="547"/>
+        <di:waypoint x="1092" y="547"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="toOnboarded_Edge" bpmnElement="toOnboarded">
+        <di:waypoint x="997" y="267"/>
+        <di:waypoint x="1092" y="267"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
