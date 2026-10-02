@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:wf="https://workflowkit.local/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="order-fulfilment-definitions" targetNamespace="http://example.com/workflowkit">
   <bpmn:process id="order-fulfilment" name="Order fulfilment" isExecutable="true">
-    <bpmn:documentation>An order from the web shop: stock is checked, and an order in stock is charged and packed at the same time, then shipped by courier or by post. One out of stock waits for the warehouse to back-order it.</bpmn:documentation>
+    <bpmn:documentation>An order from the web shop: stock is checked, and an order in stock is charged and packed at the same time, then shipped by courier or by post. One out of stock waits for the warehouse to back-order it. The packing task is routed and given its due date by the workload listener, with a checklist and packing notes as its inputs, from which its packing slip is made as it completes; the customer is mailed when the order has gone; and the audit listener records the order from start to end.</bpmn:documentation>
+    <bpmn:extensionElements>
+      <camunda:executionListener event="start" delegateExpression="${audit}"/>
+      <camunda:executionListener event="end" delegateExpression="${audit}">
+        <camunda:field name="note" stringValue="order closed"/>
+      </camunda:executionListener>
+    </bpmn:extensionElements>
     <bpmn:startEvent id="received" name="Order received">
       <bpmn:extensionElements>
         <camunda:formData businessKey="orderNumber">
@@ -30,13 +36,44 @@
     <bpmn:endEvent id="backOrdered" name="Back-ordered"/>
     <bpmn:parallelGateway id="fork"/>
     <bpmn:serviceTask id="charge" name="Charge card" camunda:type="external" camunda:topic="payment"/>
-    <bpmn:userTask id="pack" name="Pick and pack" camunda:candidateGroups="warehouse" camunda:priority="=if express then 80 else 50"/>
+    <bpmn:userTask id="pack" name="Pick and pack" camunda:candidateGroups="warehouse" camunda:priority="=if express then 80 else 50">
+      <bpmn:extensionElements>
+        <camunda:taskListener event="create" delegateExpression="${workload}">
+          <camunda:field name="queue" stringValue="packing"/>
+          <camunda:field name="dueIn" expression="=if express then &quot;PT2H&quot; else &quot;P1D&quot;"/>
+        </camunda:taskListener>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="checklist">
+            <camunda:list>
+              <camunda:value>count the items</camunda:value>
+              <camunda:value>check the address</camunda:value>
+              <camunda:value>=if express then "red tape" else "brown tape"</camunda:value>
+            </camunda:list>
+          </camunda:inputParameter>
+          <camunda:inputParameter name="packing">
+            <camunda:map>
+              <camunda:entry key="customer">${customer}</camunda:entry>
+              <camunda:entry key="express">${express}</camunda:entry>
+              <camunda:entry key="items">=count(items)</camunda:entry>
+            </camunda:map>
+          </camunda:inputParameter>
+          <camunda:outputParameter name="packingSlip">={customer: packing.customer, items: packing.items, tape: checklist[3]}</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
     <bpmn:parallelGateway id="join"/>
     <bpmn:scriptTask id="shippingCost" name="Work out shipping" wf:action="shipping-cost"/>
     <bpmn:exclusiveGateway id="how" name="Express?" default="postFlow"/>
     <bpmn:serviceTask id="courier" name="Book courier" camunda:type="external" camunda:topic="courier"/>
     <bpmn:serviceTask id="post" name="Send by post" camunda:type="external" camunda:topic="post"/>
     <bpmn:exclusiveGateway id="sent"/>
+    <bpmn:serviceTask id="tellCustomer" name="Tell customer" camunda:delegateExpression="${mailer}">
+      <bpmn:extensionElements>
+        <camunda:field name="to" expression="=customer"/>
+        <camunda:field name="template" stringValue="order-shipped"/>
+        <camunda:field name="subject" expression="=&quot;Order &quot; + orderNumber + &quot; is on its way&quot;"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
     <bpmn:endEvent id="shipped" name="Shipped"/>
     <bpmn:sequenceFlow id="toCheck" sourceRef="received" targetRef="checkStock"/>
     <bpmn:sequenceFlow id="toInStock" sourceRef="checkStock" targetRef="inStock"/>
@@ -57,7 +94,8 @@
     <bpmn:sequenceFlow id="postFlow" name="standard" sourceRef="how" targetRef="post"/>
     <bpmn:sequenceFlow id="courierSent" sourceRef="courier" targetRef="sent"/>
     <bpmn:sequenceFlow id="postSent" sourceRef="post" targetRef="sent"/>
-    <bpmn:sequenceFlow id="toShipped" sourceRef="sent" targetRef="shipped"/>
+    <bpmn:sequenceFlow id="toTell" sourceRef="sent" targetRef="tellCustomer"/>
+    <bpmn:sequenceFlow id="toShipped" sourceRef="tellCustomer" targetRef="shipped"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_zhrq6i5">
     <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_lfx6tmu" bpmnElement="order-fulfilment">
@@ -104,7 +142,7 @@
         <dc:Bounds x="1396" y="283" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="shipped_Shape" bpmnElement="shipped">
-        <dc:Bounds x="1516" y="290" width="36" height="36"/>
+        <dc:Bounds x="1686" y="290" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="toCheck_Edge" bpmnElement="toCheck">
         <di:waypoint x="116" y="214"/>
@@ -177,6 +215,13 @@
         <di:waypoint x="1421" y="333"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toShipped_Edge" bpmnElement="toShipped">
+        <di:waypoint x="1616" y="308"/>
+        <di:waypoint x="1686" y="308"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="tellCustomer_Shape" bpmnElement="tellCustomer">
+        <dc:Bounds x="1516" y="268" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="toTell_Edge" bpmnElement="toTell">
         <di:waypoint x="1446" y="308"/>
         <di:waypoint x="1516" y="308"/>
       </bpmndi:BPMNEdge>

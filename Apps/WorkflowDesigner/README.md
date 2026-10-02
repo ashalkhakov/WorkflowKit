@@ -60,6 +60,28 @@ the element is:
 A field writes when you leave it or press Return. A check box or pop-up
 writes when used. Each write is one undoable change.
 
+### Tables
+
+What an element has a list of is a table, a row an entry:
+
+- **Input/Output** (tasks, subprocesses, call activities): input and
+  output parameters, a variable and its value. A value written as a
+  `camunda:list` or `camunda:map` shows as the FEEL it means, and stays a
+  list or map unless it is edited.
+- **Listeners** (every node, flow and the process; task listeners on user
+  tasks): when, and the delegate called, by class or by name. Under the
+  table, the selected listener's fields.
+- **Called Process:** the variables passed in (one by name, all, or the
+  business key) and passed back.
+- **Implementation** (service and send tasks): a delegate's fields, text or
+  an expression.
+
+**+** adds a row and **−** removes the selected one. Double-click a cell to
+edit it, and Return or leaving it writes it. Each of these is one undoable
+change, and the rows not touched are written back as they were. A value
+the engine reads as an expression is coloured, and checked as it is
+typed, as an expression field is.
+
 ### Expressions
 
 Fields the engine reads as expressions are coloured as you type. These
@@ -170,6 +192,7 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. |
 | `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's: layers by longest path, ordered to cross as little as they can, then placed by sweeps that move each layer as near its neighbours as its order and spacing allow (isotonic regression). Edges can leave a node's bottom. |
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
+| `WKDTableEditor` | A table property in the inspector, with its + and − and its detail table. |
 | `WKDExpressionField` | The expression field and the text storage that colours it, ported from the XForms Designer's XPath field, over the engine's `+[WFFeelExpression tokensOfText:place:]` and `+problemInText:place:`. |
 | `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with its DMTabBar (`ThirdParty/`). |
 | `WKDDeployment` | What a deployment sends: the process and the forms it embeds. |

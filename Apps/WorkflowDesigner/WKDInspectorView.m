@@ -1,6 +1,7 @@
 #import "WKDInspectorView.h"
 #import "WKDEditor.h"
 #import "WKDExpressionField.h"
+#import "WKDTableEditor.h"
 #import "WKDProperties.h"
 
 static const double WKDLabelWidth = 104;
@@ -99,6 +100,22 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 			NSView *control = nil;
 			double height = 22;
 			switch (property.kind) {
+			case WKDPropertyTable: {
+				/* The width of the pane, under its name. */
+				NSTextField *title = [self label:property.label bold:NO frame:NSMakeRect(12, y, width - 24, 16)];
+				[title setAlignment:NSTextAlignmentLeft];
+				[title setAutoresizingMask:NSViewWidthSizable];
+				[self addSubview:title];
+				y += 18;
+				height = [WKDTableEditor heightFor:property];
+				WKDTableEditor *table = [[WKDTableEditor alloc] initWithFrame:NSMakeRect(12, y, width - 24, height)
+				                                                     property:property];
+				table.editor = self.editor;
+				table.refused = self.refused;
+				table.explained = self.explained;
+				control = table;
+				break;
+			}
 			case WKDPropertyCheck: {
 				NSButton *box = [[NSButton alloc] initWithFrame:NSMakeRect(fieldX, y, fieldWidth, 18)];
 				[box setButtonType:NSButtonTypeSwitch];
@@ -161,7 +178,7 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 				break;
 			}
 			}
-			if (property.kind != WKDPropertyCheck) {
+			if (property.kind != WKDPropertyCheck && property.kind != WKDPropertyTable) {
 				[self addSubview:[self label:property.label bold:NO frame:NSMakeRect(12, y + 3, WKDLabelWidth, 16)]];
 			}
 			if (property.kind != WKDPropertyLongText) {
@@ -181,6 +198,9 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 /* The control being typed in: a field's editor is the first responder. */
 - (BOOL)isEditing:(id)control
 {
+	if ([control isKindOfClass:[WKDTableEditor class]]) {
+		return [(WKDTableEditor *)control isEditing];
+	}
 	id responder = [[self window] firstResponder];
 	if (responder == control) {
 		return YES;
@@ -196,6 +216,13 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 			continue;
 		}
 		WKDProperty *property = [_properties objectAtIndex:i];
+		if (property.kind == WKDPropertyTable) {
+			WKDTableEditor *table = control;
+			table.editor = self.editor;
+			table.elementId = self.elementId;
+			[table reload];
+			continue;
+		}
 		NSString *value = [property valueIn:self.editor of:self.elementId] ?: @"";
 		switch (property.kind) {
 		case WKDPropertyCheck:

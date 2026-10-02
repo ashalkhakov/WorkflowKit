@@ -198,3 +198,7 @@ xcodebuild -workspace WorkflowKit.xcworkspace -scheme WorkflowKit \
 - gnustep-base answers NO from
   `+[NSPropertyListSerialization propertyList:isValidForFormat:]` for valid
   dictionaries; the engine checks property-list values itself.
+- gnustep-base's `-[NSBundle loadAndReturnError:]` was a stub answering NO,
+  so no plugin bundle loaded (`-loadPluginsInDirectory:error:`, wf-serve's
+  `-Plugins`); gnustep-patches' `bundle-load-and-return-error` fixes it.
+  The tests compile the example delegates in rather than load them.

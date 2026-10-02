@@ -202,12 +202,20 @@ static NSMutableDictionary *WFStoreTypes;
 		NSMutableArray *configurers = [NSMutableArray array];
 		NSString *plugins = [[self setting:@"Plugins"] description];
 		if (plugins != nil) {
+			/* Absolute: NSBundle takes no other path. */
 			plugins = [plugins stringByExpandingTildeInPath];
+			if (![plugins isAbsolutePath]) {
+				plugins = [[[NSFileManager defaultManager] currentDirectoryPath] stringByAppendingPathComponent:plugins];
+			}
+			plugins = [plugins stringByStandardizingPath];
 			if (![engine loadPluginsInDirectory:[NSURL fileURLWithPath:plugins] error:&failure]) {
 				WFServerFail(error, [NSString stringWithFormat:@"Plugins %@: %@", plugins, [failure localizedDescription]]);
 				return nil;
 			}
 			for (NSString *bundle in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:plugins error:NULL]) {
+				if (![[bundle pathExtension] isEqualToString:@"bundle"] && ![[bundle pathExtension] isEqualToString:@"plugin"]) {
+					continue;
+				}
 				Class principal = [[NSBundle bundleWithPath:[plugins stringByAppendingPathComponent:bundle]] principalClass];
 				if ([principal conformsToProtocol:@protocol(ODataServiceConfiguring)]) {
 					[configurers addObject:principal];

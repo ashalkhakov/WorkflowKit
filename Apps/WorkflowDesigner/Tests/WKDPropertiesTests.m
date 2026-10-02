@@ -59,11 +59,12 @@
 	NSArray *(^titles)(NSString *) = ^NSArray *(NSString *elementId) {
 		return [WKDSectionsFor(editor, elementId) valueForKey:@"title"];
 	};
-	XCTAssertEqualObjects(titles(@"review"), (@[ @"General", @"Assignment", @"Form", @"Multi-instance", @"Continuation" ]));
-	XCTAssertEqualObjects(titles(@"f3"), (@[ @"General", @"Flow" ]));
-	XCTAssertEqualObjects(titles(@"late"), (@[ @"General", @"Event", @"Continuation" ]));
-	XCTAssertEqualObjects(titles(@"order"), (@[ @"Process", @"Starting", @"Running" ]));
-	XCTAssertEqualObjects(titles(@"start"), (@[ @"General", @"Form", @"Continuation" ]));
+	XCTAssertEqualObjects(titles(@"review"), (@[ @"General", @"Assignment", @"Form", @"Input/Output", @"Multi-instance",
+	                                             @"Listeners", @"Continuation" ]));
+	XCTAssertEqualObjects(titles(@"f3"), (@[ @"General", @"Flow", @"Listeners" ]));
+	XCTAssertEqualObjects(titles(@"late"), (@[ @"General", @"Event", @"Listeners", @"Continuation" ]));
+	XCTAssertEqualObjects(titles(@"order"), (@[ @"Process", @"Starting", @"Running", @"Listeners" ]));
+	XCTAssertEqualObjects(titles(@"start"), (@[ @"General", @"Form", @"Listeners", @"Continuation" ]));
 	XCTAssertEqualObjects(titles(@"nothing"), @[]);
 }
 

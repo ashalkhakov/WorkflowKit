@@ -466,7 +466,7 @@ ODATA_FW = dict(FW, **{
 TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowKitTests",
     "GCC_PREPROCESSOR_DEFINITIONS": '("$(inherited)", "WORKFLOWKIT_ODATA=1")',
-    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData")',
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData", "$(SRCROOT)/Examples/Plugins")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
 SERVE_S = {

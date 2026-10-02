@@ -26,7 +26,33 @@ typedef NS_ENUM(NSInteger, WKDPropertyKind) {
 	WKDPropertyLongText,
 	WKDPropertyCheck,
 	WKDPropertyChoice,
+	/* A list of entries, a row each in a table: input parameters,
+	 * listeners, a call activity's variables, a delegate's fields. */
+	WKDPropertyTable,
 };
+
+/* A table's column: text, a choice or a check box, as a property's value is. */
+@interface WKDColumn : NSObject
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic) WKDPropertyKind kind;
+@property (nonatomic, copy) NSArray<NSString *> *values;
+@property (nonatomic, copy) NSArray<NSString *> *titles;
+@property (nonatomic, copy) NSString *placeholder;
+@property (nonatomic) BOOL holdsExpression;
+@property (nonatomic) WFExpressionPlace place;
+/* Of the table's width. */
+@property (nonatomic) double share;
+@end
+
+/* A table's row: its values, a column each, and which entry it was read
+ * from -- its index among the entries, NSNotFound for a row being added --
+ * so that writing the rows changes only what changed: an entry written in
+ * a form the table does not show (a camunda:list) stays as it is. */
+@interface WKDRow : NSObject
+@property (nonatomic) NSUInteger source;
+@property (nonatomic, copy) NSArray<NSString *> *values;
++ (instancetype)rowWithValues:(NSArray<NSString *> *)values;
+@end
 
 @interface WKDProperty : NSObject
 @property (nonatomic, copy) NSString *label;
@@ -46,6 +72,19 @@ typedef NS_ENUM(NSInteger, WKDPropertyKind) {
 /* A new value: one change, or nothing when it is the value already. NO,
  * with why, when it is refused -- an id that is taken. */
 - (BOOL)setValue:(NSString *)value in:(WKDEditor *)editor of:(NSString *)elementId error:(NSString **)reason;
+
+/* A table's: its columns, what a new row holds, and a table of what each
+ * of its rows holds in turn -- a listener's fields -- or nil. */
+@property (nonatomic, copy) NSArray<WKDColumn *> *columns;
+@property (nonatomic, copy) NSArray<NSString *> *blankRow;
+@property (nonatomic, strong) WKDProperty *detail;
+/* The rows now: of the element's entries, or, for a detail, of the entries
+ * of the master table's row from master (NSNotFound for the element's). */
+- (NSArray<WKDRow *> *)rowsIn:(WKDEditor *)editor of:(NSString *)elementId master:(NSUInteger)master;
+/* The rows as they are to be -- edited, added, removed, reordered: one
+ * change, or nothing when they are as they were. */
+- (BOOL)setRows:(NSArray<WKDRow *> *)rows in:(WKDEditor *)editor of:(NSString *)elementId
+         master:(NSUInteger)master error:(NSString **)reason;
 @end
 
 @interface WKDSection : NSObject

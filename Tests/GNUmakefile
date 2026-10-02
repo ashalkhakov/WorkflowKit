@@ -9,6 +9,7 @@ BUNDLE_NAME = WorkflowKitTests
 # included by each backend's file (see WFTestCase.h).
 WorkflowKitTests_OBJC_FILES = \
 	WFTestCase.m \
+	../Examples/Plugins/WFExampleDelegates.m \
 	WFFeelTests.m \
 	WFExpressionTextTests.m \
 	WFDmnTests.m \
@@ -49,7 +50,7 @@ endif
 WorkflowKitTests_INCLUDE_DIRS += -I../OData
 endif
 WorkflowKitTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
-WorkflowKitTests_INCLUDE_DIRS += -I../Headers
+WorkflowKitTests_INCLUDE_DIRS += -I../Headers -I../Examples/Plugins
 ADDITIONAL_LIB_DIRS += -L../$(GNUSTEP_OBJ_DIR)
 WorkflowKitTests_BUNDLE_LIBS += -lWorkflowKit -lCoreData -lXCTest -ldispatch
 WorkflowKitTests_XCDATAMODELD_FILES = ../Model/WorkflowKit.xcdatamodeld

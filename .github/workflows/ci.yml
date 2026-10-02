@@ -221,6 +221,7 @@ jobs:
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make server postgresql=yes mysql=yes
           make -C Server check
+          make -C Examples/Plugins
 
       # WorkflowDesk, over XFormsKit's framework: built, and its tests --
       # signing in, and forms -- run, which need no window server.

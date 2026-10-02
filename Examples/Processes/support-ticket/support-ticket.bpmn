@@ -4,11 +4,22 @@
   <bpmn:message id="ticketWithdrawn" name="ticket-withdrawn"/>
   <bpmn:escalation id="needsEngineering" name="Needs engineering" escalationCode="engineering"/>
   <bpmn:process id="support-ticket" name="Support ticket" isExecutable="true">
-    <bpmn:documentation>Support resolves a ticket within eight hours, or a supervisor takes it over. A ticket that needs a product fix is escalated: engineering is told while support goes on. The customer may write in at any time, and may withdraw the ticket, which ends everything.</bpmn:documentation>
+    <bpmn:documentation>Support resolves a ticket within eight hours, or a supervisor takes it over. A ticket that needs a product fix is escalated: engineering is told while support goes on. The customer may write in at any time, and may withdraw the ticket, which ends everything. The workload listener gives the diagnosis an urgent ticket an hour, any other four; the audit listener records when resolving starts and ends.</bpmn:documentation>
     <bpmn:startEvent id="opened" name="Ticket opened"/>
     <bpmn:subProcess id="resolve" name="Resolve ticket">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${audit}"/>
+        <camunda:executionListener event="end" delegateExpression="${audit}"/>
+      </bpmn:extensionElements>
       <bpmn:startEvent id="resolveStart"/>
-      <bpmn:userTask id="diagnose" name="Diagnose" camunda:candidateGroups="support"/>
+      <bpmn:userTask id="diagnose" name="Diagnose" camunda:candidateGroups="support">
+        <bpmn:extensionElements>
+          <camunda:taskListener event="create" delegateExpression="${workload}">
+            <camunda:field name="queue" stringValue="support"/>
+            <camunda:field name="dueIn" expression="=if priority = &quot;urgent&quot; then &quot;PT1H&quot; else &quot;PT4H&quot;"/>
+          </camunda:taskListener>
+        </bpmn:extensionElements>
+      </bpmn:userTask>
       <bpmn:exclusiveGateway id="productBug" name="Product bug?" default="noBugFlow"/>
       <bpmn:intermediateThrowEvent id="escalate" name="Needs engineering">
         <bpmn:escalationEventDefinition escalationRef="needsEngineering"/>

@@ -1,46 +1,100 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
              xmlns:camunda="http://camunda.org/schema/1.0/dmn"
-             id="risk-definitions" name="Loan risk" namespace="http://example.com/workflowkit">
+             id="risk-definitions" name="Loan decisions" namespace="http://example.com/workflowkit">
+  <!-- Points for what is known of the applicant, added up (COLLECT SUM). -->
+  <decision id="applicant-score" name="Applicant score">
+    <decisionTable id="scoreTable" hitPolicy="COLLECT" aggregation="SUM">
+      <input id="yearsInput" label="Years employed">
+        <inputExpression id="yearsExpression" typeRef="integer">
+          <text>years and months duration(date(employedSince), today()).years</text>
+        </inputExpression>
+      </input>
+      <input id="ratioInput" label="Debts to income">
+        <inputExpression id="ratioExpression" typeRef="double"><text>debts / income</text></inputExpression>
+      </input>
+      <input id="historyInput" label="Has defaulted">
+        <inputExpression id="historyExpression" typeRef="boolean"><text>hasDefaulted</text></inputExpression>
+      </input>
+      <output id="scoreOutput" name="score" typeRef="integer"/>
+      <rule id="longEmployed">
+        <inputEntry id="longYears"><text>&gt;= 5</text></inputEntry>
+        <inputEntry id="longRatio"><text>-</text></inputEntry>
+        <inputEntry id="longHistory"><text>-</text></inputEntry>
+        <outputEntry id="longPoints"><text>30</text></outputEntry>
+      </rule>
+      <rule id="employed">
+        <inputEntry id="employedYears"><text>[2..5)</text></inputEntry>
+        <inputEntry id="employedRatio"><text>-</text></inputEntry>
+        <inputEntry id="employedHistory"><text>-</text></inputEntry>
+        <outputEntry id="employedPoints"><text>15</text></outputEntry>
+      </rule>
+      <rule id="lowDebt">
+        <inputEntry id="lowDebtYears"><text>-</text></inputEntry>
+        <inputEntry id="lowDebtRatio"><text>&lt; 0.2</text></inputEntry>
+        <inputEntry id="lowDebtHistory"><text>-</text></inputEntry>
+        <outputEntry id="lowDebtPoints"><text>40</text></outputEntry>
+      </rule>
+      <rule id="someDebt">
+        <inputEntry id="someDebtYears"><text>-</text></inputEntry>
+        <inputEntry id="someDebtRatio"><text>[0.2..0.4)</text></inputEntry>
+        <inputEntry id="someDebtHistory"><text>-</text></inputEntry>
+        <outputEntry id="someDebtPoints"><text>20</text></outputEntry>
+      </rule>
+      <rule id="cleanHistory">
+        <inputEntry id="cleanYears"><text>-</text></inputEntry>
+        <inputEntry id="cleanRatio"><text>-</text></inputEntry>
+        <inputEntry id="cleanHistoryFlag"><text>false</text></inputEntry>
+        <outputEntry id="cleanPoints"><text>20</text></outputEntry>
+      </rule>
+      <rule id="defaulted">
+        <inputEntry id="defaultedYears"><text>-</text></inputEntry>
+        <inputEntry id="defaultedRatio"><text>-</text></inputEntry>
+        <inputEntry id="defaultedFlag"><text>true</text></inputEntry>
+        <outputEntry id="defaultedPoints"><text>-100</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <!-- The risk, from the score (required: evaluated first) and how much of
+       a year's income is asked for. -->
   <decision id="loan-risk" name="Loan risk">
+    <informationRequirement id="riskNeedsScore"><requiredDecision href="#applicant-score"/></informationRequirement>
     <decisionTable id="riskTable" hitPolicy="FIRST">
-      <input id="amountInput" label="Amount">
-        <inputExpression id="amountExpression" typeRef="long"><text>amount</text></inputExpression>
+      <input id="riskScoreInput" label="Score">
+        <inputExpression id="riskScoreExpression" typeRef="integer"><text>score</text></inputExpression>
       </input>
-      <input id="incomeInput" label="Yearly income">
-        <inputExpression id="incomeExpression" typeRef="long"><text>income</text></inputExpression>
-      </input>
-      <input id="defaultsInput" label="Earlier defaults">
-        <inputExpression id="defaultsExpression" typeRef="boolean"><text>hasDefaulted</text></inputExpression>
+      <input id="shareInput" label="Amount to income">
+        <inputExpression id="shareExpression" typeRef="double"><text>amount / income</text></inputExpression>
       </input>
       <output id="riskOutput" name="risk" typeRef="string"/>
-      <rule id="defaulted">
-        <description>Anyone who has defaulted before is declined.</description>
-        <inputEntry id="defaultedAmount"><text>-</text></inputEntry>
-        <inputEntry id="defaultedIncome"><text>-</text></inputEntry>
-        <inputEntry id="defaultedFlag"><text>true</text></inputEntry>
-        <outputEntry id="defaultedRisk"><text>"high"</text></outputEntry>
+      <rule id="badScore">
+        <description>A default outweighs everything.</description>
+        <inputEntry id="badScoreEntry"><text>&lt; 0</text></inputEntry>
+        <inputEntry id="badShare"><text>-</text></inputEntry>
+        <outputEntry id="badRisk"><text>"high"</text></outputEntry>
       </rule>
-      <rule id="small">
-        <description>A tenth of a year's income or less.</description>
-        <inputEntry id="smallAmount"><text>&lt;= income / 10</text></inputEntry>
-        <inputEntry id="smallIncome"><text>-</text></inputEntry>
-        <inputEntry id="smallFlag"><text>-</text></inputEntry>
-        <outputEntry id="smallRisk"><text>"low"</text></outputEntry>
+      <rule id="strong">
+        <inputEntry id="strongScore"><text>&gt;= 70</text></inputEntry>
+        <inputEntry id="strongShare"><text>&lt;= 0.5</text></inputEntry>
+        <outputEntry id="strongRisk"><text>"low"</text></outputEntry>
       </rule>
-      <rule id="affordable">
-        <description>Up to half a year's income.</description>
-        <inputEntry id="affordableAmount"><text>&lt;= income / 2</text></inputEntry>
-        <inputEntry id="affordableIncome"><text>-</text></inputEntry>
-        <inputEntry id="affordableFlag"><text>-</text></inputEntry>
-        <outputEntry id="affordableRisk"><text>"medium"</text></outputEntry>
+      <rule id="fair">
+        <inputEntry id="fairScore"><text>&gt;= 40</text></inputEntry>
+        <inputEntry id="fairShare"><text>&lt;= 1</text></inputEntry>
+        <outputEntry id="fairRisk"><text>"medium"</text></outputEntry>
       </rule>
       <rule id="otherwise">
-        <inputEntry id="otherAmount"><text>-</text></inputEntry>
-        <inputEntry id="otherIncome"><text>-</text></inputEntry>
-        <inputEntry id="otherFlag"><text>-</text></inputEntry>
+        <inputEntry id="otherScore"><text>-</text></inputEntry>
+        <inputEntry id="otherShare"><text>-</text></inputEntry>
         <outputEntry id="otherRisk"><text>"high"</text></outputEntry>
       </rule>
     </decisionTable>
+  </decision>
+  <!-- The most that can be lent: a literal expression. -->
+  <decision id="loan-limit" name="Loan limit">
+    <variable id="limitVariable" name="maxLoan" typeRef="double"/>
+    <literalExpression id="limitExpression">
+      <text>if income * 0.4 &gt; debts then income * 0.4 - debts else 0</text>
+    </literalExpression>
   </decision>
 </definitions>

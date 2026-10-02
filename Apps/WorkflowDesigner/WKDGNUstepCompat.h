@@ -9,4 +9,5 @@
 #define NSCompositingOperationSourceOver NSCompositeSourceOver
 #define NSButtonTypeSwitch NSSwitchButton
 #define NSBitmapImageFileTypePNG NSPNGFileType
+#define NSBezelStyleSmallSquare NSSmallSquareBezelStyle
 #endif

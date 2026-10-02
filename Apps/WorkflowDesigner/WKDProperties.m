@@ -7,9 +7,45 @@ typedef NSString *(^WKDRead)(NSXMLElement *element, NSXMLDocument *document);
 /* NO, with why, when it cannot be written. */
 typedef BOOL (^WKDWrite)(WKDEditor *editor, NSString *elementId, NSString *value, NSString **reason);
 
+/* A table's entries in what holds them -- the element, or a master row's
+ * entry -- each read as a row, written from one, made, and what is left
+ * empty when they go tidied away. */
+typedef NSArray<NSXMLElement *> *(^WKDEntries)(NSXMLElement *container);
+typedef NSArray<NSString *> *(^WKDReadRow)(NSXMLElement *entry, NSXMLDocument *document);
+typedef void (^WKDWriteRow)(NSXMLElement *entry, NSArray<NSString *> *values, NSXMLDocument *document);
+typedef NSXMLElement *(^WKDMakeEntry)(NSXMLElement *container, NSXMLDocument *document);
+typedef void (^WKDTidy)(NSXMLElement *container);
+
 @interface WKDProperty ()
 @property (nonatomic, copy) WKDRead read;
 @property (nonatomic, copy) WKDWrite write;
+@property (nonatomic, copy) WKDEntries entries;
+@property (nonatomic, copy) WKDReadRow readRow;
+@property (nonatomic, copy) WKDWriteRow writeRow;
+@property (nonatomic, copy) WKDMakeEntry makeEntry;
+@property (nonatomic, copy) WKDTidy tidy;
+/* A detail's table, whose rows' entries hold its entries. */
+@property (nonatomic, weak) WKDProperty *masterTable;
+@end
+
+@implementation WKDColumn
+- (instancetype)init
+{
+	if ((self = [super init])) {
+		_share = 1;
+	}
+	return self;
+}
+@end
+
+@implementation WKDRow
++ (instancetype)rowWithValues:(NSArray<NSString *> *)values
+{
+	WKDRow *row = [[self alloc] init];
+	row.source = NSNotFound;
+	row.values = values;
+	return row;
+}
 @end
 
 @implementation WKDProperty
@@ -28,6 +64,88 @@ typedef BOOL (^WKDWrite)(WKDEditor *editor, NSString *elementId, NSString *value
 		return YES;
 	}
 	return self.write(editor, elementId, trimmed ?: @"", reason);
+}
+
+- (void)setDetail:(WKDProperty *)detail
+{
+	_detail = detail;
+	detail.masterTable = self;
+}
+
+/* What holds the table's entries: the element, or a master row's entry. */
+- (NSXMLElement *)containerIn:(NSXMLElement *)element master:(NSUInteger)master
+{
+	if (master == NSNotFound || self.masterTable == nil) {
+		return element;
+	}
+	NSArray *masters = self.masterTable.entries(element);
+	return master < [masters count] ? [masters objectAtIndex:master] : nil;
+}
+
+- (NSArray<WKDRow *> *)rowsIn:(WKDEditor *)editor of:(NSString *)elementId master:(NSUInteger)master
+{
+	NSXMLElement *element = [editor elementWithId:elementId];
+	NSXMLElement *container = element != nil ? [self containerIn:element master:master] : nil;
+	if (container == nil || self.entries == nil) {
+		return @[];
+	}
+	NSMutableArray *rows = [NSMutableArray array];
+	NSArray *entries = self.entries(container);
+	for (NSUInteger i = 0; i < [entries count]; i++) {
+		WKDRow *row = [WKDRow rowWithValues:self.readRow([entries objectAtIndex:i], editor.document)];
+		row.source = i;
+		[rows addObject:row];
+	}
+	return rows;
+}
+
+static NSArray<NSString *> *
+WKDTrimmed(NSArray<NSString *> *values)
+{
+	NSMutableArray *trimmed = [NSMutableArray array];
+	for (NSString *value in values) {
+		[trimmed addObject:[value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+	}
+	return trimmed;
+}
+
+- (BOOL)setRows:(NSArray<WKDRow *> *)rows in:(WKDEditor *)editor of:(NSString *)elementId
+         master:(NSUInteger)master error:(NSString **)reason
+{
+	NSArray<WKDRow *> *before = [self rowsIn:editor of:elementId master:master];
+	BOOL same = [before count] == [rows count];
+	for (NSUInteger i = 0; same && i < [rows count]; i++) {
+		WKDRow *was = [before objectAtIndex:i], *now = [rows objectAtIndex:i];
+		same = was.source == now.source && [was.values isEqualToArray:WKDTrimmed(now.values)];
+	}
+	if (same) {
+		return YES;
+	}
+	return [editor edit:elementId action:self.label with:^(NSXMLElement *element, NSXMLDocument *document) {
+		NSXMLElement *container = [self containerIn:element master:master];
+		if (container == nil) {
+			return;
+		}
+		NSArray *existing = self.entries(container);
+		NSMutableArray *kept = [NSMutableArray array];
+		for (WKDRow *row in rows) {
+			NSXMLElement *entry = row.source < [existing count] ? [existing objectAtIndex:row.source]
+				: self.makeEntry(container, document);
+			NSArray *values = WKDTrimmed(row.values);
+			if (![self.readRow(entry, document) isEqualToArray:values]) {
+				self.writeRow(entry, values, document);
+			}
+			[kept addObject:entry];
+		}
+		for (NSXMLElement *entry in existing) {
+			if ([kept indexOfObjectIdenticalTo:entry] == NSNotFound) {
+				[entry detach];
+			}
+		}
+		if (self.tidy != nil) {
+			self.tidy(container);
+		}
+	}];
 }
 
 @end
@@ -534,6 +652,306 @@ WKDProcessSections(void)
 	                                        WKDCamunda(@"Task priority", @"taskPriority") ]) ];
 }
 
+#pragma mark Tables
+
+static WKDColumn *
+WKDTextColumn(NSString *title, double share)
+{
+	WKDColumn *column = [[WKDColumn alloc] init];
+	column.title = title;
+	column.kind = WKDPropertyText;
+	column.share = share;
+	return column;
+}
+
+/* Text the engine reads as literal unless it is ${...} or =FEEL. */
+static WKDColumn *
+WKDValueColumn(NSString *title, double share)
+{
+	WKDColumn *column = WKDTextColumn(title, share);
+	column.holdsExpression = YES;
+	column.place = WFExpressionPlaceAttribute;
+	return column;
+}
+
+static WKDColumn *
+WKDChoiceColumn(NSString *title, NSArray *values, NSArray *titles, double share)
+{
+	WKDColumn *column = WKDTextColumn(title, share);
+	column.kind = WKDPropertyChoice;
+	column.values = values;
+	column.titles = titles;
+	return column;
+}
+
+static WKDProperty *
+WKDTable(NSString *label, NSArray<WKDColumn *> *columns, NSArray<NSString *> *blankRow, WKDEntries entries,
+         WKDReadRow read, WKDWriteRow write, WKDMakeEntry make, WKDTidy tidy)
+{
+	WKDProperty *property = [[WKDProperty alloc] init];
+	property.label = label;
+	property.kind = WKDPropertyTable;
+	property.columns = columns;
+	property.blankRow = blankRow;
+	property.entries = entries;
+	property.readRow = read;
+	property.writeRow = write;
+	property.makeEntry = make;
+	property.tidy = tidy;
+	return property;
+}
+
+static NSXMLElement *
+WKDExtensions(NSXMLElement *element)
+{
+	return WKDChild(element, WKDBpmnNamespace, @"extensionElements");
+}
+
+static BOOL
+WKDHoldsElements(NSXMLElement *element)
+{
+	for (NSXMLNode *child in [element children]) {
+		if ([child kind] == NSXMLElementKind) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* What is left empty goes: a wrapper with nothing in it, then the
+ * extension elements. */
+static void
+WKDTidyExtensions(NSXMLElement *element, NSString *wrapper)
+{
+	NSXMLElement *extensions = WKDExtensions(element);
+	if (wrapper != nil) {
+		NSXMLElement *holder = WKDChild(extensions, WKDCamundaNamespace, wrapper);
+		if (holder != nil && !WKDHoldsElements(holder)) {
+			[holder detach];
+		}
+	}
+	if (extensions != nil && !WKDHoldsElements(extensions)) {
+		[extensions detach];
+	}
+}
+
+/* A new camunda: element at the end of what holds it. */
+static NSXMLElement *
+WKDAppendCamunda(NSXMLDocument *document, NSXMLElement *holder, NSString *local)
+{
+	NSXMLElement *entry = WKDNewElement(document, WKDCamundaNamespace, local);
+	[holder addChild:entry];
+	return entry;
+}
+
+/* A parameter's value as text: the element's own, or a camunda:list or
+ * camunda:map written as the FEEL the engine reads it as. */
+static NSString *
+WKDParameterText(NSXMLElement *parameter)
+{
+	NSXMLElement *structured = [WKDChildren(parameter, WKDCamundaNamespace, nil) firstObject];
+	if (structured == nil) {
+		return [[parameter stringValue] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+	}
+	NSString *(^item)(NSXMLElement *) = ^NSString *(NSXMLElement *value) {
+		NSString *text = WKDParameterText(value);
+		if ([text hasPrefix:@"="]) {
+			return [text substringFromIndex:1];
+		}
+		if (([text hasPrefix:@"${"] || [text hasPrefix:@"#{"]) && [text hasSuffix:@"}"]) {
+			return [text substringWithRange:NSMakeRange(2, [text length] - 3)];
+		}
+		return [NSString stringWithFormat:@"\"%@\"", [text stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""]];
+	};
+	NSMutableArray *parts = [NSMutableArray array];
+	if ([[structured localName] isEqualToString:@"list"]) {
+		for (NSXMLElement *value in WKDChildren(structured, WKDCamundaNamespace, nil)) {
+			[parts addObject:item(value)];
+		}
+		return [NSString stringWithFormat:@"=[%@]", [parts componentsJoinedByString:@", "]];
+	}
+	if ([[structured localName] isEqualToString:@"map"]) {
+		for (NSXMLElement *entry in WKDChildren(structured, WKDCamundaNamespace, @"entry")) {
+			[parts addObject:[NSString stringWithFormat:@"\"%@\": %@", WKDAttribute(entry, @"key") ?: @"", item(entry)]];
+		}
+		return [NSString stringWithFormat:@"={%@}", [parts componentsJoinedByString:@", "]];
+	}
+	return [NSString stringWithFormat:@"camunda:%@", [structured localName]];
+}
+
+/* camunda:inputOutput's input or output parameters: a name and a value,
+ * literal, ${...} or =FEEL. */
+static WKDProperty *
+WKDParameters(BOOL inputs)
+{
+	NSString *local = inputs ? @"inputParameter" : @"outputParameter";
+	WKDEntries entries = ^NSArray *(NSXMLElement *element) {
+		NSXMLElement *holder = WKDChild(WKDExtensions(element), WKDCamundaNamespace, @"inputOutput");
+		return holder != nil ? WKDChildren(holder, WKDCamundaNamespace, local) : @[];
+	};
+	WKDReadRow read = ^NSArray *(NSXMLElement *entry, NSXMLDocument *document) {
+		return @[ WKDAttribute(entry, @"name") ?: @"", WKDParameterText(entry) ];
+	};
+	WKDWriteRow write = ^(NSXMLElement *entry, NSArray *values, NSXMLDocument *document) {
+		WKDSetAttribute(entry, @"name", [values[0] length] > 0 ? values[0] : nil);
+		if (![values[1] isEqualToString:WKDParameterText(entry)]) {
+			[entry setStringValue:values[1]];
+		}
+	};
+	WKDMakeEntry make = ^NSXMLElement *(NSXMLElement *element, NSXMLDocument *document) {
+		NSXMLElement *extensions = WKDEnsureChild(document, element, WKDBpmnNamespace, @"extensionElements");
+		NSXMLElement *holder = WKDEnsureChild(document, extensions, WKDCamundaNamespace, @"inputOutput");
+		NSXMLElement *entry = WKDNewElement(document, WKDCamundaNamespace, local);
+		/* Inputs before outputs, as the schema has them. */
+		NSXMLElement *firstOutput = inputs ? WKDChild(holder, WKDCamundaNamespace, @"outputParameter") : nil;
+		if (firstOutput != nil) {
+			[holder insertChild:entry atIndex:[firstOutput index]];
+		} else {
+			[holder addChild:entry];
+		}
+		return entry;
+	};
+	WKDProperty *table = WKDTable(inputs ? @"Inputs" : @"Outputs",
+		@[ WKDTextColumn(@"Variable", 1), WKDValueColumn(@"Value", 1.6) ], @[ @"", @"" ], entries, read, write, make,
+		^(NSXMLElement *element) {
+			WKDTidyExtensions(element, @"inputOutput");
+		});
+	table.placeholder = inputs ? @"Local variables, set as the activity is entered"
+		: @"Variables set where the activity is, as it completes";
+	return table;
+}
+
+/* camunda:field, on a delegate or a listener: a name, and text or an
+ * expression. */
+static WKDProperty *
+WKDFields(BOOL inExtensions)
+{
+	WKDEntries entries = ^NSArray *(NSXMLElement *container) {
+		NSXMLElement *holder = inExtensions ? WKDExtensions(container) : container;
+		return holder != nil ? WKDChildren(holder, WKDCamundaNamespace, @"field") : @[];
+	};
+	WKDReadRow read = ^NSArray *(NSXMLElement *field, NSXMLDocument *document) {
+		NSString *expression = WKDAttribute(field, @"expression")
+			?: WKDChildText(field, WKDCamundaNamespace, @"expression");
+		NSString *text = WKDAttribute(field, @"stringValue") ?: WKDChildText(field, WKDCamundaNamespace, @"string");
+		return @[ WKDAttribute(field, @"name") ?: @"", expression != nil ? @"expression" : @"string",
+		          expression ?: text ?: @"" ];
+	};
+	WKDWriteRow write = ^(NSXMLElement *field, NSArray *values, NSXMLDocument *document) {
+		WKDSetAttribute(field, @"name", [values[0] length] > 0 ? values[0] : nil);
+		WKDSetAttribute(field, @"stringValue", nil);
+		WKDSetAttribute(field, @"expression", nil);
+		for (NSXMLElement *child in WKDChildren(field, WKDCamundaNamespace, nil)) {
+			[child detach];
+		}
+		WKDSetAttribute(field, [values[1] isEqualToString:@"expression"] ? @"expression" : @"stringValue", values[2]);
+	};
+	WKDMakeEntry make = ^NSXMLElement *(NSXMLElement *container, NSXMLDocument *document) {
+		NSXMLElement *holder = inExtensions
+			? WKDEnsureChild(document, container, WKDBpmnNamespace, @"extensionElements") : container;
+		return WKDAppendCamunda(document, holder, @"field");
+	};
+	WKDProperty *table = WKDTable(@"Fields",
+		@[ WKDTextColumn(@"Field", 1), WKDChoiceColumn(@"As", @[ @"string", @"expression" ], @[ @"Text", @"Expression" ], 0.9),
+		   WKDValueColumn(@"Value", 1.4) ], @[ @"", @"string", @"" ], entries, read, write, make,
+		inExtensions ? ^(NSXMLElement *element) { WKDTidyExtensions(element, nil); } : nil);
+	table.placeholder = @"Set on the delegate by key-value coding";
+	return table;
+}
+
+/* camunda:executionListener or camunda:taskListener: when, and the delegate
+ * it calls, by class or by name, with its fields. */
+static WKDProperty *
+WKDListeners(BOOL task, NSArray *events)
+{
+	NSString *local = task ? @"taskListener" : @"executionListener";
+	WKDEntries entries = ^NSArray *(NSXMLElement *element) {
+		NSXMLElement *extensions = WKDExtensions(element);
+		return extensions != nil ? WKDChildren(extensions, WKDCamundaNamespace, local) : @[];
+	};
+	WKDReadRow read = ^NSArray *(NSXMLElement *listener, NSXMLDocument *document) {
+		NSString *expression = WKDAttribute(listener, @"delegateExpression");
+		return @[ WKDAttribute(listener, @"event") ?: [events firstObject],
+		          expression != nil ? @"delegateExpression" : @"class",
+		          expression ?: WKDAttribute(listener, @"class") ?: @"" ];
+	};
+	WKDWriteRow write = ^(NSXMLElement *listener, NSArray *values, NSXMLDocument *document) {
+		WKDSetAttribute(listener, @"event", values[0]);
+		WKDSetAttribute(listener, @"class", nil);
+		WKDSetAttribute(listener, @"delegateExpression", nil);
+		/* Even empty: which it is to be is kept until it is filled in. */
+		WKDSetAttribute(listener, values[1], values[2]);
+	};
+	WKDMakeEntry make = ^NSXMLElement *(NSXMLElement *element, NSXMLDocument *document) {
+		return WKDAppendCamunda(document, WKDEnsureChild(document, element, WKDBpmnNamespace, @"extensionElements"), local);
+	};
+	NSDictionary *titles = @{ @"start": @"Start", @"end": @"End", @"take": @"Take", @"create": @"Create",
+	                          @"assignment": @"Assignment", @"complete": @"Complete", @"delete": @"Delete" };
+	NSMutableArray *eventTitles = [NSMutableArray array];
+	for (NSString *event in events) {
+		[eventTitles addObject:[titles objectForKey:event]];
+	}
+	WKDProperty *table = WKDTable(task ? @"Task listeners" : @"Execution listeners",
+		@[ WKDChoiceColumn(@"On", events, eventTitles, 0.9),
+		   WKDChoiceColumn(@"By", @[ @"class", @"delegateExpression" ], @[ @"Class", @"Name" ], 0.8),
+		   WKDValueColumn(@"Delegate", 1.5) ],
+		@[ [events firstObject], @"delegateExpression", @"" ], entries, read, write, make,
+		^(NSXMLElement *element) {
+			WKDTidyExtensions(element, nil);
+		});
+	table.detail = WKDFields(NO);
+	table.placeholder = @"Host code, as a delegate is found: a class, or ${name} registered";
+	return table;
+}
+
+/* A call activity's camunda:in or camunda:out: a variable by name, every
+ * variable, or the business key passed on. */
+static WKDProperty *
+WKDCallVariables(BOOL inputs)
+{
+	NSString *local = inputs ? @"in" : @"out";
+	NSArray *kinds = inputs ? @[ @"variable", @"all", @"businessKey" ] : @[ @"variable", @"all" ];
+	NSArray *kindTitles = inputs ? @[ @"Variable", @"All", @"Business key" ] : @[ @"Variable", @"All" ];
+	WKDEntries entries = ^NSArray *(NSXMLElement *element) {
+		NSXMLElement *extensions = WKDExtensions(element);
+		return extensions != nil ? WKDChildren(extensions, WKDCamundaNamespace, local) : @[];
+	};
+	WKDReadRow read = ^NSArray *(NSXMLElement *mapping, NSXMLDocument *document) {
+		if (WKDAttribute(mapping, @"businessKey") != nil) {
+			return @[ @"businessKey", @"", @"" ];
+		}
+		if ([WKDAttribute(mapping, @"variables") isEqualToString:@"all"]) {
+			return @[ @"all", @"", @"" ];
+		}
+		return @[ @"variable", WKDAttribute(mapping, @"source") ?: @"", WKDAttribute(mapping, @"target") ?: @"" ];
+	};
+	WKDWriteRow write = ^(NSXMLElement *mapping, NSArray *values, NSXMLDocument *document) {
+		for (NSString *attribute in @[ @"source", @"target", @"variables", @"businessKey", @"sourceExpression", @"local" ]) {
+			WKDSetAttribute(mapping, attribute, nil);
+		}
+		if ([values[0] isEqualToString:@"businessKey"]) {
+			WKDSetAttribute(mapping, @"businessKey", @"#{execution.processBusinessKey}");
+		} else if ([values[0] isEqualToString:@"all"]) {
+			WKDSetAttribute(mapping, @"variables", @"all");
+		} else {
+			WKDSetAttribute(mapping, @"source", [values[1] length] > 0 ? values[1] : nil);
+			WKDSetAttribute(mapping, @"target", [values[2] length] > 0 ? values[2] : nil);
+		}
+	};
+	WKDMakeEntry make = ^NSXMLElement *(NSXMLElement *element, NSXMLDocument *document) {
+		return WKDAppendCamunda(document, WKDEnsureChild(document, element, WKDBpmnNamespace, @"extensionElements"), local);
+	};
+	WKDProperty *table = WKDTable(inputs ? @"Passed in" : @"Passed back",
+		@[ WKDChoiceColumn(@"What", kinds, kindTitles, 1.35), WKDTextColumn(@"From", 1), WKDTextColumn(@"To", 1) ],
+		@[ @"variable", @"", @"" ], entries, read, write, make,
+		^(NSXMLElement *element) {
+			WKDTidyExtensions(element, nil);
+		});
+	table.placeholder = inputs ? @"Variables of this instance the called one starts with"
+		: @"Variables of the called instance this one takes back";
+	return table;
+}
+
 NSArray<WKDSection *> *
 WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 {
@@ -543,12 +961,14 @@ WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 	}
 	NSString *type = [element localName];
 	if ([type isEqualToString:@"process"]) {
-		return WKDProcessSections();
+		return [WKDProcessSections() arrayByAddingObject:
+			WKDMakeSection(@"Listeners", @[ WKDListeners(NO, @[ @"start", @"end" ]) ])];
 	}
 	NSMutableArray *sections = [NSMutableArray arrayWithObject:WKDMakeSection(@"General", @[
 		WKDIdProperty(), WKDNameProperty(type), WKDDocumentation() ])];
 	if ([type isEqualToString:@"sequenceFlow"]) {
 		[sections addObjectsFromArray:WKDFlowSections()];
+		[sections addObject:WKDMakeSection(@"Listeners", @[ WKDListeners(NO, @[ @"take" ]) ])];
 		return sections;
 	}
 	BOOL flowNode = NO;
@@ -557,13 +977,15 @@ WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 		[sections addObject:WKDMakeSection(@"Assignment", WKDUserTaskProperties())];
 		[sections addObject:WKDMakeSection(@"Form", WKDFormProperties())];
 	} else if ([type isEqualToString:@"serviceTask"] || [type isEqualToString:@"sendTask"]) {
-		[sections addObject:WKDMakeSection(@"Implementation", WKDImplementationProperties())];
+		[sections addObject:WKDMakeSection(@"Implementation",
+			[WKDImplementationProperties() arrayByAddingObject:WKDFields(YES)])];
 	} else if ([type isEqualToString:@"businessRuleTask"]) {
 		[sections addObject:WKDMakeSection(@"Decision", WKDBusinessRuleProperties())];
 	} else if ([type isEqualToString:@"scriptTask"]) {
 		[sections addObject:WKDMakeSection(@"Script", @[ WKDScriptAction() ])];
 	} else if ([type isEqualToString:@"callActivity"]) {
-		[sections addObject:WKDMakeSection(@"Called Process", WKDCallActivityProperties())];
+		[sections addObject:WKDMakeSection(@"Called Process", [WKDCallActivityProperties() arrayByAddingObjectsFromArray:
+			@[ WKDCallVariables(YES), WKDCallVariables(NO) ]])];
 	} else if ([type isEqualToString:@"receiveTask"]) {
 		[sections addObject:WKDMakeSection(@"Message", @[ WKDReference(@"Message", nil, @"messageRef", @"message",
 		                                                                @"name") ])];
@@ -580,9 +1002,15 @@ WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 		}
 	}
 	if (kind == WKDShapeActivity) {
+		[sections addObject:WKDMakeSection(@"Input/Output", @[ WKDParameters(YES), WKDParameters(NO) ])];
 		[sections addObject:WKDMakeSection(@"Multi-instance", WKDLoopProperties())];
 	}
 	if (flowNode && kind != WKDShapeArtifact) {
+		NSMutableArray *listeners = [NSMutableArray arrayWithObject:WKDListeners(NO, @[ @"start", @"end" ])];
+		if ([type isEqualToString:@"userTask"]) {
+			[listeners addObject:WKDListeners(YES, @[ @"create", @"assignment", @"complete", @"delete" ])];
+		}
+		[sections addObject:WKDMakeSection(@"Listeners", listeners)];
 		[sections addObject:WKDMakeSection(@"Continuation", WKDAsyncProperties(kind == WKDShapeActivity))];
 	}
 	return sections;

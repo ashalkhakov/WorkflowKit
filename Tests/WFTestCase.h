@@ -1,6 +1,7 @@
 #import <XCTest/XCTest.h>
 #import <CoreData/CoreData.h>
 #import "WorkflowKit.h"
+#import "WFExampleDelegates.h"
 #ifdef WORKFLOWKIT_ODATA
 #import "WFODataService.h"
 #endif

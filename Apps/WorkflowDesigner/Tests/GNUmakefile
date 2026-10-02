@@ -16,6 +16,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	WKDEditorTests.m \
 	WKDLayoutTests.m \
 	WKDPropertiesTests.m \
+	WKDTablesTests.m \
 	WKDDeploymentTests.m
 
 WorkflowDesignerTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall

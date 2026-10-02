@@ -21,9 +21,11 @@
 	return [[tests stringByAppendingPathComponent:@"../Examples/Processes"] stringByStandardizingPath];
 }
 
-/* The example's directory, deployed under its name. */
+/* The example's directory, deployed under its name, with the delegates
+ * and listeners the examples call (Examples/Plugins). */
 - (void)deployExample:(NSString *)name engine:(WFProcessEngine *)engine
 {
+	[engine addPlugin:[[WFExamplePlugin alloc] init]];
 	NSString *directory = [[self examplesDirectory] stringByAppendingPathComponent:name];
 	NSMutableDictionary *resources = [NSMutableDictionary dictionary];
 	for (NSString *file in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:directory error:NULL]) {
@@ -100,62 +102,97 @@
 	WFProcessEngine *engine = [self engineWithHandler:handler];
 	[self deployExample:@"order-fulfilment" engine:engine];
 
-	NSString *express = [self startExample:@"order-fulfilment" businessKey:@"SO-1"
-	                             variables:@{ @"customer": @"Ann", @"total": @120, @"express": @YES } engine:engine];
+	NSDictionary *order = @{ @"orderNumber": @"SO-1", @"customer": @"Ann", @"total": @120, @"express": @YES,
+	                         @"items": @[ @"lamp", @"desk" ] };
+	NSString *express = [self startExample:@"order-fulfilment" businessKey:@"SO-1" variables:order engine:engine];
 	WFWorkItem *pack = [self task:@"pack" of:express engine:engine];
 	XCTAssertEqual(pack.priority, (NSInteger)80, @"express orders first");
 	XCTAssertEqualObjects(pack.candidateGroups, @[ @"warehouse" ]);
+	NSTimeInterval due = [pack.dueDate timeIntervalSinceNow];
+	XCTAssertTrue(due > 3500 && due <= 7200, @"due in two hours, as the workload listener's field says: %f", due);
 	XCTAssertTrue([[handler topicsFor:express] containsObject:@"payment"], @"charged while it is packed");
 	[self complete:@"pack" of:express engine:engine variables:nil];
 	XCTAssertTrue([self ended:express engine:engine]);
 	XCTAssertEqualObjects([handler topicsFor:express], (@[ @"check-stock", @"payment", @"shipping-cost", @"courier" ]));
+	NSDictionary *done = [self variables:express engine:engine];
+	XCTAssertEqualObjects([done objectForKey:@"outbox"], (@[ @{ @"to": @"Ann", @"template": @"order-shipped",
+	                                                           @"subject": @"Order SO-1 is on its way" } ]));
+	XCTAssertEqualObjects([done objectForKey:@"auditTrail"], (@[ @"start process", @"end process: order closed" ]));
+	/* The packing task's list and map inputs, read back through its output. */
+	XCTAssertEqualObjects([done objectForKey:@"packingSlip"], (@{ @"customer": @"Ann", @"items": @2, @"tape": @"red tape" }));
 
 	NSString *standard = [self startExample:@"order-fulfilment" businessKey:@"SO-2"
-	                              variables:@{ @"customer": @"Bob", @"total": @30, @"express": @NO } engine:engine];
-	XCTAssertEqual([self task:@"pack" of:standard engine:engine].priority, (NSInteger)50);
+	                              variables:@{ @"orderNumber": @"SO-2", @"customer": @"Bob", @"total": @30,
+	                                           @"express": @NO, @"items": @[ @"rug" ] } engine:engine];
+	WFWorkItem *slow = [self task:@"pack" of:standard engine:engine];
+	XCTAssertEqual(slow.priority, (NSInteger)50);
+	XCTAssertTrue([slow.dueDate timeIntervalSinceNow] > 23 * 3600, @"due in a day");
 	[self complete:@"pack" of:standard engine:engine variables:nil];
 	XCTAssertEqualObjects([[handler topicsFor:standard] lastObject], @"post");
 
 	[handler.results setObject:@{ @"inStock": @NO } forKey:@"check-stock"];
 	NSString *missing = [self startExample:@"order-fulfilment" businessKey:@"SO-3"
-	                             variables:@{ @"customer": @"Cy", @"total": @45, @"express": @NO } engine:engine];
+	                             variables:@{ @"orderNumber": @"SO-3", @"customer": @"Cy", @"total": @45,
+	                                          @"express": @NO } engine:engine];
 	XCTAssertNotNil([self task:@"backOrder" of:missing engine:engine]);
 	XCTAssertNil([self task:@"pack" of:missing engine:engine]);
 	[self complete:@"backOrder" of:missing engine:engine variables:nil];
 	XCTAssertTrue([[self passed:missing engine:engine] containsObject:@"backOrdered"]);
 }
 
-/* The decision table scores each application: low is paid, medium is
- * underwritten, high -- or anyone who defaulted -- declined. */
+/* The score is added up from what is known of the applicant, the risk
+ * follows from it and the share of income asked for, and the limit from
+ * income and debts: a low risk within it is paid, a medium one
+ * underwritten (by a senior underwriter when it is large), the rest
+ * declined by mail. */
 - (void)testLoanApplication
 {
 	WFMapHandler *handler = [[WFMapHandler alloc] init];
 	WFProcessEngine *engine = [self engineWithHandler:handler];
 	[self deployExample:@"loan-application" engine:engine];
-	NSDictionary *(^applying)(NSNumber *, NSNumber *, NSNumber *) = ^NSDictionary *(NSNumber *amount, NSNumber *income,
-	                                                                                 NSNumber *defaulted) {
-		return @{ @"applicant": @"Dee", @"amount": amount, @"income": income, @"hasDefaulted": defaulted };
-	};
+	NSDictionary *(^applying)(NSNumber *, NSNumber *, NSNumber *, NSString *, NSNumber *) =
+		^NSDictionary *(NSNumber *amount, NSNumber *income, NSNumber *debts, NSString *since, NSNumber *defaulted) {
+			return @{ @"applicationId": @"A-1", @"applicant": @"Dee", @"amount": amount, @"income": income,
+			          @"debts": debts, @"employedSince": since, @"hasDefaulted": defaulted };
+		};
 
+	/* Long employed, no debts: 30 + 40 + 20 points; the limit 40% of income. */
 	NSString *low = [self startExample:@"loan-application" businessKey:@"L-1"
-	                         variables:applying(@4000, @60000, @NO) engine:engine];
-	XCTAssertEqualObjects([[self variables:low engine:engine] objectForKey:@"risk"], @"low");
+	                         variables:applying(@4000, @60000, @0, @"2015-03-01", @NO) engine:engine];
+	NSDictionary *variables = [self variables:low engine:engine];
+	XCTAssertEqualObjects([variables objectForKey:@"risk"], @"low");
+	XCTAssertEqual([[variables objectForKey:@"maxLoan"] doubleValue], 24000.0);
 	XCTAssertTrue([self ended:low engine:engine]);
 	XCTAssertEqualObjects([handler topicsFor:low], @[ @"pay-out" ]);
+	XCTAssertEqualObjects([variables objectForKey:@"auditTrail"], @[ @"end payOut: paid 4000" ]);
 
-	NSString *medium = [self startExample:@"loan-application" businessKey:@"L-2"
-	                            variables:applying(@20000, @60000, @NO) engine:engine];
+	/* As safe, but over the limit: declined. */
+	NSString *over = [self startExample:@"loan-application" businessKey:@"L-2"
+	                          variables:applying(@30000, @60000, @0, @"2015-03-01", @NO) engine:engine];
+	XCTAssertEqualObjects([[self variables:over engine:engine] objectForKey:@"outbox"],
+	                      (@[ @{ @"to": @"Dee", @"template": @"loan-declined", @"subject": @"Your application A-1" } ]));
+	XCTAssertEqualObjects([handler topicsFor:over], @[]);
+
+	/* A few years employed, some debts: 15 + 20 + 20, medium. */
+	NSString *medium = [self startExample:@"loan-application" businessKey:@"L-3"
+	                            variables:applying(@20000, @60000, @15000, @"2023-06-01", @NO) engine:engine];
 	WFWorkItem *underwrite = [self task:@"underwrite" of:medium engine:engine];
 	XCTAssertNotNil(underwrite);
+	XCTAssertNil(underwrite.assignee, @"left to the underwriters");
 	XCTAssertTrue([underwrite.dueDate timeIntervalSinceNow] > 47 * 3600, @"due in two days");
 	[self complete:@"underwrite" of:medium engine:engine variables:@{ @"approved": @YES }];
 	XCTAssertEqualObjects([handler topicsFor:medium], @[ @"pay-out" ]);
 
-	NSString *defaulted = [self startExample:@"loan-application" businessKey:@"L-3"
-	                               variables:applying(@1000, @90000, @YES) engine:engine];
+	NSString *large = [self startExample:@"loan-application" businessKey:@"L-4"
+	                           variables:applying(@60000, @100000, @30000, @"2023-06-01", @NO) engine:engine];
+	XCTAssertEqualObjects([self task:@"underwrite" of:large engine:engine].assignee, @"senior-underwriter");
+
+	/* A default outweighs everything. */
+	NSString *defaulted = [self startExample:@"loan-application" businessKey:@"L-5"
+	                               variables:applying(@1000, @90000, @0, @"2010-01-01", @YES) engine:engine];
 	XCTAssertEqualObjects([[self variables:defaulted engine:engine] objectForKey:@"risk"], @"high");
-	XCTAssertEqualObjects([handler topicsFor:defaulted], @[ @"letters" ]);
 	XCTAssertTrue([[self passed:defaulted engine:engine] containsObject:@"declined"]);
+	XCTAssertEqual([[[self variables:defaulted engine:engine] objectForKey:@"outbox"] count], (NSUInteger)1);
 }
 
 /* Paid: booked. Declined: the hotel and the flight are cancelled again,
@@ -207,15 +244,20 @@
 	XCTAssertTrue([self ended:pid engine:engine]);
 }
 
-/* Two approvals of three are enough: the third review is withdrawn, the
- * claim reimbursed, and each reviewer told in turn. */
+/* A claim with a line over 500 has its receipts checked first; two
+ * approvals of three are enough -- the third review is withdrawn -- and
+ * each reviewer is mailed the outcome in turn. */
 - (void)testExpenseReview
 {
 	WFMapHandler *handler = [[WFMapHandler alloc] init];
 	WFProcessEngine *engine = [self engineWithHandler:handler];
 	[self deployExample:@"expense-review" engine:engine];
+	NSArray *lines = @[ @{ @"item": @"taxi", @"amount": @40 }, @{ @"item": @"hotel", @"amount": @620 } ];
 	NSString *pid = [self startExample:@"expense-review" businessKey:@"E-1"
-	                         variables:@{ @"reviewers": @[ @"ann", @"bob", @"cy" ], @"approvals": @0 } engine:engine];
+	                         variables:@{ @"reviewers": @[ @"ann", @"bob", @"cy" ], @"approvals": @0, @"lines": lines }
+	                            engine:engine];
+	XCTAssertEqualObjects([[self task:@"checkReceipts" of:pid engine:engine] candidateGroups], @[ @"finance" ]);
+	[self complete:@"checkReceipts" of:pid engine:engine variables:nil];
 	NSArray *reviews = [engine.taskService tasksForProcessInstance:pid];
 	XCTAssertEqualObjects([[reviews valueForKey:@"assignee"] sortedArrayUsingSelector:@selector(compare:)],
 	                      (@[ @"ann", @"bob", @"cy" ]));
@@ -228,7 +270,18 @@
 	}
 	XCTAssertEqual([[engine.taskService tasksForProcessInstance:pid] count], (NSUInteger)0, @"cy's review withdrawn");
 	XCTAssertTrue([self ended:pid engine:engine]);
-	XCTAssertEqualObjects([handler topicsFor:pid], (@[ @"reimburse", @"notify", @"notify", @"notify" ]));
+	XCTAssertEqualObjects([handler topicsFor:pid], @[ @"reimburse" ]);
+	XCTAssertEqualObjects([[[self variables:pid engine:engine] objectForKey:@"outbox"] valueForKey:@"to"],
+	                      (@[ @"ann", @"bob", @"cy" ]), @"mailed one after another");
+	XCTAssertEqualObjects([[[[self variables:pid engine:engine] objectForKey:@"outbox"] firstObject] objectForKey:@"subject"],
+	                      @"Claim approved");
+
+	/* Every line small: straight to the reviewers. */
+	NSString *small = [self startExample:@"expense-review" businessKey:@"E-2"
+	                           variables:@{ @"reviewers": @[ @"dan" ], @"approvals": @0,
+	                                        @"lines": @[ @{ @"item": @"lunch", @"amount": @25 } ] } engine:engine];
+	XCTAssertNil([self task:@"checkReceipts" of:small engine:engine]);
+	XCTAssertEqualObjects([[[engine.taskService tasksForProcessInstance:small] firstObject] assignee], @"dan");
 }
 
 /* A ticket the customer writes about, which needs a product fix: the bug
@@ -242,7 +295,10 @@
 	[self deployExample:@"support-ticket" engine:engine];
 	NSError *error = nil;
 
-	NSString *bug = [self startExample:@"support-ticket" businessKey:@"T-1" variables:nil engine:engine];
+	NSString *bug = [self startExample:@"support-ticket" businessKey:@"T-1" variables:@{ @"priority": @"urgent" }
+	                            engine:engine];
+	NSTimeInterval due = [[self task:@"diagnose" of:bug engine:engine].dueDate timeIntervalSinceNow];
+	XCTAssertTrue(due > 3000 && due <= 3600, @"an urgent ticket diagnosed within the hour: %f", due);
 	XCTAssertTrue([engine.runtimeService correlateMessage:@"customer-replied" businessKey:@"T-1"
 	                                      correlationKeys:nil variables:nil error:&error], @"%@", error);
 	XCTAssertTrue([engine waitUntilSettled:bug timeout:10.0]);
@@ -253,6 +309,8 @@
 	XCTAssertFalse([self ended:bug engine:engine], @"the reply is still to read");
 	[self complete:@"readReply" of:bug engine:engine variables:nil];
 	XCTAssertTrue([self ended:bug engine:engine]);
+	XCTAssertEqualObjects([[self variables:bug engine:engine] objectForKey:@"auditTrail"],
+	                      (@[ @"start resolve", @"end resolve" ]));
 
 	NSString *late = [self startExample:@"support-ticket" businessKey:@"T-2" variables:nil engine:engine];
 	[self fire:@"sla" of:late engine:engine];
