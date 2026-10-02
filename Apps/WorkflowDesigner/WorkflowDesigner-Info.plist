@@ -42,6 +42,25 @@
 			<key>NSDocumentClass</key>
 			<string>WKDDocument</string>
 		</dict>
+		<!-- The decisions a process's business rule tasks evaluate. -->
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>DMN Decisions</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.omg.dmn</string>
+			</array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>dmn</string>
+			</array>
+			<key>NSDocumentClass</key>
+			<string>WKDDecisionDocument</string>
+		</dict>
 		<!-- A process's forms, edited by XFormsDesignKit's editor. -->
 		<dict>
 			<key>CFBundleTypeName</key>
@@ -78,6 +97,23 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>bpmn</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.omg.dmn</string>
+			<key>UTTypeDescription</key>
+			<string>DMN Decisions</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>dmn</string>
 				</array>
 			</dict>
 		</dict>

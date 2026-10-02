@@ -43,6 +43,10 @@ WFExpressionBody(NSString *text, WFExpressionPlace place, NSRange *body, BOOL *c
 		*body = NSMakeRange(start + 2, end - start - 3);
 		return YES;
 	}
+	if (place == WFExpressionPlaceUnaryTests) {
+		*body = NSMakeRange(start, end - start);
+		return YES;
+	}
 	if ([trimmed hasPrefix:@"="]) {
 		*opening = NSMakeRange(start, 1);
 		*body = NSMakeRange(start + 1, length - start - 1);
@@ -196,7 +200,14 @@ WFKindOf(WFFeelTokenKind kind)
 	}
 	NSString *inner = [text substringWithRange:body];
 	NSError *error = nil;
-	if (WFFeelParse(inner, camunda7, &error) != nil) {
+	if (place == WFExpressionPlaceUnaryTests && !camunda7) {
+		/* As the engine reads an input entry: tests of the value, or else
+		 * an expression true when it passes; what is wrong is said of the
+		 * tests. */
+		if (WFFeelParseUnaryTests(inner, &error) != nil || WFFeelParse(inner, NO, NULL) != nil) {
+			return nil;
+		}
+	} else if (WFFeelParse(inner, camunda7, &error) != nil) {
 		return nil;
 	}
 	NSMutableDictionary *info = [[error userInfo] mutableCopy] ?: [NSMutableDictionary dictionary];

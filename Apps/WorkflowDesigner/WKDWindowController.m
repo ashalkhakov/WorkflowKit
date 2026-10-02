@@ -1,5 +1,7 @@
 #import "WKDWindowController.h"
 #import "WKDAppDelegate.h"
+#import "WKDDecisionDocument.h"
+#import "WKDDecisions.h"
 #import "WKDDeployment.h"
 #import "WKDDocument.h"
 #import "WKDEditor.h"
@@ -625,7 +627,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 		?: [processId stringByAppendingPathExtension:@"bpmn"];
 	NSArray<NSString *> *missing = nil;
 	NSDictionary *resources = WKDDeploymentResources([self editor].document, fileName,
-	                                                 [file URLByDeletingLastPathComponent], [self editedForms],
+	                                                 [file URLByDeletingLastPathComponent], [self editedResources],
 	                                                 &missing);
 	if (resources == nil) {
 		[self alert:@"The process's forms are missing."
@@ -669,20 +671,25 @@ WKDSelectTab(id sender, NSTabView *tabView)
 
 #pragma mark Forms
 
-/* The process's forms open in the form editor, as they stand there: by
- * name, those beside the process. */
-- (NSDictionary<NSString *, NSString *> *)editedForms
+/* The files beside the process open in an editor -- its forms in the form
+ * editor, DMN files in the decision editor -- as they stand there, by name. */
+- (NSDictionary<NSString *, NSString *> *)editedResources
 {
 	NSURL *directory = [[[self designerDocument] fileURL] URLByDeletingLastPathComponent];
 	if (directory == nil) {
 		return @{};
 	}
 	NSMutableDictionary *edited = [NSMutableDictionary dictionary];
-	for (NSString *name in WKDEmbeddedForms([self editor].document)) {
-		NSDocument *open = [[NSDocumentController sharedDocumentController]
-			documentForURL:[directory URLByAppendingPathComponent:name]];
+	for (NSDocument *open in [[NSDocumentController sharedDocumentController] documents]) {
+		NSURL *url = [open fileURL];
+		if (url == nil || ![[[url URLByDeletingLastPathComponent] path] isEqualToString:[directory path]]) {
+			continue;
+		}
 		if ([open isKindOfClass:[XFDDocument class]]) {
-			[edited setObject:[(XFDDocument *)open hostXMLString] forKey:name];
+			[edited setObject:[(XFDDocument *)open hostXMLString] forKey:[url lastPathComponent]];
+		} else if ([open isKindOfClass:[WKDDecisionDocument class]]) {
+			[edited setObject:[[(WKDDecisionDocument *)open editor].document XMLStringWithOptions:NSXMLNodePrettyPrint]
+			           forKey:[url lastPathComponent]];
 		}
 	}
 	return edited;
@@ -748,10 +755,90 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	}];
 }
 
+#pragma mark Decisions
+
+/* The business rule task selected. */
+- (NSXMLElement *)decisionElement
+{
+	NSString *elementId = [self selectedId];
+	NSXMLElement *element = elementId != nil ? [[self editor] elementWithId:elementId] : nil;
+	return [[element localName] isEqualToString:@"businessRuleTask"] ? element : nil;
+}
+
+- (IBAction)editDecision:(id)sender
+{
+	NSXMLElement *element = [self decisionElement];
+	if (element == nil) {
+		[self alert:@"Select a business rule task." detail:@"Its decision is what the decision editor edits."];
+		return;
+	}
+	NSURL *file = [[self designerDocument] fileURL];
+	if (file == nil) {
+		[self alert:@"Save the process first." detail:@"Its decisions are kept beside it, and deployed with it."];
+		return;
+	}
+	NSXMLDocument *document = [self editor].document;
+	NSString *elementId = WKDAttribute(element, @"id");
+	NSString *key = WKDQualifiedAttribute(document, element, WKDCamundaNamespace, @"decisionRef");
+	if ([key hasPrefix:@"${"] || [key hasPrefix:@"#{"] || [key hasPrefix:@"="]) {
+		[self alert:@"The task names its decision by an expression."
+		     detail:@"Which decision it evaluates is known only as it runs."];
+		return;
+	}
+	BOOL named = [key length] > 0;
+	if (!named) {
+		key = elementId;
+	}
+	NSURL *directory = [file URLByDeletingLastPathComponent];
+	NSString *name = WKDDecisionFileDefining(key, directory, [self editedResources])
+		?: [key stringByAppendingPathExtension:@"dmn"];
+	NSURL *url = [directory URLByAppendingPathComponent:name];
+	if (![[NSFileManager defaultManager] fileExistsAtPath:[url path]]) {
+		/* A file of its own, whose one table is the decision. */
+		WKDDmnEditor *made = [[WKDDmnEditor alloc] initWithDocument:[WKDDmnEditor newDecisionsDocument] undoManager:nil];
+		NSString *first = [made.decisions firstObject].decisionId;
+		NSString *title = WKDAttribute(element, @"name");
+		[made renameDecision:first to:key error:NULL];
+		[made setName:[title length] > 0 ? title : key of:key];
+		NSError *error = nil;
+		if (![[made.document XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement]
+		        writeToURL:url options:NSDataWritingAtomic error:&error]) {
+			[self alert:[NSString stringWithFormat:@"Could not make %@.", name] detail:[error localizedDescription]];
+			return;
+		}
+	}
+	if (!named) {
+		[[self editor] edit:elementId action:@"Decision" with:^(NSXMLElement *edited, NSXMLDocument *xml) {
+			WKDSetQualifiedAttribute(xml, edited, WKDCamundaNamespace, @"decisionRef", key);
+		}];
+	}
+	/* In this app, a WKDDecisionDocument (Info.plist's DMN type); brought
+	 * forward when it is open already, and the decision added to it when
+	 * the file beside has that name but not the decision. */
+	[[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:url display:YES
+		completionHandler:^(NSDocument *opened, BOOL wasOpen, NSError *error) {
+		if (![opened isKindOfClass:[WKDDecisionDocument class]]) {
+			[self alert:[NSString stringWithFormat:@"%@ could not be opened.", name]
+			     detail:[error localizedDescription] ?: [url path]];
+			return;
+		}
+		WKDDecisionDocument *decisions = (WKDDecisionDocument *)opened;
+		if ([decisions.editor decisionWithId:key] == nil) {
+			[decisions.editor addDecisionTable:YES withId:key];
+		}
+		[decisions showDecision:key];
+		[self note:nil];
+		self.status = [NSString stringWithFormat:@"%@ is open in the decision editor.", name];
+	}];
+}
+
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
 	if ([item action] == @selector(editForm:)) {
 		return [self formElement] != nil;
+	}
+	if ([item action] == @selector(editDecision:)) {
+		return [self decisionElement] != nil;
 	}
 	if ([item action] == @selector(deploy:)) {
 		return [self designerDocument].problem == nil;

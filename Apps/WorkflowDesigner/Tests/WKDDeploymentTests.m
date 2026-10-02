@@ -75,6 +75,42 @@
 	XCTAssertNotNil(resources, @"all open: no directory needed");
 }
 
+/* The DMN files beside that define its business rule tasks' decisions:
+ * not other files', nor a decision an expression names. */
+- (void)testTheProcessGoesWithItsDecisions
+{
+	NSXMLDocument *document = WKDParse(WKDModellerFile);
+	NSXMLElement *process = WKDChild([document rootElement], WKDBpmnNamespace, @"process");
+	NSXMLElement *rules = WKDNewElement(document, WKDBpmnNamespace, @"businessRuleTask");
+	WKDSetAttribute(rules, @"id", @"rules");
+	WKDSetQualifiedAttribute(document, rules, WKDCamundaNamespace, @"decisionRef", @"dish");
+	[process addChild:rules];
+	NSXMLElement *dynamic = WKDNewElement(document, WKDBpmnNamespace, @"businessRuleTask");
+	WKDSetAttribute(dynamic, @"id", @"dynamic");
+	WKDSetQualifiedAttribute(document, dynamic, WKDCamundaNamespace, @"decisionRef", @"${which}");
+	[process addChild:dynamic];
+	NSArray *refs = @[ @"dish" ];
+	XCTAssertEqualObjects(WKDDecisionRefs(document), refs);
+
+	[WKDDecisionsFile writeToURL:[_directory URLByAppendingPathComponent:@"dishes.dmn"] atomically:YES
+	                    encoding:NSUTF8StringEncoding error:NULL];
+	NSString *other = [WKDDecisionsFile stringByReplacingOccurrencesOfString:@"\"dish\"" withString:@"\"plate\""];
+	[other writeToURL:[_directory URLByAppendingPathComponent:@"other.dmn"] atomically:YES
+	         encoding:NSUTF8StringEncoding error:NULL];
+	XCTAssertEqualObjects(WKDDecisionFileDefining(@"dish", _directory, nil), @"dishes.dmn");
+	XCTAssertNil(WKDDecisionFileDefining(@"dessert", _directory, nil));
+	NSDictionary *resources = WKDDeploymentResources(document, @"order.bpmn", _directory, nil, NULL);
+	NSArray *names = @[ @"dishes.dmn", @"order.bpmn" ];
+	XCTAssertEqualObjects([[resources allKeys] sortedArrayUsingSelector:@selector(compare:)], names);
+	/* As the decision editor has it, saved or not. */
+	resources = WKDDeploymentResources(document, @"order.bpmn", _directory, @{ @"dishes.dmn": WKDDecisionsFile }, NULL);
+	XCTAssertEqualObjects([resources objectForKey:@"dishes.dmn"], WKDDecisionsFile);
+	[[NSFileManager defaultManager] removeItemAtURL:[_directory URLByAppendingPathComponent:@"dishes.dmn"] error:NULL];
+	resources = WKDDeploymentResources(document, @"order.bpmn", _directory, nil, NULL);
+	XCTAssertNotNil(resources, @"a decision deployed on its own is not missing");
+	XCTAssertNil([resources objectForKey:@"other.dmn"]);
+}
+
 - (void)testAMissingFormStopsTheDeployment
 {
 	[@"<order/>" writeToURL:[_directory URLByAppendingPathComponent:@"order.xhtml"] atomically:YES

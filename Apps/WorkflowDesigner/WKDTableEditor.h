@@ -2,6 +2,11 @@
 
 @class WKDEditor, WKDProperty;
 
+/* A table whose cells Return ends the editing of, as in a field, rather
+ * than going on to the next row's cell (gnustep-gui's way). */
+@interface WKDCellTable : NSTableView
+@end
+
 /*
  * A table property in the inspector: its rows in a table, a cell each
  * column -- text, an expression coloured as the engine reads it, a

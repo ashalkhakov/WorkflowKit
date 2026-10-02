@@ -2,7 +2,8 @@
 
 The BPMN process designer for WorkflowKit, for macOS and GNUstep. It opens,
 draws, edits and saves `.bpmn` files: Camunda Modeler's files and the
-engine's own.
+engine's own. It also edits the DMN decisions a process's business rule
+tasks evaluate (`.dmn`), and its forms (`.xhtml`).
 
 The document is the BPMN XML itself. Edits change it in place, and saving
 writes it back as it was apart from what you changed. Whatever the designer
@@ -103,6 +104,60 @@ edit it, and Return or leaving it writes it. Each of these is one undoable
 change, and the rows not touched are written back as they were. A value
 the engine reads as an expression is coloured, and checked as it is
 typed, as an expression field is.
+
+### Decisions
+
+A business rule task names its decision by key (`camunda:decisionRef`).
+The decision is defined in a DMN file kept beside the `.bpmn` file and
+deployed with it. **Edit Decision…** (the button in the Decision section,
+or Diagram ▸ Edit Decision…, ⇧⌘E) opens the DMN file beside the process
+that defines the selected task's decision, with that decision shown. When
+no file defines it, the designer makes one named after the decision, with
+a table for it, and when the task names no decision yet, it names this
+one: one undoable change. `.dmn` files open from File ▸ Open too.
+
+A DMN file's window lists its decisions on the left. **+ Table** and
+**+ Literal** add a decision, and **−** removes the selected one, together
+with the requirements other decisions have on it. On the right are the
+selected decision's name, its id (changing it updates the requirements and
+the diagram that refer to it), and **Requires**, the decisions it needs
+evaluated first. The designer refuses a requirement that would make a
+cycle.
+
+A **decision table** is a grid laid out as DMN draws one: a row per rule,
+the inputs' columns, then the outputs' (marked →), then the rule's
+annotation. The hit policy is chosen above the grid, and its letter
+heads the rule numbers: U, F, A, R, C, and C+, C<, C>, C# for COLLECT's
+aggregations. These are the policies the engine evaluates.
+
+- Double-click a cell to type in it. Return or leaving the cell writes it.
+  An input's entry is unary tests (`< 10`, `[1..5]`, `"a","b"`,
+  `not(...)`, or `-` or empty for any value). An output's entry is a FEEL
+  expression, and an empty one gives no value. Entries are coloured and
+  checked as the engine reads them, while you type too, and where the
+  engine would stop reading is underlined.
+- **+ Rule** adds a rule after the selected one, **Duplicate** (⌘D)
+  copies it, **− Rule** (or Backspace, or Edit ▸ Delete) removes the
+  selected rules, and **↑ ↓** move a rule.
+- Click a column's heading or one of its cells, and the panel under the
+  grid edits the column. An input has a label, the expression whose value
+  the entries test, a type and its input variable (`cellInput` unless
+  set). An output has a label, a name and a type. **+ Input** and
+  **+ Output** add a column after the current one of their kind,
+  **− Column** removes it, and **← →** move it among its kind. A rule's
+  entries move, come and go with their columns.
+
+A **literal expression** has its variable's name and type and its FEEL
+expression.
+
+The Decision menu has all of these. Each change is one undoable step, and
+saving writes the file back as it was apart from what changed, Camunda
+extensions and input data included. Where the file has a DMN diagram, a
+decision added gets a shape in it, and a requirement an edge. The status
+line says whether the engine would deploy the file, or why it would not.
+**Server ▸ Deploy** sends the file on its own. Deploying the process
+sends the DMN files beside it that define its tasks' decisions. A file
+open in the decision editor goes as it stands there, saved or not.
 
 ### Expressions
 
@@ -232,9 +287,9 @@ this directory:
     make ODATAKIT=... XFORMSKIT=...         # WorkflowDesigner.app
     make ODATAKIT=... XFORMSKIT=... run     # open it
     make ODATAKIT=... XFORMSKIT=... check   # the tests: the document model,
-                                            # edits, layout, deployments, and
-                                            # that the engine reads what the
-                                            # designer writes
+                                            # edits, layout, decisions,
+                                            # deployments, and that the engine
+                                            # reads what the designer writes
 
 `Tools/` has the designer without a window, for BPMN files kept in a
 repository, such as `Examples/Processes`. They build on GNUstep with
@@ -258,7 +313,9 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | `WKDTableEditor` | A table property in the inspector, with its + and − and its detail table. |
 | `WKDExpressionField` | The expression field and the text storage that colours it, ported from the XForms Designer's XPath field, over the engine's `+[WFFeelExpression tokensOfText:place:]` and `+problemInText:place:`. |
 | `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with the DMTabBar XFormsDesignKit carries. |
-| `WKDDeployment` | What a deployment sends: the process and the forms it embeds, as the form editor has those open in it. |
+| `WKDDeployment` | What a deployment sends: the process, the forms it embeds and the DMN files defining its decisions, as their editors have those open. |
+| `WKDDecisions` | A DMN file's decisions, read after every change, and every change to them (`WKDDmnEditor`), one undo step each, as `WKDEditor`'s are to a process. |
+| `WKDDecisionDocument`, `WKDDecisionWindowController` | The DMN document and its window: the decisions, the table's grid and its column panel, and a literal expression's fields. The window is built in code, because the grid's columns are the table's. |
 | `WKDAppDelegate`, `WKDServerProcessesController` | The server connection, shared by every window, and the Open from Server window. The connection itself is WorkflowDesk's (`../Shared`). |
 | `WKDCanvasView`, `WKDPaletteView`, `../Shared/WKDRenderer` | Drawing and editing, adapted from CoreWF's graph view. BPMN notation is drawn with `NSBezierPath`, with no images. |
 

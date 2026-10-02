@@ -28,7 +28,11 @@ typedef NS_ENUM(NSInteger, WFExpressionPlace) {
 	WFExpressionPlaceExpression = 0,
 	/* An attribute such as camunda:assignee or a timer's value: literal
 	 * text, unless it is ${...} or begins with =. */
-	WFExpressionPlaceAttribute
+	WFExpressionPlaceAttribute,
+	/* A decision table's input entry: FEEL's unary tests -- a value,
+	 * < 10, [1..5], "a","b", not(...), - for any -- or else an
+	 * expression true when the input passes; ${...} as above. */
+	WFExpressionPlaceUnaryTests
 };
 
 /* What a token of an expression's text is, for an editor to colour. */

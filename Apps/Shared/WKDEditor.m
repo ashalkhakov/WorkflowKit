@@ -62,24 +62,6 @@ static const double WKDMargin = 80;
 	}
 }
 
-/* A copy that writes as the original does: Apple's copy drops the XML
- * declaration's standalone. */
-static NSXMLDocument *
-WKDSnapshot(NSXMLDocument *document)
-{
-	NSXMLDocument *copy = [document copy];
-	if ([copy isStandalone] != [document isStandalone]) {
-		[copy setStandalone:[document isStandalone]];
-	}
-	if ([document version] != nil && ![[copy version] isEqualToString:[document version]]) {
-		[copy setVersion:[document version]];
-	}
-	if ([document characterEncoding] != nil && ![[copy characterEncoding] isEqualToString:[document characterEncoding]]) {
-		[copy setCharacterEncoding:[document characterEncoding]];
-	}
-	return copy;
-}
-
 /* One undoable step: the document as it was is what undo restores. The
  * diagram it starts from is held for the change: its shapes' links to one
  * another are weak, and a change reads the document afresh as it goes. */
@@ -98,7 +80,7 @@ WKDSnapshot(NSXMLDocument *document)
 	BOOL joins = coalescing && _undoManager != nil && [_coalescedName isEqualToString:name]
 		&& [now timeIntervalSinceDate:_coalescedAt] < 1.0 && ![_undoManager canRedo]
 		&& [[_undoManager undoActionName] isEqualToString:name];
-	NSXMLDocument *before = joins ? nil : WKDSnapshot(_document);
+	NSXMLDocument *before = joins ? nil : WKDCopyDocument(_document);
 	change();
 	if (!joins) {
 		[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:before];
@@ -111,7 +93,7 @@ WKDSnapshot(NSXMLDocument *document)
 
 - (void)restore:(NSXMLDocument *)snapshot
 {
-	[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:WKDSnapshot(_document)];
+	[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:WKDCopyDocument(_document)];
 	_document = snapshot;
 	[self reread];
 }
@@ -995,24 +977,6 @@ WKDOnEdge(NSRect host, NSPoint point)
 	return definitionId;
 }
 
-/* An XML name, as an id must be: a letter or underscore, then letters,
- * digits, '-', '_' and '.'. */
-static BOOL
-WKDIsName(NSString *name)
-{
-	if ([name length] == 0) {
-		return NO;
-	}
-	NSMutableCharacterSet *first = [NSMutableCharacterSet letterCharacterSet];
-	[first addCharactersInString:@"_"];
-	NSMutableCharacterSet *rest = [first mutableCopy];
-	[rest formUnionWithCharacterSet:[NSCharacterSet decimalDigitCharacterSet]];
-	[rest addCharactersInString:@"-."];
-	if (![first characterIsMember:[name characterAtIndex:0]]) {
-		return NO;
-	}
-	return [name rangeOfCharacterFromSet:[rest invertedSet]].location == NSNotFound;
-}
 
 - (BOOL)renameElement:(NSString *)elementId to:(NSString *)newId error:(NSString **)reason
 {

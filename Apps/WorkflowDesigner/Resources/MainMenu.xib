@@ -281,6 +281,11 @@
                                     <action selector="editForm:" target="-1" id="WKm-ac-111"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Edit Decision…" keyEquivalent="E" id="WKm-mi-112">
+                                <connections>
+                                    <action selector="editDecision:" target="-1" id="WKm-ac-112"/>
+                                </connections>
+                            </menuItem>
                         </items>
                     </menu>
                 </menuItem>

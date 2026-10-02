@@ -7,6 +7,7 @@ NSString * const WKDDINamespace = @"http://www.omg.org/spec/DD/20100524/DI";
 NSString * const WKDCamundaNamespace = @"http://camunda.org/schema/1.0/bpmn";
 NSString * const WKDExtensionNamespace = @"https://workflowkit.local/bpmn";
 NSString * const WKDXSINamespace = @"http://www.w3.org/2001/XMLSchema-instance";
+NSString * const WKDCamundaDmnNamespace = @"http://camunda.org/schema/1.0/dmn";
 
 BOOL
 WKDIs(NSXMLNode *node, NSString *uri, NSString *local)
@@ -101,7 +102,8 @@ WKDUsualPrefix(NSString *uri)
 {
 	NSDictionary *prefixes = @{ WKDBpmnNamespace: @"bpmn", WKDBpmnDINamespace: @"bpmndi",
 	                            WKDDCNamespace: @"dc", WKDDINamespace: @"di", WKDCamundaNamespace: @"camunda",
-	                            WKDExtensionNamespace: @"wf", WKDXSINamespace: @"xsi" };
+	                            WKDExtensionNamespace: @"wf", WKDXSINamespace: @"xsi",
+	                            WKDCamundaDmnNamespace: @"camunda" };
 	return [prefixes objectForKey:uri] ?: @"ns";
 }
 
@@ -316,4 +318,41 @@ WKDAdoptInto(NSXMLDocument *document, NSXMLElement *element, NSXMLDocument *from
 		}
 	}
 	return adopted;
+}
+
+/* A copy that writes as the original does: Apple's copy drops the XML
+ * declaration's standalone. */
+NSXMLDocument *
+WKDCopyDocument(NSXMLDocument *document)
+{
+	NSXMLDocument *copy = [document copy];
+	if ([copy isStandalone] != [document isStandalone]) {
+		[copy setStandalone:[document isStandalone]];
+	}
+	if ([document version] != nil && ![[copy version] isEqualToString:[document version]]) {
+		[copy setVersion:[document version]];
+	}
+	if ([document characterEncoding] != nil && ![[copy characterEncoding] isEqualToString:[document characterEncoding]]) {
+		[copy setCharacterEncoding:[document characterEncoding]];
+	}
+	return copy;
+}
+
+/* An XML name, as an id must be: a letter or underscore, then letters,
+ * digits, '-', '_' and '.'. */
+BOOL
+WKDIsName(NSString *name)
+{
+	if ([name length] == 0) {
+		return NO;
+	}
+	NSMutableCharacterSet *first = [NSMutableCharacterSet letterCharacterSet];
+	[first addCharactersInString:@"_"];
+	NSMutableCharacterSet *rest = [first mutableCopy];
+	[rest formUnionWithCharacterSet:[NSCharacterSet decimalDigitCharacterSet]];
+	[rest addCharactersInString:@"-."];
+	if (![first characterIsMember:[name characterAtIndex:0]]) {
+		return NO;
+	}
+	return [name rangeOfCharacterFromSet:[rest invertedSet]].location == NSNotFound;
 }

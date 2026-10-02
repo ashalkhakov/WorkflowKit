@@ -9,11 +9,6 @@ static const double WKDButtonsHeight = 24;
 static const double WKDDetailGap = 8;
 static const double WKDDetailLabel = 16;
 
-/* Return ends the editing, as in a field, rather than going on to the
- * next row's cell (gnustep-gui's way). */
-@interface WKDCellTable : NSTableView
-@end
-
 @implementation WKDCellTable
 
 - (void)textDidEndEditing:(NSNotification *)notification
@@ -89,7 +84,7 @@ static const double WKDDetailLabel = 16;
 	BOOL edited = [tableView editedRow] == row
 		&& [[tableView tableColumns] indexOfObjectIdenticalTo:tableColumn] == (NSUInteger)[tableView editedColumn];
 	if (column.holdsExpression && !edited) {
-		return [self colouredText:value column:column];
+		return WKDColouredExpression(value, column.place, [NSFont systemFontOfSize:11]);
 	}
 	return value;
 }
@@ -115,30 +110,6 @@ static const double WKDDetailLabel = 16;
 	rows[(NSUInteger)row] = edited;
 	[self.owner explain:nil column:nil];
 	[self.owner write:rows of:self selecting:row];
-}
-
-/* An expression's tokens in their colours, where the engine stops reading
- * underlined. */
-- (NSAttributedString *)colouredText:(NSString *)text column:(WKDColumn *)column
-{
-	NSMutableAttributedString *coloured = [[NSMutableAttributedString alloc] initWithString:text attributes:@{
-		NSFontAttributeName: [NSFont systemFontOfSize:11],
-		NSForegroundColorAttributeName: [NSColor controlTextColor] }];
-	for (NSDictionary *token in [WFFeelExpression tokensOfText:text place:column.place]) {
-		NSRange range = [[token objectForKey:@"range"] rangeValue];
-		if (NSMaxRange(range) <= [text length]) {
-			[coloured addAttribute:NSForegroundColorAttributeName
-			                 value:WKDExpressionTokenColor([token objectForKey:@"kind"]) range:range];
-		}
-	}
-	NSError *problem = [WFFeelExpression problemInText:text place:column.place];
-	if (problem != nil && [text length] > 0) {
-		NSRange range = [[[problem userInfo] objectForKey:WFErrorRangeKey] rangeValue];
-		range = NSIntersectionRange(range.length > 0 ? range : NSMakeRange(range.location, 1), NSMakeRange(0, [text length]));
-		[coloured addAttributes:@{ NSUnderlineStyleAttributeName: @(NSUnderlineStyleThick),
-		                           NSUnderlineColorAttributeName: [NSColor redColor] } range:range];
-	}
-	return coloured;
 }
 
 - (NSString *)tableView:(NSTableView *)tableView toolTipForCell:(NSCell *)cell rect:(NSRectPointer)rect

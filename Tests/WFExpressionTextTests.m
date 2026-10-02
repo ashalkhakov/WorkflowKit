@@ -55,6 +55,25 @@
 		(@[ @"delimiter:=", @"name:owner", @"punctuation:.", @"name:name" ]));
 }
 
+/* A decision table's input entry: tests of the input's value. */
+- (void)testAnInputEntryIsReadAsUnaryTests
+{
+	XCTAssertEqualObjects([self tokens:@" < 10, [20..30]" place:WFExpressionPlaceUnaryTests],
+		(@[ @"operator:<", @"number:10", @"punctuation:,", @"punctuation:[", @"number:20", @"operator:..",
+		    @"number:30", @"punctuation:]" ]));
+	XCTAssertNil([WFFeelExpression problemInText:@"-" place:WFExpressionPlaceUnaryTests]);
+	XCTAssertNil([WFFeelExpression problemInText:@"" place:WFExpressionPlaceUnaryTests], @"empty is any value");
+	XCTAssertNil([WFFeelExpression problemInText:@"not(\"a\", \"b\")" place:WFExpressionPlaceUnaryTests]);
+	XCTAssertNil([WFFeelExpression problemInText:@"> limit" place:WFExpressionPlaceUnaryTests]);
+	XCTAssertNil([WFFeelExpression problemInText:@"${amount > 5}" place:WFExpressionPlaceUnaryTests]);
+	XCTAssertNotNil([WFFeelExpression problemInText:@"> 10" place:WFExpressionPlaceExpression],
+	                @"not an expression elsewhere");
+	NSError *error = [WFFeelExpression problemInText:@"  [1..5" place:WFExpressionPlaceUnaryTests];
+	XCTAssertNotNil(error);
+	NSRange range = [[[error userInfo] objectForKey:WFErrorRangeKey] rangeValue];
+	XCTAssertTrue(range.location >= 2 && NSMaxRange(range) <= 8, @"%@", error);
+}
+
 - (void)testAStringBeingTypedIsAString
 {
 	XCTAssertEqualObjects([self tokens:@"name = \"Al" place:WFExpressionPlaceExpression],

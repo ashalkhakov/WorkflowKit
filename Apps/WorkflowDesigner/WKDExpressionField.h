@@ -20,6 +20,9 @@
 
 /* The colour a kind of token is drawn in. */
 NSColor *WKDExpressionTokenColor(NSString *kind);
+/* The text in its tokens' colours, where the engine stops reading
+ * underlined: what a table's cell shows when it is not typed in. */
+NSAttributedString *WKDColouredExpression(NSString *text, WFExpressionPlace place, NSFont *font);
 
 @interface WKDExpressionTextStorage : NSTextStorage
 /* What the text starts from before the tokens' colours. */

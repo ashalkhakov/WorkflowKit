@@ -29,6 +29,8 @@ NSXMLElement *WKDNewElement(NSXMLDocument *document, NSString *uri, NSString *lo
 extern NSString * const WKDCamundaNamespace;
 extern NSString * const WKDExtensionNamespace;
 extern NSString * const WKDXSINamespace;
+/* Camunda's extensions to DMN: camunda:inputVariable. */
+extern NSString * const WKDCamundaDmnNamespace;
 
 /* An attribute in a namespace -- camunda:assignee -- by the prefix the
  * document gives the namespace; nil when it has none. */
@@ -55,3 +57,8 @@ NSXMLElement *WKDAdoptInto(NSXMLDocument *document, NSXMLElement *element, NSXML
                            NSUInteger index);
 /* Every element of the document with the id. */
 NSXMLElement *WKDElementWithId(NSXMLDocument *document, NSString *elementId);
+/* A copy that writes as the original does -- Apple's copy drops the XML
+ * declaration's standalone: what an editor's undo restores. */
+NSXMLDocument *WKDCopyDocument(NSXMLDocument *document);
+/* Whether the text can be an id: an XML name without a colon. */
+BOOL WKDIsName(NSString *name);

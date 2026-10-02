@@ -16,6 +16,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../../Shared/WKDEditor+Alignment.m \
 	../WKDProperties.m \
 	../WKDDeployment.m \
+	../WKDDecisions.m \
 	WKDDiagramTests.m \
 	WKDEditorTests.m \
 	WKDCanvasEditsTests.m \
@@ -25,7 +26,8 @@ WorkflowDesignerTests_OBJC_FILES = \
 	WKDLayoutTests.m \
 	WKDPropertiesTests.m \
 	WKDTablesTests.m \
-	WKDDeploymentTests.m
+	WKDDeploymentTests.m \
+	WKDDecisionsTests.m
 
 WorkflowDesignerTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 WorkflowDesignerTests_INCLUDE_DIRS = -I.. -I../../Shared -I../../../Headers

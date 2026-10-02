@@ -85,6 +85,44 @@ static NSString * const WKDUndrawnFile =
 	@"<bpmn:sequenceFlow id=\"back\" sourceRef=\"fix\" targetRef=\"approve\"/>"
 	@"</bpmn:process></bpmn:definitions>";
 
+/* Decisions as Camunda Modeler writes them: a table, a literal expression
+ * requiring it, input data the engine ignores, and the diagram. */
+static NSString * const WKDDecisionsFile =
+	@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+	@"<definitions xmlns=\"https://www.omg.org/spec/DMN/20191111/MODEL/\" "
+	@"xmlns:dmndi=\"https://www.omg.org/spec/DMN/20191111/DMNDI/\" xmlns:dc=\"http://www.omg.org/spec/DMN/20180521/DC/\" "
+	@"xmlns:di=\"http://www.omg.org/spec/DMN/20180521/DI/\" xmlns:camunda=\"http://camunda.org/schema/1.0/dmn\" "
+	@"id=\"dish\" name=\"Dish\" namespace=\"http://camunda.org/schema/1.0/dmn\">"
+	@"<decision id=\"dish\" name=\"Dish\">"
+	@"<decisionTable id=\"dishTable\" hitPolicy=\"FIRST\">"
+	@"<input id=\"season\" label=\"Season\"><inputExpression id=\"seasonExpression\" typeRef=\"string\">"
+	@"<text>season</text></inputExpression></input>"
+	@"<input id=\"guests\" label=\"Guests\" camunda:inputVariable=\"count\"><inputExpression id=\"guestsExpression\" typeRef=\"integer\">"
+	@"<text>guestCount</text></inputExpression></input>"
+	@"<output id=\"dishOutput\" label=\"Dish\" name=\"dish\" typeRef=\"string\"/>"
+	@"<rule id=\"winter\"><description>Warm</description>"
+	@"<inputEntry id=\"winterSeason\"><text>\"Winter\"</text></inputEntry>"
+	@"<inputEntry id=\"winterGuests\"><text>&lt;= 8</text></inputEntry>"
+	@"<outputEntry id=\"winterDish\"><text>\"Roastbeef\"</text></outputEntry></rule>"
+	@"<rule id=\"other\">"
+	@"<inputEntry id=\"otherSeason\"><text>-</text></inputEntry>"
+	@"<inputEntry id=\"otherGuests\"><text></text></inputEntry>"
+	@"<outputEntry id=\"otherDish\"><text>\"Stew\"</text></outputEntry></rule>"
+	@"</decisionTable></decision>"
+	@"<decision id=\"drink\" name=\"Drink\">"
+	@"<variable id=\"drinkVariable\" name=\"drink\" typeRef=\"string\"/>"
+	@"<informationRequirement id=\"drinkNeedsDish\"><requiredDecision href=\"#dish\"/></informationRequirement>"
+	@"<informationRequirement id=\"drinkNeedsAge\"><requiredInput href=\"#age\"/></informationRequirement>"
+	@"<literalExpression id=\"drinkExpression\"><text>if dish = \"Stew\" then \"Beer\" else \"Wine\"</text></literalExpression>"
+	@"</decision>"
+	@"<inputData id=\"age\" name=\"Age\"/>"
+	@"<dmndi:DMNDI><dmndi:DMNDiagram id=\"diagram\">"
+	@"<dmndi:DMNShape id=\"dishShape\" dmnElementRef=\"dish\"><dc:Bounds height=\"80\" width=\"180\" x=\"150\" y=\"250\"/></dmndi:DMNShape>"
+	@"<dmndi:DMNShape id=\"drinkShape\" dmnElementRef=\"drink\"><dc:Bounds height=\"80\" width=\"180\" x=\"150\" y=\"80\"/></dmndi:DMNShape>"
+	@"<dmndi:DMNEdge id=\"drinkNeedsDishEdge\" dmnElementRef=\"drinkNeedsDish\">"
+	@"<di:waypoint x=\"240\" y=\"250\"/><di:waypoint x=\"240\" y=\"160\"/></dmndi:DMNEdge>"
+	@"</dmndi:DMNDiagram></dmndi:DMNDI></definitions>";
+
 static inline NSXMLDocument *
 WKDParse(NSString *xml)
 {

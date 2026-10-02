@@ -434,7 +434,13 @@ static NSArray *
 WKDBusinessRuleProperties(void)
 {
 	NSArray *binding = WKDBindingChoice();
-	return @[ WKDCamunda(@"Decision", @"decisionRef"),
+	/* The decision, in the decision editor: a file of its own made for it
+	 * when no DMN file beside the process defines it. */
+	WKDProperty *edit = [[WKDProperty alloc] init];
+	edit.label = @"Edit Decision…";
+	edit.kind = WKDPropertyButton;
+	edit.actionName = @"editDecision:";
+	return @[ WKDCamunda(@"Decision", @"decisionRef"), edit,
 	          WKDChoice(WKDCamunda(@"Binding", @"decisionRefBinding"), binding[0], binding[1]),
 	          WKDCamunda(@"Version", @"decisionRefVersion"),
 	          WKDCamunda(@"Result variable", @"resultVariable"),

@@ -1,4 +1,5 @@
 #import "WKDAppDelegate.h"
+#import "WKDDecisionWindowController.h"
 #import "WKDDocument.h"
 #import "WKDServerProcessesController.h"
 #import "WDConnectWindowController.h"
@@ -21,11 +22,13 @@
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
 	WDStartTracing();
-	/* The form editor's menu, after Diagram: its items act on the form
-	 * window that is key. */
+	/* The form editor's menu and the decision editor's, after Diagram:
+	 * their items act on the form or decisions window that is key. */
 	NSMenu *menu = [NSApp mainMenu];
 	NSInteger diagram = [menu indexOfItemWithTitle:@"Diagram"];
-	[menu insertItem:[XFDDocument formMenuItem] atIndex:diagram >= 0 ? diagram + 1 : [menu numberOfItems]];
+	NSInteger after = diagram >= 0 ? diagram + 1 : [menu numberOfItems];
+	[menu insertItem:[XFDDocument formMenuItem] atIndex:after];
+	[menu insertItem:[WKDDecisionWindowController decisionMenuItem] atIndex:after + 1];
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification

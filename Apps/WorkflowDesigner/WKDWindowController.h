@@ -30,14 +30,19 @@
 - (IBAction)zoomOut:(id)sender;
 - (IBAction)actualSize:(id)sender;
 - (IBAction)arrange:(id)sender;
-/* Server ▸ Deploy: the process and its forms -- as the form editor has
- * them, for those open in it -- to the server connected. */
+/* Server ▸ Deploy: the process, its forms and its decisions -- as their
+ * editors have them, for those open in one -- to the server connected. */
 - (IBAction)deploy:(id)sender;
 /* Diagram ▸ Edit Form: the selected task's or start event's embedded form,
  * beside the process, opened in this app's form editor (XFormsDesignKit's);
  * made from its fields first, and named in its form key, when there is
  * none. */
 - (IBAction)editForm:(id)sender;
+/* Diagram ▸ Edit Decision: the selected business rule task's decision,
+ * from the DMN file beside the process that defines it, opened in this
+ * app's decision editor; a file of its own made for it, and named in the
+ * task's decisionRef, when there is none. */
+- (IBAction)editDecision:(id)sender;
 /* Diagram ▸ Align: the selected shapes lined up with the first selected;
  * Diagram ▸ Distribute: spread out evenly, across or down. */
 - (IBAction)alignLeftEdges:(id)sender;

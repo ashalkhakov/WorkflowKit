@@ -177,6 +177,30 @@ WKDExpressionTokenColor(NSString *kind)
 @interface WKDExpressionField () <NSTextViewDelegate>
 @end
 
+NSAttributedString *
+WKDColouredExpression(NSString *text, WFExpressionPlace place, NSFont *font)
+{
+	text = text ?: @"";
+	NSMutableAttributedString *coloured = [[NSMutableAttributedString alloc] initWithString:text attributes:@{
+		NSFontAttributeName: font,
+		NSForegroundColorAttributeName: [NSColor controlTextColor] }];
+	for (NSDictionary *token in [WFFeelExpression tokensOfText:text place:place]) {
+		NSRange range = [[token objectForKey:@"range"] rangeValue];
+		if (NSMaxRange(range) <= [text length]) {
+			[coloured addAttribute:NSForegroundColorAttributeName
+			                 value:WKDExpressionTokenColor([token objectForKey:@"kind"]) range:range];
+		}
+	}
+	NSError *problem = [WFFeelExpression problemInText:text place:place];
+	if (problem != nil && [text length] > 0) {
+		NSRange range = [[[problem userInfo] objectForKey:WFErrorRangeKey] rangeValue];
+		range = NSIntersectionRange(range.length > 0 ? range : NSMakeRange(range.location, 1), NSMakeRange(0, [text length]));
+		[coloured addAttributes:@{ NSUnderlineStyleAttributeName: @(NSUnderlineStyleThick),
+		                           NSUnderlineColorAttributeName: [NSColor redColor] } range:range];
+	}
+	return coloured;
+}
+
 @implementation WKDExpressionField
 {
 	NSScrollView *_scroll;

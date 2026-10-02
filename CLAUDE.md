@@ -146,6 +146,8 @@ Its windows are XIBs with Cocoa Bindings, and its forms are XFormsKit's.
 `Apps/WorkflowDesigner` is the BPMN designer (see its README): a document
 app whose document is the BPMN XML, edited in place through `WKDEditor`,
 with the engine's `WFBpmnReader` saying after each change whether it runs.
+It edits DMN files the same way (`WKDDmnEditor`, checked by `WFDmnReader`),
+and forms in XFormsDesignKit's editor.
 It links the engine, and deploys to and opens from a `wf-serve` through
 the connection WorkflowDesk has: `Apps/Shared` holds what both apps
 compile -- the session, sign-in and connect window, and the BPMN document
