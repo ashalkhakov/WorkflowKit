@@ -20,6 +20,9 @@
 @property (nonatomic, copy) NSString *elementId;
 /* Told why a value was refused: a taken id. */
 @property (nonatomic, copy) void (^refused)(NSString *reason);
+/* Told, as an expression is typed, why the engine would not read it; nil
+ * once it would, or once the field is left. */
+@property (nonatomic, copy) void (^explained)(NSString *problem);
 
 /* After any change to the document. */
 - (void)reload;

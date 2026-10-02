@@ -1,5 +1,6 @@
 #import "WKDInspectorView.h"
 #import "WKDEditor.h"
+#import "WKDExpressionField.h"
 #import "WKDProperties.h"
 
 static const double WKDLabelWidth = 104;
@@ -137,6 +138,18 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 				break;
 			}
 			default: {
+				if (property.holdsExpression) {
+					/* Coloured, and checked as it is typed, as the engine
+					 * reads it there. */
+					WKDExpressionField *field = [[WKDExpressionField alloc] initWithFrame:NSMakeRect(fieldX, y, fieldWidth, 22)];
+					field.place = property.place;
+					field.placeholderString = property.placeholder;
+					field.delegate = self;
+					field.target = self;
+					field.action = @selector(changed:);
+					control = field;
+					break;
+				}
 				NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(fieldX, y, fieldWidth, 22)];
 				[field setFont:[NSFont systemFontOfSize:11]];
 				[[field cell] setPlaceholderString:property.placeholder];
@@ -197,7 +210,7 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 			[(NSTextView *)control setString:value];
 			break;
 		default:
-			[(NSTextField *)control setStringValue:value];
+			[(id)control setStringValue:value];
 			break;
 		}
 	}
@@ -224,8 +237,11 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 		value = [[(NSTextView *)control string] copy];
 		break;
 	default:
-		value = [(NSTextField *)control stringValue];
+		value = [(id)control stringValue];
 		break;
+	}
+	if ([control isKindOfClass:[WKDExpressionField class]] && self.explained != nil) {
+		self.explained(nil);
 	}
 	NSString *elementId = self.elementId;
 	/* A new id: the element is the same one under it, from the change on,
@@ -256,6 +272,18 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 - (void)textDidEndEditing:(NSNotification *)notification
 {
 	[self write:[notification object]];
+}
+
+/* An expression being typed: what the engine says of it, while it does. */
+- (void)controlTextDidChange:(NSNotification *)notification
+{
+	WKDExpressionField *field = [notification object];
+	if (![field isKindOfClass:[WKDExpressionField class]] || self.explained == nil) {
+		return;
+	}
+	NSUInteger index = [_controls indexOfObjectIdenticalTo:field];
+	NSString *label = index != NSNotFound ? [[_properties objectAtIndex:index] label] : nil;
+	self.explained(field.problem != nil ? [NSString stringWithFormat:@"%@: %@", label ?: @"Expression", field.problem] : nil);
 }
 
 @end

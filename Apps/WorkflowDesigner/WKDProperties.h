@@ -1,4 +1,9 @@
 #import <Foundation/Foundation.h>
+#if __has_include(<WorkflowKit/WFFeel.h>)
+#import <WorkflowKit/WFFeel.h>
+#else
+#import "WFFeel.h"
+#endif
 
 @class WKDEditor;
 
@@ -31,6 +36,11 @@ typedef NS_ENUM(NSInteger, WKDPropertyKind) {
 @property (nonatomic, copy) NSArray<NSString *> *titles;
 /* Shown in an empty text field: what leaving it empty means. */
 @property (nonatomic, copy) NSString *placeholder;
+/* A text the engine reads as an expression -- a condition -- or as
+ * literal text unless it is marked as one -- camunda:assignee: what the
+ * inspector colours and checks as it is typed, at that place. */
+@property (nonatomic) BOOL holdsExpression;
+@property (nonatomic) WFExpressionPlace place;
 /* The value now, for the element of that id. */
 - (NSString *)valueIn:(WKDEditor *)editor of:(NSString *)elementId;
 /* A new value: one change, or nothing when it is the value already. NO,

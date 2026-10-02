@@ -60,6 +60,24 @@ the element is:
 A field writes when you leave it or press Return. A check box or pop-up
 writes when used. Each write is one undoable change.
 
+### Expressions
+
+Fields the engine reads as expressions are coloured as you type. These
+are:
+
+- **Expressions:** conditions, a loop's collection, cardinality and
+  completion condition, and a conditional event's condition. They are
+  FEEL, unless written as `${...}`, which is the Camunda 7 subset.
+- **Attributes that may hold one:** assignee, candidates, dates, priority,
+  a timer's value and a delegate expression. They are literal text, unless
+  written as `${...}` or begun with `=`.
+
+The engine's own lexer and parser do the work, so the colours and the
+checks are the engine's. Names, keywords, functions, numbers, strings,
+dates and durations, operators and comments each have a colour. Where the
+engine would stop reading is underlined in red, and the status line says
+what it expected there. The field's tool tip says the same.
+
 - **Ids:** changing an id updates every reference to it.
 - **References:** naming a message, signal, error or escalation makes its
   definition at the top of the file, or reuses the one already there.
@@ -135,7 +153,8 @@ directory:
 | `WKDDiagram` | What the canvas draws, read from the XML: shapes with their bounds, subprocess and boundary host, and flows with their waypoints. It is read again after every change. |
 | `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. |
 | `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's. |
-| `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it. |
+| `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
+| `WKDExpressionField` | The expression field and the text storage that colours it, ported from the XForms Designer's XPath field, over the engine's `+[WFFeelExpression tokensOfText:place:]` and `+problemInText:place:`. |
 | `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with its DMTabBar (`ThirdParty/`). |
 | `WKDDeployment` | What a deployment sends: the process and the forms it embeds. |
 | `WKDAppDelegate`, `WKDServerProcessesController` | The server connection, shared by every window, and the Open from Server window. The connection itself is WorkflowDesk's (`../Shared`). |

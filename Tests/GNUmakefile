@@ -10,6 +10,7 @@ BUNDLE_NAME = WorkflowKitTests
 WorkflowKitTests_OBJC_FILES = \
 	WFTestCase.m \
 	WFFeelTests.m \
+	WFExpressionTextTests.m \
 	WFDmnTests.m \
 	WFInMemoryTests.m \
 	WFSQLiteTests.m

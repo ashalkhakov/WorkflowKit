@@ -4,6 +4,7 @@
 #import "WFFeelInternal.h"
 
 NSString * const WFErrorDomain = @"WFErrorDomain";
+NSString * const WFErrorRangeKey = @"WFErrorRange";
 NSString * const WFErrorRefKey = @"WFErrorRef";
 
 @interface WFFlowNode ()

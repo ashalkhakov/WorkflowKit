@@ -118,6 +118,38 @@
 	XCTAssertEqualObjects(((WFGateway *)[definition nodeWithId:@"ok"]).defaultFlowId, @"f3");
 }
 
+/* Where the engine reads an expression, the inspector colours and checks
+ * one, as the engine reads it there; and what the empty fields suggest is
+ * something it reads. */
+- (void)testExpressionsAreMarkedWhereTheEngineReadsThem
+{
+	WKDEditor *editor = [self editorOf:WKDModellerFile];
+	WKDProperty *condition = [self property:@"Condition" of:@"f3" in:editor];
+	XCTAssertTrue(condition.holdsExpression);
+	XCTAssertEqual(condition.place, WFExpressionPlaceExpression);
+	WKDProperty *assignee = [self property:@"Assignee" of:@"review" in:editor];
+	XCTAssertTrue(assignee.holdsExpression);
+	XCTAssertEqual(assignee.place, WFExpressionPlaceAttribute);
+	XCTAssertFalse([self property:@"Name" of:@"review" in:editor].holdsExpression);
+	XCTAssertTrue([self property:@"When" of:@"late" in:editor].holdsExpression);
+	[self set:@"Instances" of:@"review" to:@"parallel" in:editor];
+	for (NSString *label in @[ @"Collection", @"Cardinality", @"Completion" ]) {
+		WKDProperty *property = [self property:label of:@"review" in:editor];
+		XCTAssertTrue(property.holdsExpression, @"%@", label);
+		XCTAssertEqual(property.place, WFExpressionPlaceExpression, @"%@", label);
+	}
+	for (NSString *elementId in @[ @"f3", @"review", @"late", @"start" ]) {
+		for (WKDSection *section in WKDSectionsFor(editor, elementId)) {
+			for (WKDProperty *property in section.properties) {
+				if (property.holdsExpression && property.placeholder != nil) {
+					XCTAssertNil([WFFeelExpression problemInText:property.placeholder place:property.place],
+					             @"%@'s %@: %@", elementId, property.label, property.placeholder);
+				}
+			}
+		}
+	}
+}
+
 - (void)testAServiceTaskBecomesAnExternalTask
 {
 	WKDEditor *editor = [[WKDEditor alloc] initWithDocument:[WKDEditor newProcessDocument] undoManager:nil];

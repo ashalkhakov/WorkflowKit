@@ -31,6 +31,7 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDPane.m \
 	WKDOutline.m \
 	WKDInspectorView.m \
+	WKDExpressionField.m \
 	WKDDeployment.m \
 	WKDDocument.m \
 	WKDWindowController.m \

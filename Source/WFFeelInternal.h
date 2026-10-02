@@ -116,6 +116,10 @@ typedef NS_ENUM(NSInteger, WFFeelOperator) {
 - (NSString *)description;
 @end
 
+/* In a parse error: what was expected and found, without where -- for an
+ * editor, which shows where itself. */
+#define WFFeelExpectedKey @"WFFeelExpected"
+
 /* Parses FEEL, or the Camunda 7 subset: literals, names and paths,
  * + - * /, comparisons, && || ! and their word forms, parentheses. nil, with an
  * error saying where, for text that is neither. */

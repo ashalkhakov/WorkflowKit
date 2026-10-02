@@ -131,13 +131,19 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	void (^refused)(NSString *) = ^(NSString *reason) {
 		[weakSelf note:reason];
 	};
+	/* An expression's problem as it is typed: said, not beeped at. */
+	void (^explained)(NSString *) = ^(NSString *problem) {
+		[weakSelf explain:problem];
+	};
 	_inspector = [[WKDInspectorView alloc] initWithFrame:[self.inspectorHost bounds]];
 	_inspector.editor = [self editor];
 	_inspector.refused = refused;
+	_inspector.explained = explained;
 	WKDFillHostScrolling(self.inspectorHost, _inspector);
 	_processInspector = [[WKDInspectorView alloc] initWithFrame:[self.processHost bounds]];
 	_processInspector.editor = [self editor];
 	_processInspector.refused = refused;
+	_processInspector.explained = explained;
 	WKDFillHostScrolling(self.processHost, _processInspector);
 }
 
@@ -235,6 +241,12 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	if (note != nil) {
 		NSBeep();
 	}
+	[self updateStatus];
+}
+
+- (void)explain:(NSString *)problem
+{
+	_note = [problem copy];
 	[self updateStatus];
 }
 

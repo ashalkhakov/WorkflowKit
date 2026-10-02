@@ -21,6 +21,29 @@
  * ge), && || ! (and or not), and parentheses. It becomes the same FEEL;
  * a division is a decimal one, 3/5 is 0.6.
  */
+/* Where text in a BPMN file is, which says how the engine reads it. */
+typedef NS_ENUM(NSInteger, WFExpressionPlace) {
+	/* A condition, a cardinality, a collection: FEEL, unless it is
+	 * ${...} (the Camunda 7 subset); a leading = is FEEL too. */
+	WFExpressionPlaceExpression = 0,
+	/* An attribute such as camunda:assignee or a timer's value: literal
+	 * text, unless it is ${...} or begins with =. */
+	WFExpressionPlaceAttribute
+};
+
+/* What a token of an expression's text is, for an editor to colour. */
+extern NSString * const WFExpressionTokenName;      /* amount, order.total */
+extern NSString * const WFExpressionTokenKeyword;   /* if, and, true, null, eq */
+extern NSString * const WFExpressionTokenFunction;  /* a name called: sum(, string length( */
+extern NSString * const WFExpressionTokenNumber;
+extern NSString * const WFExpressionTokenString;
+extern NSString * const WFExpressionTokenTemporal;  /* @"2020-01-01" */
+extern NSString * const WFExpressionTokenOperator;  /* + <= && .. */
+extern NSString * const WFExpressionTokenPunctuation; /* ( ) [ ] { } , . : */
+extern NSString * const WFExpressionTokenDelimiter; /* ${ and }, a leading = */
+extern NSString * const WFExpressionTokenComment;
+extern NSString * const WFExpressionTokenInvalid;   /* a character that begins no token */
+
 @interface WFFeelExpression : NSObject <WFCondition>
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -40,4 +63,15 @@
 /* Canonical FEEL: parsing it gives the same expression. */
 - (NSString *)expressionString;
 
+@end
+
+/* For an editor of expressions. */
+@interface WFFeelExpression (WFEditing)
+/* The text as an editor shows it, read as the engine reads text in that
+ * place: its tokens, in order, each a dictionary of @"kind" (one of the
+ * kinds above) and @"range" (an NSValue); none for literal text. */
++ (NSArray<NSDictionary *> *)tokensOfText:(NSString *)text place:(WFExpressionPlace)place;
+/* Why the engine would not read the text there; nil when it would, and for
+ * literal text. Its WFErrorRangeKey says where in the text. */
++ (NSError *)problemInText:(NSString *)text place:(WFExpressionPlace)place;
 @end

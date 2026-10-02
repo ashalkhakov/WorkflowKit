@@ -18,6 +18,7 @@ WorkflowKit_OBJC_FILES = \
 	Source/WFFlowElements.m \
 	Source/WFFeelLexer.m \
 	Source/WFFeelParser.m \
+	Source/WFFeelHighlight.m \
 	Source/WFFeelEvaluator.m \
 	Source/WFFeelFunctions.m \
 	Source/WFFeelTemporal.m \

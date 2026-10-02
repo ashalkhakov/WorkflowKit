@@ -99,4 +99,7 @@ typedef NS_ENUM(NSInteger, WFErrorCode) {
 };
 
 extern NSString * const WFErrorDomain;
+/* In an error about text -- an expression the engine cannot read --
+ * where in the text, as an NSValue holding an NSRange. */
+extern NSString * const WFErrorRangeKey;
 extern NSString * const WFErrorRefKey;

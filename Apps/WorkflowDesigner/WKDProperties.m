@@ -123,10 +123,19 @@ WKDSetExpression(NSXMLDocument *document, NSXMLElement *parent, NSString *local,
 
 /* The text of a child of the element's child: an event definition's timer,
  * the loop's cardinality. */
+/* An expression, or literal text that may be one, the engine reads. */
+static WKDProperty *
+WKDHoldingExpression(WKDProperty *property, WFExpressionPlace place)
+{
+	property.holdsExpression = YES;
+	property.place = place;
+	return property;
+}
+
 static WKDProperty *
 WKDNestedExpression(NSString *label, NSString *outer, NSString *inner, BOOL formal)
 {
-	return WKDMake(label, WKDPropertyText, ^NSString *(NSXMLElement *element, NSXMLDocument *document) {
+	return WKDHoldingExpression(WKDMake(label, WKDPropertyText, ^NSString *(NSXMLElement *element, NSXMLDocument *document) {
 		return WKDChildText(WKDChild(element, WKDBpmnNamespace, outer), WKDBpmnNamespace, inner);
 	}, WKDEditing(label, ^(NSXMLElement *element, NSXMLDocument *document, NSString *value, WKDEditor *editor) {
 		NSXMLElement *container = WKDEnsureChild(document, element, WKDBpmnNamespace, outer);
@@ -135,7 +144,7 @@ WKDNestedExpression(NSString *label, NSString *outer, NSString *inner, BOOL form
 		} else {
 			WKDSetChildText(document, container, WKDBpmnNamespace, inner, value);
 		}
-	}));
+	})), WFExpressionPlaceExpression);
 }
 
 /* An attribute of the element's child: the loop's camunda:collection. */
@@ -206,7 +215,8 @@ WKDFlowSections(void)
 	}, WKDEditing(@"Condition", ^(NSXMLElement *element, NSXMLDocument *document, NSString *value, WKDEditor *editor) {
 		WKDSetExpression(document, element, @"conditionExpression", value);
 	}));
-	condition.placeholder = @"=amount > 100";
+	condition.placeholder = @"amount > 100";
+	WKDHoldingExpression(condition, WFExpressionPlaceExpression);
 	/* The source's default: written on the source, not the flow. */
 	WKDProperty *isDefault = WKDMake(@"Default flow", WKDPropertyCheck, ^NSString *(NSXMLElement *element, NSXMLDocument *document) {
 		NSXMLElement *source = WKDElementWithId(document, WKDAttribute(element, @"sourceRef"));
@@ -234,7 +244,7 @@ WKDUserTaskProperties(void)
 	for (NSArray *pair in @[ @[ @"Assignee", @"assignee" ], @[ @"Candidate users", @"candidateUsers" ],
 	                          @[ @"Candidate groups", @"candidateGroups" ], @[ @"Due date", @"dueDate" ],
 	                          @[ @"Follow-up date", @"followUpDate" ], @[ @"Priority", @"priority" ] ]) {
-		[properties addObject:WKDCamunda(pair[0], pair[1])];
+		[properties addObject:WKDHoldingExpression(WKDCamunda(pair[0], pair[1]), WFExpressionPlaceAttribute)];
 	}
 	((WKDProperty *)properties[2]).placeholder = @"managers, department:purchasing";
 	((WKDProperty *)properties[0]).placeholder = @"ann, ${owner}, =reviewer";
@@ -284,6 +294,7 @@ WKDImplementationProperties(void)
 	WKDProperty *class = WKDCamunda(@"Delegate class", @"class");
 	WKDProperty *expression = WKDCamunda(@"Delegate expression", @"delegateExpression");
 	expression.placeholder = @"${mailer}";
+	WKDHoldingExpression(expression, WFExpressionPlaceAttribute);
 	return @[ kind, topic, class, expression, WKDCamunda(@"Task priority", @"taskPriority") ];
 }
 
@@ -385,7 +396,8 @@ WKDLoopProperties(void)
 	loop.values = @[ @"", @"parallel", @"sequential" ];
 	loop.titles = @[ @"One", @"Parallel", @"Sequential" ];
 	WKDProperty *collection = WKDNestedCamunda(@"Collection", @"multiInstanceLoopCharacteristics", @"collection");
-	collection.placeholder = @"${reviewers}";
+	collection.placeholder = @"reviewers";
+	WKDHoldingExpression(collection, WFExpressionPlaceExpression);
 	return @[ loop, collection,
 	          WKDNestedCamunda(@"Element variable", @"multiInstanceLoopCharacteristics", @"elementVariable"),
 	          WKDNestedExpression(@"Cardinality", @"multiInstanceLoopCharacteristics", @"loopCardinality", YES),
@@ -443,6 +455,7 @@ WKDTimerProperties(void)
 		WKDSetExpression(document, timer, currentKind(element, document), text);
 	}));
 	value.placeholder = @"PT1H, 2026-12-31T09:00, R3/PT10M";
+	WKDHoldingExpression(value, WFExpressionPlaceAttribute);
 	return @[ kind, value ];
 }
 

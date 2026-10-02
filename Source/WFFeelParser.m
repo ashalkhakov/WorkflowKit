@@ -285,9 +285,18 @@ WFFeelKeyText(NSString *key)
 		WFFeelToken *token = [self peek];
 		NSString *message = [NSString stringWithFormat:@"\"%@\": expected %@ at %lu, found %@",
 			self.text, expected, (unsigned long)token.range.location + 1, token];
+		/* Where: the token, or at the end the last character. */
+		NSRange range = token.range;
+		if (range.length == 0) {
+			NSUInteger length = [self.text length];
+			range = length > 0 ? NSMakeRange(MIN(range.location, length - 1), 1) : NSMakeRange(0, 0);
+		}
 		self.error = [NSError errorWithDomain:WFErrorDomain
 		                                 code:WFErrorCondition
-		                             userInfo:@{ NSLocalizedDescriptionKey: message }];
+		                             userInfo:@{ NSLocalizedDescriptionKey: message,
+		                                         WFErrorRangeKey: [NSValue valueWithRange:range],
+		                                         WFFeelExpectedKey: [NSString stringWithFormat:@"expected %@, found %@",
+		                                                             expected, token] }];
 	}
 	return [WFFeelNode literal:[NSNull null]];
 }
