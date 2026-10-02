@@ -457,6 +457,9 @@ WFFormsOf(WFProcessDefinition *definition)
 					}
 					return nil;
 				}
+				/* XML, not the HTML Apple's takes an <html> root for, whose
+				 * element names it writes in lower case: the instance's too. */
+				[document setDocumentContentKind:NSXMLDocumentXMLKind];
 				[documents setObject:[document XMLString] forKey:activityId];
 			} else if ([form.fields count] > 0) {
 				[documents setObject:[[form XFormsDocument] XMLString] forKey:activityId];

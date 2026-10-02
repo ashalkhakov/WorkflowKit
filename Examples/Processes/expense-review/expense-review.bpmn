@@ -23,7 +23,7 @@
         <bpmn:flowNodeRef>approvedEnough</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="claimed" name="Expense claimed"/>
+    <bpmn:startEvent id="claimed" name="Expense claimed" camunda:formKey="embedded:deployment:claim.xhtml" camunda:formHandlerClass="expenseClaim"/>
     <bpmn:exclusiveGateway id="receiptsNeeded" name="Any line over 500?" default="noReceiptsFlow"/>
     <bpmn:userTask id="checkReceipts" name="Check receipts" camunda:candidateGroups="finance"/>
     <bpmn:exclusiveGateway id="receiptsDone"/>

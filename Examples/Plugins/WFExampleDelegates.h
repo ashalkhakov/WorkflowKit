@@ -21,6 +21,9 @@
  *   orderForm      order-fulfilment's start form: an order of lines, each
  *                  an item, a quantity and a price, checked and totalled
  *                  again, its order number the business key
+ *   expenseClaim   expense-review's start form: a claim of lines, each an
+ *                  item and an amount, and the reviewers who review it,
+ *                  checked again, its reference the business key
  *   expenseReview  expense-review's review form: the claim's lines shown,
  *                  approved taken back, and a reason (needed to reject)
  *                  added to the notes variable as "reviewer: reason"
@@ -36,6 +39,9 @@
 @end
 
 @interface WFExampleOrderForm : NSObject <WFFormHandler>
+@end
+
+@interface WFExampleExpenseClaim : NSObject <WFFormHandler>
 @end
 
 @interface WFExampleExpenseReview : NSObject <WFFormHandler>

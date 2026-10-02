@@ -226,6 +226,75 @@ WFNumber(NSString *text, BOOL whole)
 
 @end
 
+@implementation WFExampleExpenseClaim
+
+- (NSXMLDocument *)instanceForForm:(WFFormContext *)context error:(NSError **)error
+{
+	NSXMLElement *claim = [[NSXMLElement alloc] initWithName:@"claim"];
+	[claim addChild:WFElement(@"reference", nil)];
+	NSXMLElement *lines = [[NSXMLElement alloc] initWithName:@"lines"];
+	NSXMLElement *line = [[NSXMLElement alloc] initWithName:@"line"];
+	[line addChild:WFElement(@"item", nil)];
+	[line addChild:WFElement(@"amount", nil)];
+	[lines addChild:line];
+	[claim addChild:lines];
+	NSXMLElement *reviewers = [[NSXMLElement alloc] initWithName:@"reviewers"];
+	[reviewers addChild:WFElement(@"reviewer", nil)];
+	[claim addChild:reviewers];
+	[claim addChild:WFElement(@"total", nil)];
+	return [[NSXMLDocument alloc] initWithRootElement:claim];
+}
+
+- (NSDictionary *)variablesFromInstance:(NSXMLDocument *)instance
+                                   form:(WFFormContext *)context
+                                  error:(NSError **)error
+{
+	NSXMLElement *claim = [instance rootElement];
+	NSString *reference = WFText(claim, @"reference");
+	NSString *problem = [reference length] == 0 ? @"a claim needs its reference" : nil;
+	NSMutableArray *lines = [NSMutableArray array];
+	for (NSXMLElement *line in [WFChild(claim, @"lines") elementsForName:@"line"]) {
+		if (problem != nil) {
+			break;
+		}
+		NSUInteger number = [lines count] + 1;
+		NSString *item = WFText(line, @"item");
+		NSNumber *amount = WFNumber(WFText(line, @"amount"), NO);
+		if ([item length] == 0) {
+			problem = [NSString stringWithFormat:@"line %lu needs its item", (unsigned long)number];
+		} else if (amount == nil || [amount doubleValue] <= 0) {
+			problem = [NSString stringWithFormat:@"line %lu: the amount is a number above 0", (unsigned long)number];
+		} else {
+			[lines addObject:@{ @"item": item, @"amount": amount }];
+		}
+	}
+	/* Each reviewer once, in the order named. */
+	NSMutableArray *reviewers = [NSMutableArray array];
+	for (NSXMLElement *reviewer in [WFChild(claim, @"reviewers") elementsForName:@"reviewer"]) {
+		NSString *name = [[reviewer stringValue]
+			stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+		if ([name length] > 0 && ![reviewers containsObject:name]) {
+			[reviewers addObject:name];
+		}
+	}
+	if (problem == nil && [lines count] == 0) {
+		problem = @"a claim needs a line";
+	}
+	if (problem == nil && [reviewers count] == 0) {
+		problem = @"a claim needs a reviewer";
+	}
+	if (problem != nil) {
+		if (error != NULL) {
+			*error = WFFormRefusal(problem);
+		}
+		return nil;
+	}
+	context.businessKey = context.businessKey ?: reference;
+	return @{ @"lines": lines, @"reviewers": reviewers, @"approvals": @0, @"notes": @[] };
+}
+
+@end
+
 @implementation WFExampleExpenseReview
 
 - (NSXMLDocument *)instanceForForm:(WFFormContext *)context error:(NSError **)error
@@ -286,6 +355,7 @@ WFNumber(NSString *text, BOOL whole)
 	[engine registerDelegate:[[WFExampleMailer alloc] init] forName:@"mailer"];
 	[engine registerDelegate:[[WFExampleWorkload alloc] init] forName:@"workload"];
 	[engine registerDelegateClass:[WFExampleOrderForm class] forName:@"orderForm"];
+	[engine registerDelegateClass:[WFExampleExpenseClaim class] forName:@"expenseClaim"];
 	[engine registerDelegateClass:[WFExampleExpenseReview class] forName:@"expenseReview"];
 }
 

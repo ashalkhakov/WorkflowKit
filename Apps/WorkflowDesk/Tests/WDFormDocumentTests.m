@@ -62,6 +62,20 @@ static NSString * const WDDeployedForm =
 	XCTAssertEqual([[[document rootElement] elementsForName:@"body"] count], (NSUInteger)1);
 }
 
+/* Names keep their case: Apple's takes an <html> root for HTML, and would
+ * write applicationId as applicationid, which the form's binds and
+ * controls -- ref="applicationId" -- then miss. */
+- (void)testNamesKeepTheirCase
+{
+	NSString *form = [WDFieldsForm stringByReplacingOccurrencesOfString:@"amount" withString:@"applicationId"];
+	NSError *error = nil;
+	NSString *merged = WDFormDocumentWithInstance(form,
+		@"<data><applicationId>A-1</applicationId><approved/></data>", &error);
+	XCTAssertNotNil(merged, @"%@", error);
+	XCTAssertTrue([merged rangeOfString:@"<applicationId>A-1</applicationId>"].location != NSNotFound, @"%@", merged);
+	XCTAssertTrue([merged rangeOfString:@"applicationid"].location == NSNotFound, @"%@", merged);
+}
+
 - (void)testTheFirstModelsFirstInstanceIsTheDefault
 {
 	NSError *error = nil;

@@ -18,20 +18,26 @@ names is what a worker answers. The delegates and listeners the processes
 call by name are in `Examples/Plugins` (`WFExampleDelegates.h`), as an
 application's would be: `${audit}` keeps an audit trail, `${mailer}` puts a
 message together from its fields, and `${workload}` routes a task and
-sets its due date from its fields. Its form handlers, `orderForm` and
-`expenseReview`, give two of the forms their instances and take them back.
+sets its due date from its fields. Its form handlers, `orderForm`,
+`expenseClaim` and `expenseReview`, give three of the forms their
+instances and take them back.
 
-Three tasks have forms of their own, written in XForms and deployed beside
-the process (`camunda:formKey="embedded:deployment:..."`): open them in
-WorkflowDesk, or in the designer with Edit Form. They show the two ways a
-form gets its data:
+Four forms of the examples are written in XForms and deployed beside
+their processes (`camunda:formKey="embedded:deployment:..."`): open them
+in WorkflowDesk, or in the designer with Edit Form. They show the two ways
+a form gets its data:
 
 - `loan-application/underwrite.xhtml` lays out the task's fields
   (`camunda:formData`), which the engine fills and checks itself.
-- `order-fulfilment/order.xhtml` and `expense-review/review.xhtml` hold
-  lists, which fields cannot, so a form handler (`camunda:formHandlerClass`)
+- `order-fulfilment/order.xhtml`, `expense-review/claim.xhtml` (the claim
+  that starts its process) and `expense-review/review.xhtml` hold lists,
+  which fields cannot, so a form handler (`camunda:formHandlerClass`)
   builds their instance from the variables and turns what is submitted
   back into variables.
+
+A process whose start event has a form is started on it: the loan
+application's start event has fields, and order fulfilment and expense
+review have forms of their own.
 
 Two processes are drawn in a pool divided into lanes, as most modelled
 processes are: `loan-application` (the loan system, underwriters and

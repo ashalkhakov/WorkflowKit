@@ -138,6 +138,8 @@
 	WFFormData *form = [engine.formService startFormDataForKey:@"order-fulfilment" error:&error];
 	XCTAssertNotNil(form, @"%@", error);
 	XCTAssertTrue([[form.document XMLString] rangeOfString:@"Add line"].location != NSNotFound, @"order.xhtml");
+	XCTAssertTrue([[form.document XMLString] rangeOfString:@"<orderNumber"].location != NSNotFound,
+	              @"its names as they are, not lower case as HTML's");
 	XCTAssertEqual([[[[[form.instance rootElement] elementsForName:@"lines"] firstObject] elementsForName:@"line"] count],
 	               (NSUInteger)1);
 	XCTAssertEqualObjects([self field:@"express" of:form.instance], @"false");
@@ -391,6 +393,26 @@
 	                                        @"lines": @[ @{ @"item": @"lunch", @"amount": @25 } ] } engine:engine];
 	XCTAssertNil([self task:@"checkReceipts" of:small engine:engine]);
 	XCTAssertEqualObjects([[[engine.taskService tasksForProcessInstance:small] firstObject] assignee], @"dan");
+
+	/* Claimed on its start form: the lines and the reviewers, as lists. */
+	WFFormData *claimForm = [engine.formService startFormDataForKey:@"expense-review" error:&error];
+	XCTAssertNotNil(claimForm, @"%@", error);
+	XCTAssertTrue([[claimForm.document XMLString] rangeOfString:@"Add reviewer"].location != NSNotFound, @"claim.xhtml");
+	NSString *noReviewer = @"<claim><reference>E-3</reference><lines><line><item>taxi</item><amount>30</amount></line>"
+		@"</lines><reviewers><reviewer/></reviewers></claim>";
+	XCTAssertNil([engine.formService submitStartFormForKey:@"expense-review" businessKey:nil
+	                                              instance:[self XML:noReviewer] error:&error]);
+	XCTAssertEqualObjects([error localizedDescription], @"a claim needs a reviewer");
+	NSString *claim = @"<claim><reference>E-3</reference><lines><line><item>taxi</item><amount>30</amount></line>"
+		@"<line><item>train</item><amount>45.50</amount></line></lines>"
+		@"<reviewers><reviewer>eve</reviewer><reviewer> fay </reviewer><reviewer>eve</reviewer></reviewers></claim>";
+	WFProcessInstance *claimed = [engine.formService submitStartFormForKey:@"expense-review" businessKey:nil
+	                                                              instance:[self XML:claim] error:&error];
+	XCTAssertNotNil(claimed, @"%@", error);
+	XCTAssertEqualObjects(claimed.businessKey, @"E-3", @"the reference");
+	NSArray *reviewers = [[engine.taskService tasksForProcessInstance:claimed.processInstanceId] valueForKey:@"assignee"];
+	XCTAssertEqualObjects([reviewers sortedArrayUsingSelector:@selector(compare:)], (@[ @"eve", @"fay" ]),
+	                      @"each reviewer once");
 }
 
 /* A ticket the customer writes about, which needs a product fix: the bug

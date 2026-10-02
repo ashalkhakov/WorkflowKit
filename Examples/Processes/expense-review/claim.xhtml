@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The claim form that starts the process. Its instance is the claim
+  handler's (expenseClaim, in Examples/Plugins): it opens blank, with one
+  line and one reviewer, and the handler takes the claim back, checking it
+  again, as the variables lines (each an item and an amount), reviewers
+  (their user ids), approvals (none yet) and notes, with the claim's
+  reference as the business key.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xf="http://www.w3.org/2002/xforms"
+      xmlns:ev="http://www.w3.org/2001/xml-events"
+      xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <head>
+    <title>Expense claim</title>
+    <xf:model>
+      <xf:instance>
+        <claim xmlns="">
+          <reference/>
+          <lines>
+            <line><item/><amount/></line>
+          </lines>
+          <reviewers>
+            <reviewer/>
+          </reviewers>
+          <total/>
+        </claim>
+      </xf:instance>
+      <!-- What Add line and Add reviewer copy. -->
+      <xf:instance id="blank">
+        <blank xmlns="">
+          <line><item/><amount/></line>
+          <reviewer/>
+        </blank>
+      </xf:instance>
+      <xf:bind ref="reference" required="true()"/>
+      <xf:bind ref="lines/line/item" required="true()"/>
+      <xf:bind ref="lines/line/amount" type="xsd:decimal" required="true()" constraint=". &gt; 0"/>
+      <xf:bind ref="reviewers/reviewer" required="true()"/>
+      <xf:bind ref="total" calculate="sum(../lines/line/amount[. != ''])"/>
+    </xf:model>
+  </head>
+  <body>
+    <xf:group>
+      <xf:label>Claim</xf:label>
+      <xf:input ref="reference">
+        <xf:label>Reference</xf:label>
+        <xf:hint>The claim's own number: E-1042.</xf:hint>
+      </xf:input>
+    </xf:group>
+    <xf:group>
+      <xf:label>Lines</xf:label>
+      <xf:repeat id="lines" nodeset="lines/line">
+        <xf:input ref="item"><xf:label>Item</xf:label></xf:input>
+        <xf:input ref="amount">
+          <xf:label>Amount</xf:label>
+          <xf:alert>An amount above zero.</xf:alert>
+        </xf:input>
+        <xf:trigger>
+          <xf:label>Remove</xf:label>
+          <xf:delete ev:event="DOMActivate" nodeset="../line" at="index('lines')"/>
+        </xf:trigger>
+      </xf:repeat>
+      <xf:trigger>
+        <xf:label>Add line</xf:label>
+        <xf:insert ev:event="DOMActivate" context="lines" nodeset="line" at="last()" position="after"
+                   origin="instance('blank')/line"/>
+      </xf:trigger>
+      <xf:output ref="total"><xf:label>Total</xf:label></xf:output>
+      <xf:output value="'any line over 500 has its receipt checked by finance first'">
+        <xf:label>Receipts</xf:label>
+      </xf:output>
+    </xf:group>
+    <xf:group>
+      <xf:label>Reviewers</xf:label>
+      <xf:repeat id="reviewers" nodeset="reviewers/reviewer">
+        <xf:input ref=".">
+          <xf:label>Reviewer</xf:label>
+          <xf:hint>Their user id. Two approvals settle the claim.</xf:hint>
+        </xf:input>
+        <xf:trigger>
+          <xf:label>Remove</xf:label>
+          <xf:delete ev:event="DOMActivate" nodeset="../reviewer" at="index('reviewers')"/>
+        </xf:trigger>
+      </xf:repeat>
+      <xf:trigger>
+        <xf:label>Add reviewer</xf:label>
+        <xf:insert ev:event="DOMActivate" context="reviewers" nodeset="reviewer" at="last()" position="after"
+                   origin="instance('blank')/reviewer"/>
+      </xf:trigger>
+    </xf:group>
+  </body>
+</html>

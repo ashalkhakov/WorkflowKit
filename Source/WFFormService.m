@@ -133,7 +133,10 @@
 		text = record.document;
 		return YES;
 	} error:NULL];
-	return text != nil ? [[NSXMLDocument alloc] initWithXMLString:text options:0 error:NULL] : nil;
+	NSXMLDocument *document = text != nil ? [[NSXMLDocument alloc] initWithXMLString:text options:0 error:NULL] : nil;
+	/* XML, as it was deployed: not the HTML Apple's would write it as. */
+	[document setDocumentContentKind:NSXMLDocumentXMLKind];
+	return document;
 }
 
 - (NSError *)noForm:(NSString *)where

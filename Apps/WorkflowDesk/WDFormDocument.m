@@ -45,6 +45,10 @@ WDFormDocumentWithInstance(NSString *document, NSString *instance, NSError **err
 		}
 		return nil;
 	}
+	/* Written as XML: Apple's takes an <html> root for HTML, and writes its
+	 * element names in lower case -- the instance's applicationId too,
+	 * which its control is then bound to nothing by. */
+	[form setDocumentContentKind:NSXMLDocumentXMLKind];
 	if ([instance length] == 0) {
 		return [form XMLString];
 	}

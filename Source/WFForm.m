@@ -494,6 +494,8 @@ WFXFormsLabel(NSString *text)
 	}
 	[html addChild:body];
 	NSXMLDocument *document = [[NSXMLDocument alloc] initWithRootElement:html];
+	/* Written as XML, its element names as they are, not as HTML. */
+	[document setDocumentContentKind:NSXMLDocumentXMLKind];
 	[document setCharacterEncoding:@"UTF-8"];
 	return document;
 }
