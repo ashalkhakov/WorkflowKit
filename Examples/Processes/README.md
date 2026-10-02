@@ -6,9 +6,12 @@ Each directory is one deployment: its BPMN files, with the decisions
 
 - `Tests/WFExamplesTests.inc` deploys each directory and runs it through
   the scenario its documentation describes, on every store.
-- `wf-serve -Deployments Examples/Processes -Plugins Examples/Plugins/obj`
-  deploys all of them, to try in WorkflowDesk or open in WorkflowDesigner
-  (File ▸ Open from Server), after `make -C Examples/Plugins`.
+- The example server deploys all of them, with the plugin they call:
+  `make -C Server run` (which builds `Examples/Plugins` first), or the
+  `wf-serve` scheme in Xcode. Try them in WorkflowDesk, or open them in
+  WorkflowDesigner (File ▸ Open from Server). Elsewhere,
+  `wf-serve -Deployments Examples/Processes -Plugins Examples/Plugins/obj`
+  does the same.
 
 Service, send and script tasks are external tasks; the topic each one
 names is what a worker answers. The delegates and listeners the processes

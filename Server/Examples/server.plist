@@ -1,6 +1,10 @@
 {
     StoreType = InMemory;
-    Deployments = Examples/deployments;
+    /* The purchase request, and every example process (Examples/Processes)
+     * with its decisions and forms. */
+    Deployments = (Examples/deployments, ../Examples/Processes);
+    /* What the example processes call: make -C ../Examples/Plugins. */
+    Plugins = ../Examples/Plugins/obj;
     HistoryLevel = full;
     Port = 8080;
     DevelopmentUser = developer;

@@ -217,6 +217,7 @@ p_desk = product("WorkflowDesk", ".app", "wrapper.application")
 p_desk_tests = product("WorkflowDeskTests", ".xctest", "wrapper.cfbundle")
 p_designer = product("WorkflowDesigner", ".app", "wrapper.application")
 p_designer_tests = product("WorkflowDesignerTests", ".xctest", "wrapper.cfbundle")
+p_plugin = product("ExampleDelegates", ".bundle", "wrapper.cfbundle")
 
 
 # ---------------------------------------------------------------- build files
@@ -286,6 +287,14 @@ s_frameworks = phase("PBXFrameworksBuildPhase", "wf-serve", "Frameworks", names(
      buildfile("wf-serve", otelkit, "OTelKit.framework"),
      buildfile("wf-serve", foundation, "Foundation.framework"),
      buildfile("wf-serve", coredata, "CoreData.framework")]))
+
+# The tests compile the same file in.
+PLUGIN_SOURCE = "../Examples/Plugins/WFExampleDelegates.m"
+pl_sources = phase("PBXSourcesBuildPhase", "ExampleDelegates", "Sources", names(
+    [buildfile("ExampleDelegates", test_refs[PLUGIN_SOURCE], "WFExampleDelegates.m")]))
+pl_frameworks = phase("PBXFrameworksBuildPhase", "ExampleDelegates", "Frameworks", names(
+    [buildfile("ExampleDelegates", p_fw, "WorkflowKit.framework"),
+     buildfile("ExampleDelegates", foundation, "Foundation.framework")]))
 
 d_sources = phase("PBXSourcesBuildPhase", "PurchaseRequestDemo", "Sources", names(
     [buildfile("PurchaseRequestDemo", demo_refs[d], d) for d in DEMO]))
@@ -411,8 +420,8 @@ g_designer = group("WorkflowDesigner", "WorkflowDesigner",
                    "WorkflowDesigner")
 g_apps = group("Apps", "Apps", [g_shared, g_desk, g_designer], "Apps")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
-g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_desk, p_desk_tests,
-                                            p_designer, p_designer_tests])
+g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_plugin, p_desk,
+                                            p_desk_tests, p_designer, p_designer_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
                                                   httpserverkit, otelkit, xformskit])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
@@ -473,6 +482,15 @@ SERVE_S = {
     "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
 }
+# The example processes' delegates and form handlers, as the plugin bundle
+# wf-serve loads (Examples/Plugins).
+PLUGIN_S = {
+    "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
+    "GENERATE_INFOPLIST_FILE": "YES",
+    "INFOPLIST_KEY_NSPrincipalClass": "WFExamplePlugin",
+    "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.ExampleDelegates",
+    "WRAPPER_EXTENSION": "bundle",
+}
 DEMO_S = {
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
@@ -529,6 +547,7 @@ cl_odata = configs("WorkflowKitOData", settings(ODATA_FW), settings(ODATA_FW))
 cl_tests = configs("WorkflowKitTests", settings(TESTS_S), settings(TESTS_S))
 cl_demo = configs("PurchaseRequestDemo", settings(DEMO_S), settings(DEMO_S))
 cl_serve = configs("wf-serve", settings(SERVE_S), settings(SERVE_S))
+cl_plugin = configs("ExampleDelegates", settings(PLUGIN_S), settings(PLUGIN_S))
 cl_desk = configs("WorkflowDesk", settings(DESK_S), settings(DESK_S))
 cl_desk_tests = configs("WorkflowDeskTests", settings(DESK_TESTS_S), settings(DESK_TESTS_S))
 cl_designer = configs("WorkflowDesigner", settings(DESIGNER_S), settings(DESIGNER_S))
@@ -583,6 +602,9 @@ t_demo = target("PurchaseRequestDemo", cl_demo, [d_sources, d_frameworks],
 t_serve = target("wf-serve", cl_serve, [s_sources, s_frameworks],
                  [dependency("wf-serve", t_fw, "WorkflowKit"), dependency("wf-serve", t_odata, "WorkflowKitOData")],
                  p_serve, "com.apple.product-type.tool")
+t_plugin = target("ExampleDelegates", cl_plugin, [pl_sources, pl_frameworks],
+                  [dependency("ExampleDelegates", t_fw, "WorkflowKit")],
+                  p_plugin, "com.apple.product-type.bundle")
 t_desk = target("WorkflowDesk", cl_desk, [w_model, w_sources, w_resources, w_frameworks, w_embed], [],
                 p_desk, "com.apple.product-type.application")
 t_desk_tests = target("WorkflowDeskTests", cl_desk_tests, [wt_sources, wt_frameworks], [],
@@ -606,7 +628,7 @@ add(project_id, "Project object", [
     ("productRefGroup", "%s /* Products */" % g_products),
     ("projectDirPath", '""'),
     ("projectRoot", '""'),
-    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve, t_desk, t_desk_tests, t_designer,
+    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve, t_plugin, t_desk, t_desk_tests, t_designer,
                        t_designer_tests])),
 ])
 
@@ -700,9 +722,11 @@ demo_ref = ref(t_demo, "PurchaseRequestDemo", "PurchaseRequestDemo")
 serve_ref = ref(t_serve, "wf-serve", "wf-serve")
 scheme("WorkflowKit", [fw_ref, odata_ref], test=tests_ref)
 scheme("PurchaseRequestDemo", [demo_ref], run=demo_ref)
-# Run from Server/, on the example deployment, as `make -C Server run` does.
-scheme("wf-serve", [serve_ref], run=serve_ref, directory="$(PROJECT_DIR)/Server",
-       arguments=["-Config Examples/server.plist"])
+# Run from Server/, on the example deployments, as `make -C Server run` does,
+# with the example plugin built beside it rather than where make puts it.
+plugin_ref = ref(t_plugin, "ExampleDelegates", "ExampleDelegates.bundle")
+scheme("wf-serve", [plugin_ref, serve_ref], run=serve_ref, directory="$(PROJECT_DIR)/Server",
+       arguments=["-Config Examples/server.plist", "-Plugins $(BUILT_PRODUCTS_DIR)"])
 desk_ref = ref(t_desk, "WorkflowDesk", "WorkflowDesk.app")
 desk_tests_ref = ref(t_desk_tests, "WorkflowDeskTests", "WorkflowDeskTests.xctest")
 # The frameworks of the projects beside this one that the app embeds, built

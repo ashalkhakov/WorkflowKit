@@ -226,11 +226,13 @@ static NSMutableDictionary *WFStoreTypes;
 			WFServerFail(error, [NSString stringWithFormat:@"the engine does not open: %@", [failure localizedDescription]]);
 			return nil;
 		}
-		NSString *deployments = [[self setting:@"Deployments"] description];
-		if (deployments != nil
-		    && ![self deployTo:engine from:[deployments stringByExpandingTildeInPath] error:error]) {
-			[engine close];
-			return nil;
+		id deployments = [self setting:@"Deployments"];
+		for (id directory in [deployments isKindOfClass:[NSArray class]] ? deployments
+		                     : deployments != nil ? @[ deployments ] : @[]) {
+			if (![self deployTo:engine from:[[directory description] stringByExpandingTildeInPath] error:error]) {
+				[engine close];
+				return nil;
+			}
 		}
 		_configurers = configurers;
 		_engine = engine;

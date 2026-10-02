@@ -28,11 +28,12 @@
  *   StoreOptions  a dictionary, handed to the store as it is: for a
  *                 server's store, CDSQLStoreSchemaName names the schema the
  *                 engine's tables are in
- *   Deployments   a directory: each directory in it is a deployment of
- *                 the files in it, by their paths under it -- BPMN, DMN,
- *                 the XForms documents its forms name -- deployed at start,
- *                 unless the latest deployment of that name is the same
- *                 byte for byte
+ *   Deployments   a directory, or (in the property list) a list of them:
+ *                 each directory in one is a deployment of the files in
+ *                 it, by their paths under it -- BPMN, DMN, the XForms
+ *                 documents its forms name -- deployed at start, unless
+ *                 the latest deployment of that name is the same byte for
+ *                 byte
  *   Plugins       a directory of bundles, each a WFEnginePlugin's
  *                 (WFProcessEngine.h): delegates, listeners, form handlers.
  *                 A principal class that conforms to ODataServiceConfiguring

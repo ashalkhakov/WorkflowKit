@@ -39,7 +39,10 @@ export LD_LIBRARY_PATH := $(CURDIR)/../$(GNUSTEP_OBJ_DIR):$(ODATAKIT)/obj:$(LD_L
 export WORKFLOWKIT_MODEL ?= $(CURDIR)/../WorkflowKit/Versions/0/Resources/WorkflowKit.momd
 
 .PHONY: run check
+# The example processes' delegates and form handlers first: the example
+# configuration loads them.
 run: all
+	$(MAKE) -C ../Examples/Plugins
 	$(GNUSTEP_OBJ_DIR)/wf-serve -Config Examples/server.plist
 
 check:: all

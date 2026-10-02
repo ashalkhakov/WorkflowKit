@@ -20,6 +20,8 @@ WDSort(NSString *key, BOOL ascending)
 	NSUInteger _instancesRead;
 	NSUInteger _detailsRead;
 	NSUInteger _marksRead;
+	/* The Show menu's choice: 0 running, 1 finished, 2 all. */
+	NSInteger _instanceFilter;
 	/* Each definition's diagram, by its id, once read; and the
 	 * document each was read from, which its shapes need kept. */
 	NSMutableDictionary<NSString *, WKDDiagram *> *_diagrams;
@@ -152,9 +154,13 @@ WDSort(NSString *key, BOOL ascending)
 		[self instanceSelectionDidChange];
 		return;
 	}
-	NSPredicate *predicate = [NSPredicate predicateWithFormat:@"definitionId == %@",
-		[definition valueForKey:@"definitionId"]];
-	[self read:@"WFExecution" where:predicate into:self.instances then:^{
+	NSString *definitionId = [definition valueForKey:@"definitionId"];
+	/* Running: the engine's executions. Finished, or all: its history. */
+	NSString *entity = _instanceFilter == 0 ? @"WFExecution" : @"WFHistoricProcessInstance";
+	NSPredicate *predicate = _instanceFilter == 1
+		? [NSPredicate predicateWithFormat:@"definitionId == %@ AND endTime != nil", definitionId]
+		: [NSPredicate predicateWithFormat:@"definitionId == %@", definitionId];
+	[self read:entity where:predicate into:self.instances then:^{
 		if (read == self->_instancesRead) {
 			[self selectFirstOf:self.instances];
 			[self instanceSelectionDidChange];
@@ -162,21 +168,72 @@ WDSort(NSString *key, BOOL ascending)
 	}];
 }
 
+- (IBAction)instanceFilterChanged:(id)sender
+{
+	_instanceFilter = [[sender selectedItem] tag];
+	/* Running ones by business key; finished ones the latest first. */
+	[self.instances setSortDescriptors:_instanceFilter == 0
+		? @[ WDSort(@"businessKey", YES), WDSort(@"executionId", YES) ]
+		: @[ WDSort(@"startTime", NO), WDSort(@"businessKey", YES) ]];
+	[self definitionSelectionDidChange];
+}
+
+/* Of a finished instance's variable updates, each variable's last. */
+static NSArray *
+WDLastValues(NSArray *updates)
+{
+	if (updates == nil) {
+		return nil;
+	}
+	NSMutableDictionary *last = [NSMutableDictionary dictionary];
+	for (NSManagedObject *update in updates) {
+		NSString *name = [update valueForKey:@"name"];
+		NSManagedObject *known = name != nil ? [last objectForKey:name] : nil;
+		if (name != nil && (known == nil || [[update valueForKey:@"sequence"] compare:[known valueForKey:@"sequence"]]
+		                                      == NSOrderedDescending)) {
+			[last setObject:update forKey:name];
+		}
+	}
+	return [last allValues];
+}
+
+/* A row of the instances list that is running: an execution, or a
+ * history row with no end yet. */
+static BOOL
+WDIsRunning(NSManagedObject *instance)
+{
+	if (instance == nil) {
+		return NO;
+	}
+	if ([[[instance entity] name] isEqualToString:@"WFExecution"]) {
+		return YES;
+	}
+	return [instance valueForKey:@"endTime"] == nil;
+}
+
 - (void)instanceSelectionDidChange
 {
 	NSManagedObject *instance = [self selectedOf:self.instances];
 	self.instanceSelected = instance != nil;
+	BOOL running = WDIsRunning(instance);
+	self.instanceRunning = running;
 	NSUInteger read = ++_detailsRead;
-	NSArray *lists = @[ @[ @"WFVariable", self.variables ], @[ @"WFHistoricActivityInstance", self.activities ],
-	                    @[ @"WFIncident", self.incidents ], @[ @"WFJob", self.jobs ] ];
+	/* A finished instance's are in the history: its variables' last
+	 * values, its incidents; it has no jobs. */
+	NSArray *lists = running
+		? @[ @[ @"WFVariable", self.variables ], @[ @"WFHistoricActivityInstance", self.activities ],
+		     @[ @"WFIncident", self.incidents ], @[ @"WFJob", self.jobs ] ]
+		: @[ @[ @"WFHistoricVariableUpdate", self.variables ], @[ @"WFHistoricActivityInstance", self.activities ],
+		     @[ @"WFHistoricIncident", self.incidents ], @[ @"", self.jobs ] ];
 	for (NSArray *list in lists) {
 		NSArrayController *controller = [list lastObject];
-		if (instance == nil) {
+		if (instance == nil || [[list firstObject] length] == 0) {
 			[controller setContent:@[]];
 			continue;
 		}
 		NSPredicate *predicate = [NSPredicate predicateWithFormat:@"processInstanceId == %@",
 			[instance valueForKey:@"executionId"]];
+
 		NSFetchRequest *fetch = [NSFetchRequest fetchRequestWithEntityName:[list firstObject]];
 		[fetch setPredicate:predicate];
 		[self setLoading:YES];
@@ -184,6 +241,9 @@ WDSort(NSString *key, BOOL ascending)
 			[self setLoading:NO];
 			if (read != self->_detailsRead) {
 				return;
+			}
+			if ([[list firstObject] isEqualToString:@"WFHistoricVariableUpdate"]) {
+				objects = WDLastValues(objects);
 			}
 			[controller setContent:objects ?: @[]];
 			[controller rearrangeObjects];
@@ -274,7 +334,27 @@ WDSort(NSString *key, BOOL ascending)
 		[self.diagramView setActive:active finished:finished incidents:incidents];
 		return;
 	}
-	NSArray *ids = [[self.instances arrangedObjects] valueForKey:@"executionId"];
+	NSString *definitionId = [[self selectedOf:self.definitions] valueForKey:@"definitionId"];
+	if (definitionId == nil) {
+		[self.diagramView setActive:nil finished:nil incidents:nil];
+		return;
+	}
+	/* The running instances, whatever the list shows. */
+	NSFetchRequest *executions = [NSFetchRequest fetchRequestWithEntityName:@"WFExecution"];
+	[executions setPredicate:[NSPredicate predicateWithFormat:@"definitionId == %@", definitionId]];
+	[self setLoading:YES];
+	[_session fetch:executions completion:^(NSArray *rows, NSError *executionsError) {
+		[self setLoading:NO];
+		if (read != self->_marksRead) {
+			return;
+		}
+		[self markRunning:[rows valueForKey:@"executionId"] ?: @[] read:read];
+	}];
+}
+
+/* Where the running instances of these ids are, and their incidents. */
+- (void)markRunning:(NSArray *)ids read:(NSUInteger)read
+{
 	if ([ids count] == 0) {
 		[self.diagramView setActive:nil finished:nil incidents:nil];
 		return;
@@ -382,16 +462,43 @@ WDSort(NSString *key, BOOL ascending)
 	     failure:@"Could not resume the process definition."];
 }
 
+/* The execution of the running instance selected: the row itself, or, for
+ * a row of the history, the execution read for it. */
+- (void)withSelectedExecution:(void (^)(NSManagedObject *execution))then
+{
+	NSManagedObject *instance = [self selectedOf:self.instances];
+	if (!WDIsRunning(instance)) {
+		return;
+	}
+	if ([[[instance entity] name] isEqualToString:@"WFExecution"]) {
+		then(instance);
+		return;
+	}
+	NSFetchRequest *fetch = [NSFetchRequest fetchRequestWithEntityName:@"WFExecution"];
+	[fetch setPredicate:[NSPredicate predicateWithFormat:@"executionId == %@", [instance valueForKey:@"executionId"]]];
+	[self setLoading:YES];
+	[_session fetch:fetch completion:^(NSArray *objects, NSError *error) {
+		[self setLoading:NO];
+		if ([objects firstObject] == nil) {
+			WDAlert([self window], @"The instance is no longer running.", error);
+			return;
+		}
+		then([objects firstObject]);
+	}];
+}
+
 - (IBAction)suspendInstance:(id)sender
 {
-	[self invoke:@"Suspend" on:[self selectedOf:self.instances] parameters:nil
-	     failure:@"Could not suspend the process instance."];
+	[self withSelectedExecution:^(NSManagedObject *execution) {
+		[self invoke:@"Suspend" on:execution parameters:nil failure:@"Could not suspend the process instance."];
+	}];
 }
 
 - (IBAction)activateInstance:(id)sender
 {
-	[self invoke:@"Activate" on:[self selectedOf:self.instances] parameters:nil
-	     failure:@"Could not resume the process instance."];
+	[self withSelectedExecution:^(NSManagedObject *execution) {
+		[self invoke:@"Activate" on:execution parameters:nil failure:@"Could not resume the process instance."];
+	}];
 }
 
 - (IBAction)cancelInstance:(id)sender
@@ -408,8 +515,10 @@ WDSort(NSString *key, BOOL ascending)
 	[alert addButtonWithTitle:@"Keep Running"];
 	[alert beginSheetModalForWindow:[self window] completionHandler:^(NSModalResponse response) {
 		if (response == NSAlertFirstButtonReturn) {
-			[self invoke:@"Cancel" on:instance parameters:@{ @"Reason": @"Cancelled in WorkflowDesk" }
-			     failure:@"Could not cancel the process instance."];
+			[self withSelectedExecution:^(NSManagedObject *execution) {
+				[self invoke:@"Cancel" on:execution parameters:@{ @"Reason": @"Cancelled in WorkflowDesk" }
+				     failure:@"Could not cancel the process instance."];
+			}];
 		}
 	}];
 }

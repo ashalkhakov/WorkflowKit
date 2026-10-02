@@ -96,7 +96,10 @@ who is asking, health and readiness, metrics, the access log, CORS, and
 OpenTelemetry traces (OTelKit) -- from settings its header lists; the
 header lists the engine's own. An app that needs routes or APIs beside
 OData subclasses it, or adds an `HSModule`; never write another HTTP
-server. `wf-serve` (`Server/`) is `HSMain` with it and nothing more; with
+server. `wf-serve` (`Server/`) is `HSMain` with it and nothing more; its
+example configuration (`Server/Examples/server.plist`, which `make -C
+Server run` and the Xcode scheme use) deploys the purchase request and
+every process in `Examples/Processes`, with `Examples/Plugins`; with
 `postgresql=yes` and `mysql=yes` it has FreeCoreData's server stores.
 `make -C Server check` drives a purchase request through it with curl and
 asks for its health, readiness and metrics:

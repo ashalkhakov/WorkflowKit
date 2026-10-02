@@ -185,14 +185,32 @@
                         </connections>
                     </button>
                     <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-lb-176">
-                        <rect key="frame" x="360" y="624" width="320" height="17"/>
-                        <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
-                        <textFieldCell key="cell" lineBreakMode="truncatingTail" truncatesLastVisibleLine="YES" sendsActionOnEndEditing="YES" alignment="left" title="Running Instances" id="WDo-lc-177">
+                        <rect key="frame" x="360" y="624" width="90" height="17"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                        <textFieldCell key="cell" lineBreakMode="truncatingTail" truncatesLastVisibleLine="YES" sendsActionOnEndEditing="YES" alignment="left" title="Instances" id="WDo-lc-177">
                             <font key="font" metaFont="systemBold"/>
                             <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
                     </textField>
+                    <popUpButton verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-pu-401">
+                        <rect key="frame" x="452" y="618" width="130" height="26"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                        <popUpButtonCell key="cell" type="push" title="Running" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="WDo-mi-402" id="WDo-pc-401">
+                            <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="menu"/>
+                            <menu key="menu" id="WDo-pm-401">
+                                <items>
+                                    <menuItem title="Running" state="on" tag="0" id="WDo-mi-402"/>
+                                    <menuItem title="Finished" tag="1" id="WDo-mi-403"/>
+                                    <menuItem title="All" tag="2" id="WDo-mi-404"/>
+                                </items>
+                            </menu>
+                        </popUpButtonCell>
+                        <connections>
+                            <action selector="instanceFilterChanged:" target="-2" id="WDo-ac-401"/>
+                        </connections>
+                    </popUpButton>
                     <scrollView fixedFrame="YES" autohidesScrollers="YES" horizontalLineScroll="22" horizontalPageScroll="10" verticalLineScroll="22" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-sv-191">
                         <rect key="frame" x="360" y="424" width="660" height="192"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
@@ -207,7 +225,7 @@
                                     <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
                                     <color key="gridColor" name="gridColor" catalog="System" colorSpace="catalog"/>
                                     <tableColumns>
-                                        <tableColumn identifier="executionId" editable="NO" width="270" minWidth="40" maxWidth="1000" id="WDo-tc-179">
+                                        <tableColumn identifier="executionId" editable="NO" width="190" minWidth="40" maxWidth="1000" id="WDo-tc-179">
                                             <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Instance">
                                                 <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                 <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
@@ -223,7 +241,7 @@
                                                 <binding destination="WDo-ac-002" name="value" keyPath="arrangedObjects.executionId" id="WDo-bd-181"/>
                                             </connections>
                                         </tableColumn>
-                                        <tableColumn identifier="businessKey" editable="NO" width="220" minWidth="40" maxWidth="1000" id="WDo-tc-182">
+                                        <tableColumn identifier="businessKey" editable="NO" width="120" minWidth="40" maxWidth="1000" id="WDo-tc-182">
                                             <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Business Key">
                                                 <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                 <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
@@ -253,6 +271,38 @@
                                             <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
                                             <connections>
                                                 <binding destination="WDo-ac-002" name="value" keyPath="arrangedObjects.state" id="WDo-bd-187"/>
+                                            </connections>
+                                        </tableColumn>
+                                        <tableColumn identifier="startTime" editable="NO" width="110" minWidth="40" maxWidth="1000" id="WDo-tc-5185">
+                                            <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Started">
+                                                <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
+                                            </tableHeaderCell>
+                                            <textFieldCell key="dataCell" lineBreakMode="truncatingTail" selectable="YES" alignment="left" title="Text Cell" id="WDo-dc-5186">
+                                                <font key="font" metaFont="system"/>
+                                                <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                            </textFieldCell>
+                                            <sortDescriptor key="sortDescriptorPrototype" ascending="YES" sortKey="state"/>
+                                            <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                                            <connections>
+                                                <binding destination="WDo-ac-002" name="value" keyPath="arrangedObjects.startTime" id="WDo-bd-5187"/>
+                                            </connections>
+                                        </tableColumn>
+                                        <tableColumn identifier="endTime" editable="NO" width="110" minWidth="40" maxWidth="1000" id="WDo-tc-6185">
+                                            <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Ended">
+                                                <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
+                                            </tableHeaderCell>
+                                            <textFieldCell key="dataCell" lineBreakMode="truncatingTail" selectable="YES" alignment="left" title="Text Cell" id="WDo-dc-6186">
+                                                <font key="font" metaFont="system"/>
+                                                <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                            </textFieldCell>
+                                            <sortDescriptor key="sortDescriptorPrototype" ascending="YES" sortKey="state"/>
+                                            <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                                            <connections>
+                                                <binding destination="WDo-ac-002" name="value" keyPath="arrangedObjects.endTime" id="WDo-bd-6187"/>
                                             </connections>
                                         </tableColumn>
                                     </tableColumns>
@@ -286,7 +336,7 @@
                         </buttonCell>
                         <connections>
                             <action selector="suspendInstance:" target="-2" id="WDo-ac-195"/>
-                            <binding destination="-2" name="enabled" keyPath="instanceSelected" id="WDo-bd-196"/>
+                            <binding destination="-2" name="enabled" keyPath="instanceRunning" id="WDo-bd-196"/>
                         </connections>
                     </button>
                     <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-bt-201">
@@ -298,7 +348,7 @@
                         </buttonCell>
                         <connections>
                             <action selector="activateInstance:" target="-2" id="WDo-ac-199"/>
-                            <binding destination="-2" name="enabled" keyPath="instanceSelected" id="WDo-bd-200"/>
+                            <binding destination="-2" name="enabled" keyPath="instanceRunning" id="WDo-bd-200"/>
                         </connections>
                     </button>
                     <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-bt-205">
@@ -310,7 +360,7 @@
                         </buttonCell>
                         <connections>
                             <action selector="cancelInstance:" target="-2" id="WDo-ac-203"/>
-                            <binding destination="-2" name="enabled" keyPath="instanceSelected" id="WDo-bd-204"/>
+                            <binding destination="-2" name="enabled" keyPath="instanceRunning" id="WDo-bd-204"/>
                         </connections>
                     </button>
                     <tabView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WDo-tv-299">

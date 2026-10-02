@@ -4,20 +4,22 @@ NSDictionary *
 WDEntityClasses(void)
 {
 	return @{ @"WFVariable": @"WDVariable", @"WFHistoricVariableUpdate": @"WDVariable",
-	          @"WFDefinitionRecord": @"WDSuspendable", @"WFExecution": @"WDSuspendable" };
+	          @"WFHistoricVariable": @"WDVariable",
+	          @"WFDefinitionRecord": @"WDSuspendable", @"WFExecution": @"WDSuspendable",
+	          @"WFHistoricProcessInstance": @"WDHistoricInstance" };
 }
 
 @implementation WDVariable
 
 + (NSSet *)keyPathsForValuesAffectingDisplayValue
 {
-	return [NSSet setWithObjects:@"textValue", @"jsonText", @"realNumber", @"truthValue", @"dateTime",
-		@"bytesValue", nil];
+	return [NSSet setWithObjects:@"textValue", @"jsonText", @"realNumber", @"wholeNumber", @"truthValue",
+		@"dateTime", @"bytesValue", nil];
 }
 
 - (id)displayValue
 {
-	for (NSString *key in @[ @"textValue", @"jsonText", @"realNumber", @"dateTime" ]) {
+	for (NSString *key in @[ @"textValue", @"jsonText", @"wholeNumber", @"realNumber", @"dateTime" ]) {
 		id value = [self valueForKey:key];
 		if (value != nil) {
 			return value;
@@ -43,6 +45,45 @@ WDEntityClasses(void)
 - (NSString *)state
 {
 	return [[self valueForKey:@"suspended"] boolValue] ? @"Suspended" : @"Active";
+}
+
+- (NSDate *)startTime
+{
+	return nil;
+}
+
+- (NSDate *)endTime
+{
+	return nil;
+}
+
+@end
+
+@implementation WDHistoricInstance
+
++ (NSSet *)keyPathsForValuesAffectingExecutionId
+{
+	return [NSSet setWithObject:@"processInstanceId"];
+}
+
+- (NSString *)executionId
+{
+	return [self valueForKey:@"processInstanceId"];
+}
+
+- (NSString *)state
+{
+	[self willAccessValueForKey:@"state"];
+	NSString *raw = [self primitiveValueForKey:@"state"];
+	[self didAccessValueForKey:@"state"];
+	NSDictionary *words = @{ @"ACTIVE": @"Active", @"SUSPENDED": @"Suspended", @"COMPLETED": @"Completed",
+	                         @"EXTERNALLY_TERMINATED": @"Canceled", @"INTERNALLY_TERMINATED": @"Terminated" };
+	return [words objectForKey:raw ?: @""] ?: [raw capitalizedString];
+}
+
+- (BOOL)isRunning
+{
+	return [self valueForKey:@"endTime"] == nil;
 }
 
 @end

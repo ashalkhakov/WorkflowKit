@@ -31,6 +31,7 @@
 		168EFE1966EE16C725220701 /* WKDTypesTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 22E248FF48B60108749DDF90 /* WKDTypesTests.m */; };
 		1725ADF36718BE265E74A261 /* WKDOutline.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = AA8C7BC0EAADF3D6E03E52F4 /* WKDOutline.m */; };
 		1744EBA86112B79AE386ED38 /* WFTypes.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 82A9264CEF1DD63DE1DC4914 /* WFTypes.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		18565A525198E41B4FD05906 /* WFExampleDelegates.m in ExampleDelegates */ = { isa = PBXBuildFile; fileRef = CA45130A37EA2EEE31CABA0F /* WFExampleDelegates.m */; };
 		1877C754F8D816156BE7DC22 /* WDSignIn.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = DF787AED42FA4250E0E11D3C /* WDSignIn.m */; };
 		18DD4FBB2A1739E1BC8EBCE3 /* AppKit.framework in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = D9440F138977C55F58D15995 /* AppKit.framework */; };
 		19D0DC221431404CE4BCA2DA /* WFStore.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 2092E6C210C24A4CEEBB280A /* WFStore.m */; };
@@ -82,6 +83,7 @@
 		5BC7EC669EDB8710CE001C88 /* WKDInspectorView.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 256FA4DDB1A34C8F6D7C7766 /* WKDInspectorView.m */; };
 		5D669998ECEA43FAFE42050A /* WDConnectWindowController.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 07C88C31572E234F3FC802A1 /* WDConnectWindowController.m */; };
 		5E153024B661FEA6C9322243 /* OTelKit.framework in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = A9464F12C40389720351CF71 /* OTelKit.framework */; };
+		600F7F39FB8C0F9DAB6FAEA7 /* Foundation.framework in ExampleDelegates */ = { isa = PBXBuildFile; fileRef = B29454D488C4F49E273C15A0 /* Foundation.framework */; };
 		605C4FB7118CB204389194A1 /* WKDDiagramTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = A067EE67726F52438528BCDA /* WKDDiagramTests.m */; };
 		61210CDE7320ABDB34638C84 /* WFTestCase.m in WorkflowKitTests */ = { isa = PBXBuildFile; fileRef = B889BD1773784D5B911A2332 /* WFTestCase.m */; };
 		61F0072B29087A4A5FB90DFA /* WKDEditor+Canvas.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 5DE618889A380C69D9861862 /* WKDEditor+Canvas.m */; };
@@ -107,6 +109,7 @@
 		74276469454D123DCB7F2EA0 /* WFFormService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 693B6C5E6C9A4660D1ED1172 /* WFFormService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		776CFB20A9E03665187A5FF8 /* WKDPropertiesTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 41AFDFC42580B2BEEB0E08CD /* WKDPropertiesTests.m */; };
 		79364317002E8ACB80D714DB /* WDTasksWindowController.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = A5A4B14A73EEEFB6BCA19F09 /* WDTasksWindowController.m */; };
+		79FF46871F998A524A14943F /* WorkflowKit.framework in ExampleDelegates */ = { isa = PBXBuildFile; fileRef = 26EF78F0632519432985E683 /* WorkflowKit.framework */; };
 		7ADCA002D722AEBEF3379DFA /* WKDEditorTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 74B42B02CCD1B5AA47D17AE2 /* WKDEditorTests.m */; };
 		7B642CDEE04736732C4FB45F /* WKDRenderer.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 941E5145442C2C3F38ADCE0B /* WKDRenderer.m */; };
 		7E1890E7CA8ED649C3760ED6 /* WFExternalTaskService.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 3262393709D3B8619F13D3D3 /* WFExternalTaskService.m */; };
@@ -245,6 +248,13 @@
 			remoteGlobalIDString = 27FF5E22392971B8D21B493B;
 			remoteInfo = WorkflowKitOData;
 		};
+		A91604DB3F6645F846769E15 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C85F249A009E6B852FD0AE48;
+			remoteInfo = WorkflowKit;
+		};
 		B53024955B1219BFC64D3796 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
@@ -331,6 +341,7 @@
 		23908830DA51E97C102E5DAB /* WFManagementService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFManagementService.h; sourceTree = "<group>"; };
 		256993C8A240F5C1E562CB7A /* WFTimerTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFTimerTests.inc; sourceTree = "<group>"; };
 		256FA4DDB1A34C8F6D7C7766 /* WKDInspectorView.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WKDInspectorView.m; sourceTree = "<group>"; };
+		259A56E1D43BA676A2A06BA7 /* ExampleDelegates.bundle */ = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExampleDelegates.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		26B1006EFEF0AE79870F09B5 /* WFFeelFunctions.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFFeelFunctions.m; sourceTree = "<group>"; };
 		26B4BBF48F59F971A04755C1 /* WFHistoryTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFHistoryTests.inc; sourceTree = "<group>"; };
 		26EF78F0632519432985E683 /* WorkflowKit.framework */ = { isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = WorkflowKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -566,6 +577,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B0B7BE1110C4273C17E51F70 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				79FF46871F998A524A14943F /* WorkflowKit.framework in ExampleDelegates */,
+				600F7F39FB8C0F9DAB6FAEA7 /* Foundation.framework in ExampleDelegates */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BF67D0EC33E7FE729C8E9D5E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -689,6 +709,7 @@
 				DFC8CC2FFB1029A61E406DE9 /* WorkflowKitTests.xctest */,
 				D7418BD4F00F1BFEFE9885B7 /* PurchaseRequestDemo */,
 				759364013D6AC7F235C3EC2E /* wf-serve */,
+				259A56E1D43BA676A2A06BA7 /* ExampleDelegates.bundle */,
 				CF5D7D1827B0471A570B6A4A /* WorkflowDesk.app */,
 				2D31A8CAFB6D1390BBB012DB /* WorkflowDeskTests.xctest */,
 				45E63BDA63CE3E0362DB6573 /* WorkflowDesigner.app */,
@@ -1101,6 +1122,23 @@
 			productReference = DFC8CC2FFB1029A61E406DE9 /* WorkflowKitTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		7A8090799ADB0FBC3D780824 /* ExampleDelegates */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A0C6EA1F5447EAF8C905CA4 /* Build configuration list for PBXNativeTarget "ExampleDelegates" */;
+			buildPhases = (
+				8D3B77AA6C7B6E11F8C9C09D /* Sources */,
+				B0B7BE1110C4273C17E51F70 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BABBCF765610B54A1D5D4DAB /* PBXTargetDependency */,
+			);
+			name = ExampleDelegates;
+			productName = ExampleDelegates;
+			productReference = 259A56E1D43BA676A2A06BA7 /* ExampleDelegates.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		8E61B9CCF66B1EC804627DB5 /* WorkflowDesignerTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2E2D6D353D7EBF50EE75E0D5 /* Build configuration list for PBXNativeTarget "WorkflowDesignerTests" */;
@@ -1213,6 +1251,7 @@
 				782374E825FAB6D56317B24C /* WorkflowKitTests */,
 				F7FC19492C97835418C0B101 /* PurchaseRequestDemo */,
 				E57B7BFE7D24FF6EB4C69CBF /* wf-serve */,
+				7A8090799ADB0FBC3D780824 /* ExampleDelegates */,
 				6BDD8ED3BD76F6DE7743F25C /* WorkflowDesk */,
 				95AEC80836A9073A78508E7C /* WorkflowDeskTests */,
 				3F39B3A49E088734D4C2B719 /* WorkflowDesigner */,
@@ -1385,6 +1424,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8D3B77AA6C7B6E11F8C9C09D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				18565A525198E41B4FD05906 /* WFExampleDelegates.m in ExampleDelegates */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA3136A19C90C6984C4B1B2D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1490,6 +1537,11 @@
 			target = C85F249A009E6B852FD0AE48 /* WorkflowKit */;
 			targetProxy = FB49D431693FCB52214C7581 /* PBXContainerItemProxy */;
 		};
+		BABBCF765610B54A1D5D4DAB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C85F249A009E6B852FD0AE48 /* WorkflowKit */;
+			targetProxy = A91604DB3F6645F846769E15 /* PBXContainerItemProxy */;
+		};
 		E27352CBCEFD5AF9E8AE6265 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 27FF5E22392971B8D21B493B /* WorkflowKitOData */;
@@ -1526,6 +1578,18 @@
 			};
 			name = Debug;
 		};
+		3E9E9C65C3A3D98A2874CFE0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
+				INFOPLIST_KEY_NSPrincipalClass = WFExamplePlugin;
+				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.ExampleDelegates;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		474FBCA14F209E49E834AD8C /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */;
@@ -1539,6 +1603,18 @@
 				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.WorkflowDesigner;
 			};
 			name = Release;
+		};
+		5192A62C86EB3C951986B13D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6A39BD6A1A322B814E9ED908 /* Debug.xcconfig */;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
+				INFOPLIST_KEY_NSPrincipalClass = WFExamplePlugin;
+				PRODUCT_BUNDLE_IDENTIFIER = local.workflowkit.ExampleDelegates;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
 		};
 		5389C2CB6712CF5F8A432667 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -1778,6 +1854,15 @@
 			buildConfigurations = (
 				C88D3B33369C716AE168A21B /* Debug */,
 				60F131DEB526D958F8BB94DE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5A0C6EA1F5447EAF8C905CA4 /* Build configuration list for ExampleDelegates */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5192A62C86EB3C951986B13D /* Debug */,
+				3E9E9C65C3A3D98A2874CFE0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

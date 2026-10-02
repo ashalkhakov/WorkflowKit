@@ -7,7 +7,9 @@
  * instances of the one selected, and of the instance selected its
  * variables, the activities it has been through, its incidents and its
  * jobs, and the definition's diagram with where the instance is on it --
- * or where all its running instances are. Each list is an
+ * or where all its running instances are. Finished instances are shown
+ * from the history: their variables' last values, the activities they
+ * went through, their incidents. Each list is an
  * NSArrayController in OperationsWindow.xib; a
  * selection reads the lists below it again. The buttons suspend and
  * resume definitions and instances, cancel an instance, give a failed job
@@ -35,9 +37,15 @@
 @property (nonatomic, copy) NSString *status;
 @property (nonatomic) BOOL definitionSelected;
 @property (nonatomic) BOOL instanceSelected;
+/* The instance selected is running: it can be suspended, resumed or
+ * cancelled. */
+@property (nonatomic) BOOL instanceRunning;
 @property (nonatomic) BOOL jobSelected;
 
 - (IBAction)refresh:(id)sender;
+/* The Show menu above the instances: running ones, read from the engine's
+ * executions; finished ones, or all, read from its history. */
+- (IBAction)instanceFilterChanged:(id)sender;
 - (IBAction)suspendDefinition:(id)sender;
 - (IBAction)activateDefinition:(id)sender;
 - (IBAction)suspendInstance:(id)sender;
