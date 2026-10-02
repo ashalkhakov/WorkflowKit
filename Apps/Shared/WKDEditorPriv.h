@@ -4,8 +4,10 @@
  * What WKDEditor's own files share. The editor is split by what it
  * changes -- WKDEditor.m the nodes, flows and layout, WKDEditor+Canvas.m
  * names, labels, bends and reconnections, WKDEditor+Clipboard.m copying
- * and pasting, WKDEditor+Types.m a node's type -- and every change in any
- * of them is one -change:with: step.
+ * and pasting, WKDEditor+Types.m a node's type, WKDEditor+Alignment.m
+ * arranging several shapes, WKDEditor+Lanes.m pools and lanes -- and
+ * every change in any of them is one -change:with: step, after which the
+ * lanes are kept right.
  */
 @interface WKDEditor ()
 @property (nonatomic, readwrite, strong) NSXMLDocument *document;
@@ -44,6 +46,20 @@
 /* Why a sequence flow cannot join the two -- a flow other than `except`
  * joining them already is one reason -- or nil when it can. */
 - (NSString *)refusalToConnect:(WKDShape *)source to:(WKDShape *)target except:(NSString *)flowId;
+@end
+
+/* What the lanes category does for the rest of the editor. */
+@interface WKDEditor (WKDLanesInternal)
+/* After a change: the pool round its nodes, the lanes listing theirs. */
+- (void)keepLanes;
+/* A lane's or the pool's new size (-resizeElement:to: for them). */
+- (void)resizeBand:(NSString *)elementId to:(NSRect)bounds;
+/* Lanes and pools removed, inside a change; the nodes stay. */
+- (void)removeBands:(NSArray<NSString *> *)elementIds;
+/* Leaf lane id to the ids of the nodes it lists. */
+- (NSDictionary<NSString *, NSArray<NSString *> *> *)laneMembership;
+/* After a layout: each lane's nodes stacked in a band of their own. */
+- (void)stackLanes:(NSDictionary<NSString *, NSArray<NSString *> *> *)membership;
 @end
 
 /* The prefix of a new node's id: Event, Gateway, Activity. */

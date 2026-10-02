@@ -176,6 +176,17 @@ WDBadge(NSPoint centre, NSUInteger count, NSColor *colour)
 		   withAttributes:attributes];
 		return;
 	}
+	/* Pools and lanes under everything. */
+	NSMutableArray<WKDLane *> *bands = [NSMutableArray arrayWithArray:self.diagram.otherPools];
+	if (self.diagram.pool != nil) {
+		[bands addObject:self.diagram.pool];
+	}
+	[bands addObjectsFromArray:self.diagram.lanes];
+	for (WKDLane *band in bands) {
+		if (band.hasBounds) {
+			WKDDrawLane(band.bounds, band.name, band.horizontal);
+		}
+	}
 	/* The way taken first, under the shapes. */
 	for (WKDConnection *connection in self.diagram.connections) {
 		BOOL taken = [self.finished containsObject:connection.source.elementId]

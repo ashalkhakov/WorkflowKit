@@ -471,6 +471,50 @@ WKDNodeOutline(NSString *type, NSRect rect)
 }
 
 void
+WKDDrawLane(NSRect rect, NSString *name, BOOL horizontal)
+{
+	[WKDInkColor() setStroke];
+	NSBezierPath *outline = [NSBezierPath bezierPathWithRect:rect];
+	[outline setLineWidth:1.2];
+	[outline stroke];
+	NSRect band = WKDLaneBandRect(rect, horizontal);
+	NSBezierPath *edge = [NSBezierPath bezierPath];
+	if (horizontal) {
+		[edge moveToPoint:NSMakePoint(NSMaxX(band), NSMinY(band))];
+		[edge lineToPoint:NSMakePoint(NSMaxX(band), NSMaxY(band))];
+	} else {
+		[edge moveToPoint:NSMakePoint(NSMinX(band), NSMaxY(band))];
+		[edge lineToPoint:NSMakePoint(NSMaxX(band), NSMaxY(band))];
+	}
+	[edge setLineWidth:1.2];
+	[edge stroke];
+	if ([name length] == 0) {
+		return;
+	}
+	NSDictionary *attributes = @{ NSFontAttributeName: [NSFont systemFontOfSize:11],
+	                              NSForegroundColorAttributeName: WKDInkColor() };
+	double room = (horizontal ? NSHeight(band) : NSWidth(band)) - 8;
+	NSString *text = name;
+	while ([text length] > 1 && [text sizeWithAttributes:attributes].width > room) {
+		text = [[text substringToIndex:[text length] - 2] stringByAppendingString:@"…"];
+	}
+	NSSize size = [text sizeWithAttributes:attributes];
+	if (!horizontal) {
+		[text drawAtPoint:NSMakePoint(NSMidX(band) - size.width / 2, NSMidY(band) - size.height / 2)
+		   withAttributes:attributes];
+		return;
+	}
+	/* Turned a quarter anticlockwise about the band's centre. */
+	[NSGraphicsContext saveGraphicsState];
+	NSAffineTransform *turn = [NSAffineTransform transform];
+	[turn translateXBy:NSMidX(band) yBy:NSMidY(band)];
+	[turn rotateByDegrees:-90];
+	[turn concat];
+	[text drawAtPoint:NSMakePoint(-size.width / 2, -size.height / 2) withAttributes:attributes];
+	[NSGraphicsContext restoreGraphicsState];
+}
+
+void
 WKDDrawSelection(NSRect rect)
 {
 	[WKDSelectionColor() setStroke];

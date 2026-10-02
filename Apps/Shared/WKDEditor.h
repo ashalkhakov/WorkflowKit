@@ -112,6 +112,22 @@
 
 @end
 
+/* Pools and lanes (WKDEditor+Lanes.m). Once the process has them, every
+ * change keeps them right: the pool grows round what is moved past its
+ * edge, and each node is listed by the lane it is in (flowNodeRef). */
+@interface WKDEditor (WKDLanes)
+
+/* The process in a pool: a collaboration whose participant it is, round
+ * what the diagram shows. Its id; the pool's when it has one already. */
+- (NSString *)addPool;
+/* A lane after the lane, or at the bottom of the pool for the pool's id or
+ * nil, what is below it moved down to make room; a process without a pool
+ * is given one, and a pool without lanes a lane holding what it holds
+ * first. The new lane's id; nil for another process's pool. */
+- (NSString *)addLaneAfter:(NSString *)elementId;
+
+@end
+
 /* Copying and pasting (WKDEditor+Clipboard.m). */
 @interface WKDEditor (WKDClipboard)
 

@@ -170,6 +170,7 @@ static NSInteger
 WKDRank(NSString *local)
 {
 	NSDictionary *ranks = @{ @"documentation": @0, @"extensionElements": @1, @"incoming": @2, @"outgoing": @3,
+	                         @"laneSet": @4,
 	                         @"standardLoopCharacteristics": @9, @"multiInstanceLoopCharacteristics": @9 };
 	NSNumber *rank = [ranks objectForKey:local];
 	return rank != nil ? [rank integerValue] : 5;

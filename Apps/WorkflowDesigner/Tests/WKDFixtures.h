@@ -123,6 +123,48 @@ static NSString * const WKDDecisionsFile =
 	@"<di:waypoint x=\"240\" y=\"250\"/><di:waypoint x=\"240\" y=\"160\"/></dmndi:DMNEdge>"
 	@"</dmndi:DMNDiagram></dmndi:DMNDI></definitions>";
 
+/* A pool with two lanes, as Camunda Modeler writes one, and another
+ * participant's pool, collapsed: hr starts and reviews, the manager
+ * approves and ends. */
+static NSString * const WKDLanesFile =
+	@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+	@"<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" "
+	@"xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" "
+	@"xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">"
+	@"<bpmn:collaboration id=\"team\">"
+	@"<bpmn:participant id=\"company\" name=\"Company\" processRef=\"hire\"/>"
+	@"<bpmn:participant id=\"candidate\" name=\"Candidate\"/>"
+	@"<bpmn:messageFlow id=\"apply\" sourceRef=\"candidate\" targetRef=\"start\"/>"
+	@"</bpmn:collaboration>"
+	@"<bpmn:process id=\"hire\" name=\"Hire\" isExecutable=\"true\">"
+	@"<bpmn:laneSet id=\"lanes\">"
+	@"<bpmn:lane id=\"hr\" name=\"HR\"><bpmn:flowNodeRef>start</bpmn:flowNodeRef><bpmn:flowNodeRef>review</bpmn:flowNodeRef></bpmn:lane>"
+	@"<bpmn:lane id=\"manager\" name=\"Manager\"><bpmn:flowNodeRef>approve</bpmn:flowNodeRef><bpmn:flowNodeRef>done</bpmn:flowNodeRef></bpmn:lane>"
+	@"</bpmn:laneSet>"
+	@"<bpmn:startEvent id=\"start\"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>"
+	@"<bpmn:userTask id=\"review\" name=\"Review\"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:userTask>"
+	@"<bpmn:userTask id=\"approve\" name=\"Approve\"><bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing></bpmn:userTask>"
+	@"<bpmn:endEvent id=\"done\"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>"
+	@"<bpmn:sequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"review\"/>"
+	@"<bpmn:sequenceFlow id=\"f2\" sourceRef=\"review\" targetRef=\"approve\"/>"
+	@"<bpmn:sequenceFlow id=\"f3\" sourceRef=\"approve\" targetRef=\"done\"/>"
+	@"</bpmn:process>"
+	@"<bpmndi:BPMNDiagram id=\"diagram\"><bpmndi:BPMNPlane id=\"plane\" bpmnElement=\"team\">"
+	@"<bpmndi:BPMNShape id=\"company_di\" bpmnElement=\"company\" isHorizontal=\"true\"><dc:Bounds x=\"100\" y=\"80\" width=\"700\" height=\"300\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"hr_di\" bpmnElement=\"hr\" isHorizontal=\"true\"><dc:Bounds x=\"130\" y=\"80\" width=\"670\" height=\"150\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"manager_di\" bpmnElement=\"manager\" isHorizontal=\"true\"><dc:Bounds x=\"130\" y=\"230\" width=\"670\" height=\"150\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"candidate_di\" bpmnElement=\"candidate\" isHorizontal=\"true\"><dc:Bounds x=\"100\" y=\"420\" width=\"700\" height=\"80\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"><dc:Bounds x=\"180\" y=\"137\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"review_di\" bpmnElement=\"review\"><dc:Bounds x=\"260\" y=\"115\" width=\"100\" height=\"80\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"approve_di\" bpmnElement=\"approve\"><dc:Bounds x=\"420\" y=\"265\" width=\"100\" height=\"80\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNShape id=\"done_di\" bpmnElement=\"done\"><dc:Bounds x=\"600\" y=\"287\" width=\"36\" height=\"36\"/></bpmndi:BPMNShape>"
+	@"<bpmndi:BPMNEdge id=\"f1_di\" bpmnElement=\"f1\"><di:waypoint x=\"216\" y=\"155\"/><di:waypoint x=\"260\" y=\"155\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"f2_di\" bpmnElement=\"f2\"><di:waypoint x=\"360\" y=\"155\"/><di:waypoint x=\"390\" y=\"155\"/>"
+	@"<di:waypoint x=\"390\" y=\"305\"/><di:waypoint x=\"420\" y=\"305\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"f3_di\" bpmnElement=\"f3\"><di:waypoint x=\"520\" y=\"305\"/><di:waypoint x=\"600\" y=\"305\"/></bpmndi:BPMNEdge>"
+	@"<bpmndi:BPMNEdge id=\"apply_di\" bpmnElement=\"apply\"><di:waypoint x=\"198\" y=\"420\"/><di:waypoint x=\"198\" y=\"173\"/></bpmndi:BPMNEdge>"
+	@"</bpmndi:BPMNPlane></bpmndi:BPMNDiagram></bpmn:definitions>";
+
 static inline NSXMLDocument *
 WKDParse(NSString *xml)
 {

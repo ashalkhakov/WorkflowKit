@@ -39,6 +39,10 @@
  * gateway's or a flow's name is dragged on its own. Double-click, or
  * Rename, types a name over the element.
  *
+ * Pools and lanes are drawn under the nodes, and selected by their bands,
+ * where their names are: a pool is dragged with what it holds, and a
+ * selected pool or lane is resized by the handle at its bottom right.
+ *
  * Moves, connections and resizes are shown as the mouse goes and asked of
  * the delegate when it is released: one change each, one undo step.
  */

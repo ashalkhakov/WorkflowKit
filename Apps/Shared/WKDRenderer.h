@@ -33,6 +33,9 @@ void WKDDrawAssociation(NSArray<NSValue *> *points, BOOL directed);
  * event, a diamond for a gateway, a rounded box for the rest -- for marks
  * laid over a node in its own shape. */
 NSBezierPath *WKDNodeOutline(NSString *type, NSRect rect);
+/* A pool or a lane: its outline, and its band with its name in it, read
+ * from the bottom up as BPMN's notation turns it. */
+void WKDDrawLane(NSRect rect, NSString *name, BOOL horizontal);
 /* A selection outline around the rectangle. */
 void WKDDrawSelection(NSRect rect);
 /* The distance from the point to the polyline. */

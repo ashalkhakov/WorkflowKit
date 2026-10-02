@@ -208,6 +208,16 @@
                                     <action selector="arrange:" target="-1" id="WKm-ac-056"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Add Pool" id="WKm-mi-113">
+                                <connections>
+                                    <action selector="addPool:" target="-1" id="WKm-ac-113"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Add Lane" id="WKm-mi-114">
+                                <connections>
+                                    <action selector="addLane:" target="-1" id="WKm-ac-114"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Rename" keyEquivalent="r" id="WKm-mi-123">
                                 <connections>
                                     <action selector="rename:" target="-1" id="WKm-ac-123"/>

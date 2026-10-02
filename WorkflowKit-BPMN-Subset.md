@@ -131,7 +131,7 @@ Refused: `PRIORITY` and `OUTPUT ORDER`, business knowledge models, decision serv
 
 | Family | Examples |
 |---|---|
-| Collaboration | pool, lane, messageFlow, conversation, choreography |
+| Collaboration | messageFlow between pools, conversation, choreography; a collaboration's executable processes are read, each its own definition, and their pools and lanes ignored |
 | Gateways | complex |
 | Activities | transaction, ad-hoc, standard loop, compensation |
 | Tasks | receive tasks that start a process; `camunda:decisionRefBinding="versionTag"`, expressions in `camunda:decisionRef` |

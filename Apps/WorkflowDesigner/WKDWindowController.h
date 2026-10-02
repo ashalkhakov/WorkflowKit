@@ -53,6 +53,10 @@
 - (IBAction)alignBottomEdges:(id)sender;
 - (IBAction)distributeAcross:(id)sender;
 - (IBAction)distributeDown:(id)sender;
+/* Diagram ▸ Add Pool: the process in a pool of its own. Diagram ▸ Add
+ * Lane: a lane after the one selected, or at the bottom of the pool. */
+- (IBAction)addPool:(id)sender;
+- (IBAction)addLane:(id)sender;
 /* View ▸ Zoom to Fit: the whole diagram in the window. */
 - (IBAction)zoomToFit:(id)sender;
 /* Diagram ▸ Rename: the selected element's name typed over it. */

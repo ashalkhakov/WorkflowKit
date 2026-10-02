@@ -33,6 +33,12 @@ form gets its data:
   builds their instance from the variables and turns what is submitted
   back into variables.
 
+Two processes are drawn in a pool divided into lanes, as most modelled
+processes are: `loan-application` (the loan system, underwriters and
+payments) and `expense-review` (the employee, finance and the reviewers).
+The engine runs a pool's process and ignores its lanes; the designer
+keeps each node listed by the lane it is drawn in.
+
 The diagrams are laid out by the designer's own Arrange, and the pictures
 are drawn by its renderer: after changing a file, run
 `Apps/WorkflowDesigner/Tools/obj/wkd-arrange` on it, and

@@ -40,8 +40,8 @@ NSString *WKDQualifiedAttribute(NSXMLDocument *document, NSXMLElement *element, 
 void WKDSetQualifiedAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *uri, NSString *local,
                               NSString *value);
 /* The child, made where BPMN's schema puts it when there is none:
- * documentation first, then extensions, incoming, outgoing, the rest, and
- * loop characteristics last. */
+ * documentation first, then extensions, incoming, outgoing, a process's
+ * lanes, the rest, and loop characteristics last. */
 NSXMLElement *WKDEnsureChild(NSXMLDocument *document, NSXMLElement *parent, NSString *uri, NSString *local);
 /* The child's text; nil when there is no such child. */
 NSString *WKDChildText(NSXMLElement *parent, NSString *uri, NSString *local);

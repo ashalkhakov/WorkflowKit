@@ -51,6 +51,7 @@ WorkflowDesigner_OBJC_FILES = \
 	../Shared/WKDEditor+Clipboard.m \
 	../Shared/WKDEditor+Types.m \
 	../Shared/WKDEditor+Alignment.m \
+	../Shared/WKDEditor+Lanes.m \
 	../Shared/WKDLayout.m \
 	../Shared/WKDDiagram.m \
 	../Shared/WKDRenderer.m \

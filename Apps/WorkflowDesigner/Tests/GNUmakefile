@@ -14,6 +14,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../../Shared/WKDEditor+Clipboard.m \
 	../../Shared/WKDEditor+Types.m \
 	../../Shared/WKDEditor+Alignment.m \
+	../../Shared/WKDEditor+Lanes.m \
 	../WKDProperties.m \
 	../WKDDeployment.m \
 	../WKDDecisions.m \
@@ -23,6 +24,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	WKDClipboardTests.m \
 	WKDTypesTests.m \
 	WKDAlignmentTests.m \
+	WKDLanesTests.m \
 	WKDLayoutTests.m \
 	WKDPropertiesTests.m \
 	WKDTablesTests.m \

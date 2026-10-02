@@ -10,7 +10,8 @@ only, and it has two windows:
 - **Operations** shows the deployed process definitions, each one's
   instances -- running ones, finished ones from the engine's history, or
   all, as the Show menu above them says -- and for the instance selected:
-  - the process's diagram, with where the instance is on it, as Camunda's
+  - the process's diagram, its pools and lanes too, with where the
+    instance is on it, as Camunda's
     Cockpit shows it: the activities it is in now outlined in blue (with
     how many tokens, when more than one), those it has finished and the
     flows between them shaded green, and incidents as red badges. **All

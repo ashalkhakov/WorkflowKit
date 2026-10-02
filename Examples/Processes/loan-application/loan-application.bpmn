@@ -1,7 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="loan-application-definitions" targetNamespace="http://example.com/workflowkit">
+  <bpmn:collaboration id="loan-collaboration">
+    <bpmn:participant id="bank" name="Bank" processRef="loan-application"/>
+  </bpmn:collaboration>
   <bpmn:process id="loan-application" name="Loan application" isExecutable="true" camunda:candidateStarterGroups="branch-staff">
     <bpmn:documentation>A loan application is scored by the decisions in risk.dmn: Loan risk, which requires the Applicant score (points for years employed, debts and credit history, added up), and the Loan limit, a literal expression. A low risk within the limit is paid out at once, a medium one goes to an underwriter -- a senior one for a large loan, routed by the workload listener -- and anything else is declined by mail.</bpmn:documentation>
+    <bpmn:laneSet id="loan-application-lanes">
+      <bpmn:lane id="loan-system" name="Loan system">
+        <bpmn:flowNodeRef>applied</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>assess</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>limit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>byRisk</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="underwriters" name="Underwriters">
+        <bpmn:flowNodeRef>underwrite</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>byUnderwriter</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="payments" name="Payments">
+        <bpmn:flowNodeRef>payable</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>payOut</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>paid</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>refusable</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>decline</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>declined</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
     <bpmn:startEvent id="applied" name="Application received">
       <bpmn:extensionElements>
         <camunda:formData businessKey="applicationId">
@@ -144,99 +167,112 @@
     <bpmn:sequenceFlow id="toDeclined" sourceRef="decline" targetRef="declined"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_l83cvc8">
-    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_6goxkfm" bpmnElement="loan-application">
+    <bpmndi:BPMNPlane xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNPlane_6goxkfm" bpmnElement="loan-collaboration">
       <bpmndi:BPMNShape id="applied_Shape" bpmnElement="applied">
-        <dc:Bounds x="80" y="172" width="36" height="36"/>
+        <dc:Bounds x="80" y="102" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="assess_Shape" bpmnElement="assess">
-        <dc:Bounds x="186" y="150" width="100" height="80"/>
+        <dc:Bounds x="186" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="byRisk_Shape" bpmnElement="byRisk">
-        <dc:Bounds x="526" y="165" width="50" height="50"/>
+        <dc:Bounds x="526" y="95" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="underwrite_Shape" bpmnElement="underwrite">
-        <dc:Bounds x="646" y="150" width="100" height="80"/>
+        <dc:Bounds x="646" y="257" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="byUnderwriter_Shape" bpmnElement="byUnderwriter">
-        <dc:Bounds x="816" y="165" width="50" height="50"/>
+        <dc:Bounds x="816" y="272" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="payable_Shape" bpmnElement="payable">
-        <dc:Bounds x="936" y="95" width="50" height="50"/>
+        <dc:Bounds x="936" y="449" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="payOut_Shape" bpmnElement="payOut">
-        <dc:Bounds x="1056" y="80" width="100" height="80"/>
+        <dc:Bounds x="1056" y="434" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="paid_Shape" bpmnElement="paid">
-        <dc:Bounds x="1226" y="102" width="36" height="36"/>
+        <dc:Bounds x="1226" y="456" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="refusable_Shape" bpmnElement="refusable">
-        <dc:Bounds x="936" y="235" width="50" height="50"/>
+        <dc:Bounds x="936" y="589" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="decline_Shape" bpmnElement="decline">
-        <dc:Bounds x="1056" y="220" width="100" height="80"/>
+        <dc:Bounds x="1056" y="574" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="declined_Shape" bpmnElement="declined">
-        <dc:Bounds x="1226" y="242" width="36" height="36"/>
+        <dc:Bounds x="1226" y="596" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="toAssess_Edge" bpmnElement="toAssess">
-        <di:waypoint x="116" y="190"/>
-        <di:waypoint x="186" y="190"/>
+        <di:waypoint x="116" y="120"/>
+        <di:waypoint x="186" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toRisk_Edge" bpmnElement="toRisk">
-        <di:waypoint x="456" y="190"/>
-        <di:waypoint x="526" y="190"/>
+        <di:waypoint x="456" y="120"/>
+        <di:waypoint x="526" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="lowRisk_Edge" bpmnElement="lowRisk">
-        <di:waypoint x="551" y="165"/>
-        <di:waypoint x="551" y="120"/>
-        <di:waypoint x="936" y="120"/>
+        <di:waypoint x="551" y="145"/>
+        <di:waypoint x="551" y="474"/>
+        <di:waypoint x="936" y="474"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="mediumRisk_Edge" bpmnElement="mediumRisk">
-        <di:waypoint x="576" y="190"/>
-        <di:waypoint x="646" y="190"/>
+        <di:waypoint x="551" y="145"/>
+        <di:waypoint x="551" y="297"/>
+        <di:waypoint x="646" y="297"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="highRisk_Edge" bpmnElement="highRisk">
-        <di:waypoint x="551" y="215"/>
-        <di:waypoint x="551" y="260"/>
-        <di:waypoint x="936" y="260"/>
+        <di:waypoint x="551" y="145"/>
+        <di:waypoint x="551" y="614"/>
+        <di:waypoint x="936" y="614"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toDecide_Edge" bpmnElement="toDecide">
-        <di:waypoint x="746" y="190"/>
-        <di:waypoint x="816" y="190"/>
+        <di:waypoint x="746" y="297"/>
+        <di:waypoint x="816" y="297"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="approvedFlow_Edge" bpmnElement="approvedFlow">
-        <di:waypoint x="841" y="165"/>
-        <di:waypoint x="841" y="120"/>
-        <di:waypoint x="936" y="120"/>
+        <di:waypoint x="841" y="322"/>
+        <di:waypoint x="841" y="474"/>
+        <di:waypoint x="936" y="474"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="refusedFlow_Edge" bpmnElement="refusedFlow">
-        <di:waypoint x="841" y="215"/>
-        <di:waypoint x="841" y="260"/>
-        <di:waypoint x="936" y="260"/>
+        <di:waypoint x="841" y="322"/>
+        <di:waypoint x="841" y="614"/>
+        <di:waypoint x="936" y="614"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toPayOut_Edge" bpmnElement="toPayOut">
-        <di:waypoint x="986" y="120"/>
-        <di:waypoint x="1056" y="120"/>
+        <di:waypoint x="986" y="474"/>
+        <di:waypoint x="1056" y="474"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toPaid_Edge" bpmnElement="toPaid">
-        <di:waypoint x="1156" y="120"/>
-        <di:waypoint x="1226" y="120"/>
+        <di:waypoint x="1156" y="474"/>
+        <di:waypoint x="1226" y="474"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toDecline_Edge" bpmnElement="toDecline">
-        <di:waypoint x="986" y="260"/>
-        <di:waypoint x="1056" y="260"/>
+        <di:waypoint x="986" y="614"/>
+        <di:waypoint x="1056" y="614"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toDeclined_Edge" bpmnElement="toDeclined">
-        <di:waypoint x="1156" y="260"/>
-        <di:waypoint x="1226" y="260"/>
+        <di:waypoint x="1156" y="614"/>
+        <di:waypoint x="1226" y="614"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="limit_Shape" bpmnElement="limit">
-        <dc:Bounds x="356" y="150" width="100" height="80"/>
+        <dc:Bounds x="356" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="toLimit_Edge" bpmnElement="toLimit">
-        <di:waypoint x="286" y="190"/>
-        <di:waypoint x="356" y="190"/>
+        <di:waypoint x="286" y="120"/>
+        <di:waypoint x="356" y="120"/>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="payments_Shape" bpmnElement="payments" isHorizontal="true">
+        <dc:Bounds x="10" y="394" width="1292" height="317"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="underwriters_Shape" bpmnElement="underwriters" isHorizontal="true">
+        <dc:Bounds x="10" y="217" width="1292" height="177"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="loan-system_Shape" bpmnElement="loan-system" isHorizontal="true">
+        <dc:Bounds x="10" y="40" width="1292" height="177"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bank_Shape" bpmnElement="bank" isHorizontal="true">
+        <dc:Bounds x="-20" y="40" width="1322" height="671"/>
+      </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

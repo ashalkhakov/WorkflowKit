@@ -340,6 +340,9 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	NSString *selected = [self selectedId];
 	if (selected != nil) {
 		[[menu addItemWithTitle:@"Rename" action:@selector(rename:) keyEquivalent:@""] setTarget:self];
+		if ([[self editor].diagram laneWithId:selected] != nil) {
+			[[menu addItemWithTitle:@"Add Lane" action:@selector(addLane:) keyEquivalent:@""] setTarget:self];
+		}
 		NSArray *types = [[self editor] typesFor:selected];
 		if ([types count] > 0) {
 			WKDShape *shape = [[self editor].diagram shapeWithId:selected];
@@ -603,6 +606,27 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	}
 }
 
+#pragma mark Pools and lanes
+
+- (IBAction)addPool:(id)sender
+{
+	NSString *pool = [[self editor] addPool];
+	if (pool != nil) {
+		self.canvas.selection = [NSSet setWithObject:pool];
+	}
+}
+
+- (IBAction)addLane:(id)sender
+{
+	/* After the lane selected, else at the bottom of the pool. */
+	NSString *selected = [self selectedId];
+	NSString *after = [[self editor].diagram laneWithId:selected] != nil ? selected : nil;
+	NSString *lane = [[self editor] addLaneAfter:after];
+	if (lane != nil) {
+		self.canvas.selection = [NSSet setWithObject:lane];
+	}
+}
+
 #pragma mark Deploying
 
 - (void)alert:(NSString *)message detail:(NSString *)detail
@@ -839,6 +863,9 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	}
 	if ([item action] == @selector(editDecision:)) {
 		return [self decisionElement] != nil;
+	}
+	if ([item action] == @selector(addPool:)) {
+		return [self editor].diagram.pool == nil;
 	}
 	if ([item action] == @selector(deploy:)) {
 		return [self designerDocument].problem == nil;

@@ -28,6 +28,7 @@ WorkflowDesk_OBJC_FILES = \
 	../Shared/WKDRenderer.m \
 	../Shared/WKDEditor.m \
 	../Shared/WKDEditor+Canvas.m \
+	../Shared/WKDEditor+Lanes.m \
 	../Shared/WKDLayout.m \
 	../Shared/WDEntities.m \
 	WDFormDocument.m \

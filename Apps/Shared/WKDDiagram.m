@@ -50,6 +50,15 @@ WKDNodeLabelRect(NSString *type, NSRect rect)
 	return NSMakeRect(NSMidX(rect) - 50, NSMaxY(rect) + 2, 100, 30);
 }
 
+const double WKDLaneBandWidth = 30;
+
+NSRect
+WKDLaneBandRect(NSRect rect, BOOL horizontal)
+{
+	return horizontal ? NSMakeRect(NSMinX(rect), NSMinY(rect), MIN(WKDLaneBandWidth, NSWidth(rect)), NSHeight(rect))
+	                  : NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), MIN(WKDLaneBandWidth, NSHeight(rect)));
+}
+
 NSRect
 WKDFlowLabelRect(NSArray<NSValue *> *points)
 {
@@ -103,6 +112,30 @@ WKDFlowLabelRect(NSArray<NSValue *> *points)
 @implementation WKDConnection
 @end
 
+@interface WKDLane ()
+@property (nonatomic, readwrite, strong) NSXMLElement *element;
+@property (nonatomic, readwrite, copy) NSString *elementId;
+@property (nonatomic, readwrite, copy) NSString *name;
+@property (nonatomic, readwrite) NSRect bounds;
+@property (nonatomic, readwrite) BOOL hasBounds;
+@property (nonatomic, readwrite) BOOL isPool;
+@property (nonatomic, readwrite) BOOL horizontal;
+@property (nonatomic, readwrite, weak) WKDLane *parent;
+@property (nonatomic, readwrite) NSUInteger depth;
+@property (nonatomic, readwrite, copy) NSArray<WKDLane *> *children;
+@property (nonatomic, readwrite, copy) NSArray<NSString *> *flowNodeIds;
+@end
+
+@implementation WKDLane
+
+- (NSString *)description
+{
+	return [NSString stringWithFormat:@"<%@ %@ %@>", self.isPool ? @"pool" : @"lane", self.elementId,
+		NSStringFromRect(self.bounds)];
+}
+
+@end
+
 @interface WKDDiagram ()
 @property (nonatomic, readwrite, strong) NSXMLElement *process;
 @property (nonatomic, readwrite, strong) NSXMLElement *plane;
@@ -134,6 +167,7 @@ WKDPointValue(double x, double y)
 {
 	NSMutableDictionary<NSString *, WKDShape *> *_shapesById;
 	NSMutableDictionary<NSString *, WKDConnection *> *_connectionsById;
+	NSMutableDictionary<NSString *, WKDLane *> *_lanesById;
 }
 
 + (instancetype)diagramOfDocument:(NSXMLDocument *)document
@@ -171,10 +205,14 @@ WKDPointValue(double x, double y)
 	NSMutableDictionary *bounds = [NSMutableDictionary dictionary];
 	NSMutableDictionary *edges = [NSMutableDictionary dictionary];
 	NSMutableDictionary *labels = [NSMutableDictionary dictionary];
+	NSMutableSet *vertical = [NSMutableSet set];
 	for (NSXMLElement *plane in planes) {
 		for (NSXMLElement *shape in WKDChildren(plane, WKDBpmnDINamespace, @"BPMNShape")) {
 			NSXMLElement *box = WKDChild(shape, WKDDCNamespace, @"Bounds");
 			NSString *ref = WKDAttribute(shape, @"bpmnElement");
+			if (ref != nil && [WKDAttribute(shape, @"isHorizontal") isEqualToString:@"false"]) {
+				[vertical addObject:ref];
+			}
 			if (ref != nil && WKDLabelBoundsOf(shape) != nil) {
 				[labels setObject:WKDLabelBoundsOf(shape) forKey:ref];
 			}
@@ -242,6 +280,101 @@ WKDPointValue(double x, double y)
 		[_connectionsById setObject:connection forKey:connection.elementId];
 	}
 	_connections = connections;
+	[self readLanes:root bounds:bounds vertical:vertical];
+}
+
+- (WKDLane *)laneFor:(NSXMLElement *)element
+              pool:(BOOL)pool
+            parent:(WKDLane *)parent
+            bounds:(NSDictionary *)bounds
+          vertical:(NSSet *)vertical
+{
+	WKDLane *lane = [[WKDLane alloc] init];
+	lane.element = element;
+	lane.elementId = WKDAttribute(element, @"id") ?: @"";
+	lane.name = WKDAttribute(element, @"name");
+	lane.isPool = pool;
+	lane.parent = parent;
+	lane.depth = parent != nil ? parent.depth + 1 : 0;
+	lane.horizontal = ![vertical containsObject:lane.elementId];
+	NSValue *box = [bounds objectForKey:lane.elementId];
+	lane.hasBounds = box != nil;
+	lane.bounds = box != nil ? [box rectValue] : NSZeroRect;
+	NSMutableArray *refs = [NSMutableArray array];
+	for (NSXMLElement *ref in WKDChildren(element, WKDBpmnNamespace, @"flowNodeRef")) {
+		NSString *nodeId = [[ref stringValue] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+		if ([nodeId length] > 0) {
+			[refs addObject:nodeId];
+		}
+	}
+	lane.flowNodeIds = refs;
+	[_lanesById setObject:lane forKey:lane.elementId];
+	return lane;
+}
+
+/* A laneSet's lanes, each followed by those dividing it. */
+- (NSArray<WKDLane *> *)lanesIn:(NSXMLElement *)laneSet
+                         parent:(WKDLane *)parent
+                         bounds:(NSDictionary *)bounds
+                       vertical:(NSSet *)vertical
+                            all:(NSMutableArray *)all
+{
+	NSMutableArray *lanes = [NSMutableArray array];
+	for (NSXMLElement *element in WKDChildren(laneSet, WKDBpmnNamespace, @"lane")) {
+		WKDLane *lane = [self laneFor:element pool:NO parent:parent bounds:bounds vertical:vertical];
+		[lanes addObject:lane];
+		[all addObject:lane];
+		NSXMLElement *childSet = WKDChild(element, WKDBpmnNamespace, @"childLaneSet");
+		lane.children = childSet != nil ? [self lanesIn:childSet parent:lane bounds:bounds vertical:vertical all:all] : @[];
+	}
+	return lanes;
+}
+
+- (void)readLanes:(NSXMLElement *)root bounds:(NSDictionary *)bounds vertical:(NSSet *)vertical
+{
+	_lanesById = [NSMutableDictionary dictionary];
+	NSString *processId = WKDAttribute(_process, @"id");
+	NSMutableArray *others = [NSMutableArray array];
+	for (NSXMLElement *collaboration in WKDChildren(root, WKDBpmnNamespace, @"collaboration")) {
+		for (NSXMLElement *participant in WKDChildren(collaboration, WKDBpmnNamespace, @"participant")) {
+			WKDLane *pool = [self laneFor:participant pool:YES parent:nil bounds:bounds vertical:vertical];
+			if (_pool == nil && processId != nil && [WKDAttribute(participant, @"processRef") isEqualToString:processId]) {
+				_pool = pool;
+			} else {
+				pool.children = @[];
+				[others addObject:pool];
+			}
+		}
+	}
+	_otherPools = others;
+	NSMutableArray *all = [NSMutableArray array];
+	NSXMLElement *laneSet = WKDChild(_process, WKDBpmnNamespace, @"laneSet");
+	NSArray *top = laneSet != nil ? [self lanesIn:laneSet parent:nil bounds:bounds vertical:vertical all:all] : @[];
+	_pool.children = top;
+	_lanes = all;
+	NSMutableArray *leaves = [NSMutableArray array];
+	for (WKDLane *lane in all) {
+		if ([lane.children count] == 0) {
+			[leaves addObject:lane];
+		}
+	}
+	_leafLanes = leaves;
+}
+
+- (WKDLane *)laneWithId:(NSString *)elementId
+{
+	return elementId != nil ? [_lanesById objectForKey:elementId] : nil;
+}
+
+- (WKDLane *)laneOf:(WKDShape *)shape
+{
+	WKDLane *found = nil;
+	for (WKDLane *lane in _lanes) {
+		if ([lane.flowNodeIds containsObject:shape.elementId] && (found == nil || lane.depth >= found.depth)) {
+			found = lane;
+		}
+	}
+	return found;
 }
 
 - (void)readContainer:(NSXMLElement *)container
@@ -350,6 +483,16 @@ WKDPointValue(double x, double y)
 	for (WKDShape *shape in _shapes) {
 		if (shape.hasBounds) {
 			all = NSIsEmptyRect(all) ? shape.bounds : NSUnionRect(all, shape.bounds);
+		}
+	}
+	NSMutableArray *bands = [NSMutableArray arrayWithArray:_lanes];
+	[bands addObjectsFromArray:_otherPools];
+	if (_pool != nil) {
+		[bands addObject:_pool];
+	}
+	for (WKDLane *lane in bands) {
+		if (lane.hasBounds) {
+			all = NSIsEmptyRect(all) ? lane.bounds : NSUnionRect(all, lane.bounds);
 		}
 	}
 	for (WKDConnection *connection in _connections) {

@@ -253,6 +253,24 @@ write.
   hangs below its activity. Event subprocesses go in a row beneath the
   rest. Flows bend at right angles, enter an activity straight across
   where the two face each other, and go round other shapes.
+- **Pools and lanes:** Diagram ▸ **Add Pool** puts the process in a pool
+  (a collaboration's participant, named for the process). **Add Lane**
+  (Diagram, or right-click a pool or lane) adds a lane after the lane
+  selected, or at the bottom of the pool; a process without a pool is
+  given one first, and a pool without lanes a lane holding everything in
+  it. What is below a new lane moves down to make room. Click a pool's or
+  lane's band (where its name is) to select it; double-click it to rename
+  it; drag a pool's band to move it with everything in it; drag the handle
+  at its bottom right to resize it -- a lane gets taller or shorter at its
+  bottom, the lanes below moving with it, and a pool's width is its
+  lanes'. Delete removes a lane, the lane before it (or after it) taking
+  its room and its nodes, or a pool with its lanes; the nodes stay. As
+  nodes are moved, added, pasted and renamed, each is listed by the lane
+  it is in (`flowNodeRef`), and the pool grows round what is moved past
+  its edge, moving the pools below it down. **Arrange** keeps each node in
+  its lane, stacking the lanes round what they hold. Other participants'
+  pools are drawn, not edited; message flows are not drawn yet. The
+  engine runs the process and ignores its lanes.
 - **Associations**, such as a compensation boundary's link to its handler,
   are drawn dotted and listed in the outline with ⇢.
 - **Undo and Redo** cover every change. **View** zooms in and out, and
@@ -307,7 +325,7 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | Where | What |
 | --- | --- |
 | `../Shared/WKDDiagram` | What the canvas draws, read from the XML: shapes with their bounds, subprocess and boundary host, and flows with their waypoints. It is read again after every change. |
-| `../Shared/WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. Its categories hold what the canvas changes directly (`+Canvas`: names, reconnections, bends, labels, kept routes), the clipboard (`+Clipboard`), type changes (`+Types`) and arranging several shapes (`+Alignment`). |
+| `../Shared/WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. Its categories hold what the canvas changes directly (`+Canvas`: names, reconnections, bends, labels, kept routes), the clipboard (`+Clipboard`), type changes (`+Types`), arranging several shapes (`+Alignment`), and pools and lanes, kept round their nodes after every change (`+Lanes`). |
 | `../Shared/WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's: layers by longest path, ordered to cross as little as they can, then placed by sweeps that move each layer as near its neighbours as its order and spacing allow (isotonic regression). Edges can leave a node's bottom. |
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
 | `WKDTableEditor` | A table property in the inspector, with its + and − and its detail table. |
