@@ -13,7 +13,7 @@
 
 /* The side panes' widths, and how narrow they and the canvas may get. */
 static const double WKDLeftWidth = 230;
-static const double WKDRightWidth = 300;
+static const double WKDRightWidth = 360;
 static const double WKDSideMinimum = 170;
 static const double WKDCentreMinimum = 320;
 
@@ -410,8 +410,71 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	}];
 }
 
+#pragma mark Forms
+
+/* The element whose form is edited: the one selected, a user task or a
+ * start event. */
+- (NSXMLElement *)formElement
+{
+	NSString *elementId = [self selectedId];
+	NSXMLElement *element = elementId != nil ? [[self editor] elementWithId:elementId] : nil;
+	NSString *type = [element localName];
+	return [type isEqualToString:@"userTask"] || [type isEqualToString:@"startEvent"] ? element : nil;
+}
+
+- (IBAction)editForm:(id)sender
+{
+	NSXMLElement *element = [self formElement];
+	if (element == nil) {
+		[self alert:@"Select a user task or a start event." detail:@"Their forms are what the form designer edits."];
+		return;
+	}
+	NSURL *file = [[self designerDocument] fileURL];
+	if (file == nil) {
+		[self alert:@"Save the process first." detail:@"Its forms are kept beside it, and deployed with it."];
+		return;
+	}
+	NSXMLDocument *document = [self editor].document;
+	NSString *elementId = WKDAttribute(element, @"id");
+	NSString *name = WKDEmbeddedFormOf(document, element);
+	BOOL named = name != nil;
+	if (!named) {
+		name = [elementId stringByAppendingPathExtension:@"xhtml"];
+	}
+	NSURL *form = [[file URLByDeletingLastPathComponent] URLByAppendingPathComponent:name];
+	if (![[NSFileManager defaultManager] fileExistsAtPath:[form path]]) {
+		NSError *error = nil;
+		NSXMLDocument *made = WKDGeneratedForm(document, elementId, &error);
+		if (made == nil || ![[made XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement]
+		                       writeToURL:form options:NSDataWritingAtomic error:&error]) {
+			[self alert:[NSString stringWithFormat:@"Could not make %@.", name] detail:[error localizedDescription]];
+			return;
+		}
+	}
+	if (!named) {
+		/* One change: the key that names it, undone like any other. */
+		[[self editor] edit:elementId action:@"Form key" with:^(NSXMLElement *edited, NSXMLDocument *xml) {
+			WKDSetQualifiedAttribute(xml, edited, WKDCamundaNamespace, @"formKey",
+			                         [@"embedded:deployment:" stringByAppendingString:name]);
+		}];
+	}
+	NSString *designer = [[NSUserDefaults standardUserDefaults] stringForKey:@"WKDFormDesigner"] ?: @"XFormsDesigner";
+	NSWorkspace *workspace = [NSWorkspace sharedWorkspace];
+	if (![workspace openFile:[form path] withApplication:designer] && ![workspace openFile:[form path]]) {
+		[self alert:[NSString stringWithFormat:@"%@ could not be opened.", designer]
+		     detail:[NSString stringWithFormat:@"The form is %@.", [form path]]];
+		return;
+	}
+	[self note:nil];
+	self.status = [NSString stringWithFormat:@"%@ is open in %@.", name,
+	               [[designer lastPathComponent] stringByDeletingPathExtension]];
+}
+
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
+	if ([item action] == @selector(editForm:)) {
+		return [self formElement] != nil;
+	}
 	if ([item action] == @selector(deploy:)) {
 		return [self designerDocument].problem == nil;
 	}

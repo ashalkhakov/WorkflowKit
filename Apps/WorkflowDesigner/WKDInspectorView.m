@@ -100,6 +100,16 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 			NSView *control = nil;
 			double height = 22;
 			switch (property.kind) {
+			case WKDPropertyButton: {
+				NSButton *button = [[NSButton alloc] initWithFrame:NSMakeRect(fieldX - 6, y - 2, MIN(fieldWidth + 12, 160), 26)];
+				[button setTitle:property.label];
+				[button setBezelStyle:NSBezelStyleRounded];
+				[button setFont:[NSFont systemFontOfSize:11]];
+				[button setTarget:nil];
+				[button setAction:NSSelectorFromString(property.actionName)];
+				control = button;
+				break;
+			}
 			case WKDPropertyTable: {
 				/* The width of the pane, under its name. */
 				NSTextField *title = [self label:property.label bold:NO frame:NSMakeRect(12, y, width - 24, 16)];
@@ -178,7 +188,7 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 				break;
 			}
 			}
-			if (property.kind != WKDPropertyCheck && property.kind != WKDPropertyTable) {
+			if (property.kind != WKDPropertyCheck && property.kind != WKDPropertyTable && property.kind != WKDPropertyButton) {
 				[self addSubview:[self label:property.label bold:NO frame:NSMakeRect(12, y + 3, WKDLabelWidth, 16)]];
 			}
 			if (property.kind != WKDPropertyLongText) {
@@ -216,6 +226,9 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 			continue;
 		}
 		WKDProperty *property = [_properties objectAtIndex:i];
+		if (property.kind == WKDPropertyButton) {
+			continue;
+		}
 		if (property.kind == WKDPropertyTable) {
 			WKDTableEditor *table = control;
 			table.editor = self.editor;

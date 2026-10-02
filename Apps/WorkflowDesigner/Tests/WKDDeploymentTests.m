@@ -79,4 +79,37 @@
 	                @"one without forms needs no directory");
 }
 
+/* A form to start from: the fields, as the engine makes their form. */
+- (void)testAFormIsMadeFromItsFields
+{
+	NSXMLDocument *document = WKDParse(WKDModellerFile);
+	NSXMLElement *extensions = WKDEnsureChild(document, WKDElementWithId(document, @"review"), WKDBpmnNamespace,
+	                                          @"extensionElements");
+	NSXMLElement *data = WKDNewElement(document, WKDCamundaNamespace, @"formData");
+	NSXMLElement *field = WKDNewElement(document, WKDCamundaNamespace, @"formField");
+	WKDSetAttribute(field, @"id", @"amount");
+	WKDSetAttribute(field, @"label", @"Amount");
+	WKDSetAttribute(field, @"type", @"long");
+	NSXMLElement *validation = WKDNewElement(document, WKDCamundaNamespace, @"validation");
+	NSXMLElement *required = WKDNewElement(document, WKDCamundaNamespace, @"constraint");
+	WKDSetAttribute(required, @"name", @"required");
+	[validation addChild:required];
+	[field addChild:validation];
+	[data addChild:field];
+	[extensions addChild:data];
+	XCTAssertNil(WKDEmbeddedFormOf(document, WKDElementWithId(document, @"review")));
+	NSError *error = nil;
+	NSXMLDocument *form = WKDGeneratedForm(document, @"review", &error);
+	XCTAssertNotNil(form, @"%@", error);
+	NSString *text = [form XMLString];
+	XCTAssertTrue([text rangeOfString:@"<amount"].location != NSNotFound, @"the instance: %@", text);
+	XCTAssertTrue([text rangeOfString:@"required"].location != NSNotFound, @"the bind: %@", text);
+	XCTAssertTrue([text rangeOfString:@"Amount"].location != NSNotFound, @"the control's label: %@", text);
+	NSXMLElement *review = WKDElementWithId(document, @"review");
+	WKDSetQualifiedAttribute(document, review, WKDCamundaNamespace, @"formKey", @"embedded:deployment:review.xhtml");
+	XCTAssertEqualObjects(WKDEmbeddedFormOf(document, review), @"review.xhtml");
+	WKDSetQualifiedAttribute(document, review, WKDCamundaNamespace, @"formKey", @"app:review");
+	XCTAssertNil(WKDEmbeddedFormOf(document, review), @"a key the application resolves");
+}
+
 @end

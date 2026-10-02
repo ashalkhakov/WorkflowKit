@@ -14,3 +14,14 @@ NSArray<NSString *> *WKDEmbeddedForms(NSXMLDocument *document);
  * or there is no directory to look in. */
 NSDictionary<NSString *, NSString *> *WKDDeploymentResources(NSXMLDocument *document, NSString *fileName,
                                                              NSURL *directory, NSArray<NSString *> **missing);
+
+/* The form the element names as camunda:formKey="embedded:deployment:<name>",
+ * or nil. */
+NSString *WKDEmbeddedFormOf(NSXMLDocument *document, NSXMLElement *element);
+
+/* An XForms document for the element's form, as the engine makes one from
+ * its camunda:formData fields -- a model with an instance and a bind per
+ * field, a control per field -- for a form designer to start from; an
+ * empty form when it has no fields. nil, with an error, when the engine
+ * cannot read the process. */
+NSXMLDocument *WKDGeneratedForm(NSXMLDocument *document, NSString *elementId, NSError **error);

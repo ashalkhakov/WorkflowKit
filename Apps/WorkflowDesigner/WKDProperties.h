@@ -29,6 +29,8 @@ typedef NS_ENUM(NSInteger, WKDPropertyKind) {
 	/* A list of entries, a row each in a table: input parameters,
 	 * listeners, a call activity's variables, a delegate's fields. */
 	WKDPropertyTable,
+	/* A button, whose action goes to the first responder: Edit Form. */
+	WKDPropertyButton,
 };
 
 /* A table's column: text, a choice or a check box, as a property's value is. */
@@ -62,6 +64,8 @@ typedef NS_ENUM(NSInteger, WKDPropertyKind) {
 @property (nonatomic, copy) NSArray<NSString *> *titles;
 /* Shown in an empty text field: what leaving it empty means. */
 @property (nonatomic, copy) NSString *placeholder;
+/* A button's action, by selector name. */
+@property (nonatomic, copy) NSString *actionName;
 /* A text the engine reads as an expression -- a condition -- or as
  * literal text unless it is marked as one -- camunda:assignee: what the
  * inspector colours and checks as it is typed, at that place. */
@@ -73,11 +77,12 @@ typedef NS_ENUM(NSInteger, WKDPropertyKind) {
  * with why, when it is refused -- an id that is taken. */
 - (BOOL)setValue:(NSString *)value in:(WKDEditor *)editor of:(NSString *)elementId error:(NSString **)reason;
 
-/* A table's: its columns, what a new row holds, and a table of what each
- * of its rows holds in turn -- a listener's fields -- or nil. */
+/* A table's: its columns, what a new row holds, and the tables of what
+ * each of its rows holds in turn -- a listener's fields; a form field's
+ * constraints, values and properties. */
 @property (nonatomic, copy) NSArray<WKDColumn *> *columns;
 @property (nonatomic, copy) NSArray<NSString *> *blankRow;
-@property (nonatomic, strong) WKDProperty *detail;
+@property (nonatomic, copy) NSArray<WKDProperty *> *details;
 /* The rows now: of the element's entries, or, for a detail, of the entries
  * of the master table's row from master (NSNotFound for the element's). */
 - (NSArray<WKDRow *> *)rowsIn:(WKDEditor *)editor of:(NSString *)elementId master:(NSUInteger)master;

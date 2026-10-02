@@ -81,6 +81,9 @@ static const double WKDDetailLabel = 16;
 		NSUInteger index = [column.values indexOfObject:value];
 		return @(index == NSNotFound ? 0 : (NSInteger)index);
 	}
+	if (column.kind == WKDPropertyCheck) {
+		return @([value isEqualToString:@"true"] ? NSControlStateValueOn : NSControlStateValueOff);
+	}
 	/* An expression, coloured: as the cell's value, which both kits draw
 	 * as it is; and plain while it is typed in. */
 	BOOL edited = [tableView editedRow] == row
@@ -101,6 +104,7 @@ static const double WKDDetailLabel = 16;
 	}
 	NSString *value = column.kind == WKDPropertyChoice
 		? [column.values objectAtIndex:MIN((NSUInteger)MAX(0, [object integerValue]), [column.values count] - 1)]
+		: column.kind == WKDPropertyCheck ? ([object integerValue] != 0 ? @"true" : @"false")
 		: [object isKindOfClass:[NSAttributedString class]] ? [object string] : [object description] ?: @"";
 	WKDRow *edited = [WKDRow rowWithValues:[self.rows objectAtIndex:(NSUInteger)row].values];
 	edited.source = [self.rows objectAtIndex:(NSUInteger)row].source;
@@ -197,8 +201,9 @@ static const double WKDDetailLabel = 16;
 @implementation WKDTableEditor
 {
 	WKDTablePane *_main;
-	WKDTablePane *_detail;
-	NSTextField *_detailLabel;
+	/* The tables of the selected row's entries, and what each is titled. */
+	NSMutableArray<WKDTablePane *> *_details;
+	NSMutableArray<NSTextField *> *_detailLabels;
 }
 
 + (double)tableHeight:(double)rows
@@ -209,9 +214,7 @@ static const double WKDDetailLabel = 16;
 + (double)heightFor:(WKDProperty *)property
 {
 	double height = [self tableHeight:WKDVisibleRows] + WKDButtonsHeight;
-	if (property.detail != nil) {
-		height += WKDDetailGap + WKDDetailLabel + [self tableHeight:3] + WKDButtonsHeight;
-	}
+	height += (double)[property.details count] * (WKDDetailGap + WKDDetailLabel + [self tableHeight:3] + WKDButtonsHeight);
 	return height;
 }
 
@@ -227,21 +230,25 @@ static const double WKDDetailLabel = 16;
 		double y = 0, width = NSWidth(frame);
 		_main = [self paneFor:property rows:WKDVisibleRows y:&y width:width];
 		_main.master = NSNotFound;
-		if (property.detail != nil) {
+		_details = [NSMutableArray array];
+		_detailLabels = [NSMutableArray array];
+		for (WKDProperty *detail in property.details) {
 			y += WKDDetailGap;
-			_detailLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(0, y, width, WKDDetailLabel)];
-			[_detailLabel setEditable:NO];
-			[_detailLabel setSelectable:NO];
-			[_detailLabel setBordered:NO];
-			[_detailLabel setBezeled:NO];
-			[_detailLabel setDrawsBackground:NO];
-			[_detailLabel setFont:[NSFont systemFontOfSize:10]];
-			[_detailLabel setTextColor:[NSColor secondaryLabelColor]];
-			[_detailLabel setAutoresizingMask:NSViewWidthSizable];
-			[self addSubview:_detailLabel];
+			NSTextField *label = [[NSTextField alloc] initWithFrame:NSMakeRect(0, y, width, WKDDetailLabel)];
+			[label setEditable:NO];
+			[label setSelectable:NO];
+			[label setBordered:NO];
+			[label setBezeled:NO];
+			[label setDrawsBackground:NO];
+			[label setFont:[NSFont systemFontOfSize:10]];
+			[label setTextColor:[NSColor secondaryLabelColor]];
+			[label setAutoresizingMask:NSViewWidthSizable];
+			[self addSubview:label];
+			[_detailLabels addObject:label];
 			y += WKDDetailLabel;
-			_detail = [self paneFor:property.detail rows:3 y:&y width:width];
-			_detail.master = NSNotFound;
+			WKDTablePane *pane = [self paneFor:detail rows:3 y:&y width:width];
+			pane.master = NSNotFound;
+			[_details addObject:pane];
 		}
 	}
 	return self;
@@ -275,7 +282,12 @@ static const double WKDDetailLabel = 16;
 		[tableColumn setWidth:floor(inner * column.share / shares)];
 		[tableColumn setEditable:YES];
 		[tableColumn setResizingMask:NSTableColumnAutoresizingMask | NSTableColumnUserResizingMask];
-		if (column.kind == WKDPropertyChoice) {
+		if (column.kind == WKDPropertyCheck) {
+			NSButtonCell *cell = [[NSButtonCell alloc] initTextCell:@""];
+			[cell setButtonType:NSButtonTypeSwitch];
+			[cell setControlSize:NSControlSizeSmall];
+			[tableColumn setDataCell:cell];
+		} else if (column.kind == WKDPropertyChoice) {
 			NSPopUpButtonCell *cell = [[NSPopUpButtonCell alloc] initTextCell:@"" pullsDown:NO];
 			[cell addItemsWithTitles:column.titles];
 			[cell setBordered:NO];
@@ -339,8 +351,15 @@ static const double WKDDetailLabel = 16;
 
 - (BOOL)isEditing
 {
-	/* (A table that is not there edits no row: not row 0.) */
-	return [_main.table editedRow] >= 0 || (_detail != nil && [_detail.table editedRow] >= 0);
+	if ([_main.table editedRow] >= 0) {
+		return YES;
+	}
+	for (WKDTablePane *pane in _details) {
+		if ([pane.table editedRow] >= 0) {
+			return YES;
+		}
+	}
+	return NO;
 }
 
 - (void)reload
@@ -368,20 +387,23 @@ static const double WKDDetailLabel = 16;
 
 - (void)selectionChanged:(WKDTablePane *)pane
 {
-	if (pane != _main || _detail == nil) {
+	if (pane != _main) {
 		return;
 	}
 	NSInteger selected = [_main.table selectedRow];
 	NSUInteger master = selected >= 0 && selected < (NSInteger)[_main.rows count]
 		? [_main.rows objectAtIndex:(NSUInteger)selected].source : NSNotFound;
-	if (master != _detail.master || master == NSNotFound) {
-		[_detail.table deselectAll:nil];
+	for (NSUInteger i = 0; i < [_details count]; i++) {
+		WKDTablePane *detail = [_details objectAtIndex:i];
+		if (master != detail.master || master == NSNotFound) {
+			[detail.table deselectAll:nil];
+		}
+		detail.master = master;
+		[[_detailLabels objectAtIndex:i] setStringValue:master == NSNotFound
+			? [NSString stringWithFormat:@"%@ of the row selected above", detail.property.label]
+			: [NSString stringWithFormat:@"%@ of row %ld", detail.property.label, (long)selected + 1]];
+		[self load:detail];
 	}
-	_detail.master = master;
-	[_detailLabel setStringValue:master == NSNotFound
-		? [NSString stringWithFormat:@"%@ of the row selected above", _detail.property.label]
-		: [NSString stringWithFormat:@"%@ of row %ld", _detail.property.label, (long)selected + 1]];
-	[self load:_detail];
 }
 
 - (void)write:(NSArray<WKDRow *> *)rows of:(WKDTablePane *)pane selecting:(NSInteger)row

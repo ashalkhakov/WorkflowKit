@@ -66,10 +66,12 @@ typedef void (^WKDTidy)(NSXMLElement *container);
 	return self.write(editor, elementId, trimmed ?: @"", reason);
 }
 
-- (void)setDetail:(WKDProperty *)detail
+- (void)setDetails:(NSArray<WKDProperty *> *)details
 {
-	_detail = detail;
-	detail.masterTable = self;
+	_details = [details copy];
+	for (WKDProperty *detail in details) {
+		detail.masterTable = self;
+	}
 }
 
 /* What holds the table's entries: the element, or a master row's entry. */
@@ -374,7 +376,13 @@ WKDFormProperties(void)
 {
 	WKDProperty *key = WKDCamunda(@"Form key", @"formKey");
 	key.placeholder = @"embedded:deployment:order.xhtml";
-	return @[ key, WKDCamunda(@"Form handler", @"formHandlerClass") ];
+	/* The form beside the process, in the form designer: made from the
+	 * fields first when there is none. */
+	WKDProperty *edit = [[WKDProperty alloc] init];
+	edit.label = @"Edit Form…";
+	edit.kind = WKDPropertyButton;
+	edit.actionName = @"editForm:";
+	return @[ key, WKDCamunda(@"Form handler", @"formHandlerClass"), edit ];
 }
 
 /* How a service or send task runs: by a worker on a topic, or a delegate
@@ -899,7 +907,7 @@ WKDListeners(BOOL task, NSArray *events)
 		^(NSXMLElement *element) {
 			WKDTidyExtensions(element, nil);
 		});
-	table.detail = WKDFields(NO);
+	table.details = @[ WKDFields(NO) ];
 	table.placeholder = @"Host code, as a delegate is found: a class, or ${name} registered";
 	return table;
 }
@@ -952,6 +960,226 @@ WKDCallVariables(BOOL inputs)
 	return table;
 }
 
+#pragma mark Forms
+
+static NSXMLElement *
+WKDFormData(NSXMLElement *element)
+{
+	return WKDChild(WKDExtensions(element), WKDCamundaNamespace, @"formData");
+}
+
+/* The constraint of that name in the field's validation, or nil. */
+static NSXMLElement *
+WKDConstraint(NSXMLElement *field, NSString *name)
+{
+	for (NSXMLElement *constraint in WKDChildren(WKDChild(field, WKDCamundaNamespace, @"validation"),
+	                                             WKDCamundaNamespace, @"constraint")) {
+		if ([WKDAttribute(constraint, @"name") isEqualToString:name]) {
+			return constraint;
+		}
+	}
+	return nil;
+}
+
+static void
+WKDTidyField(NSXMLElement *field)
+{
+	for (NSString *local in @[ @"validation", @"properties" ]) {
+		NSXMLElement *holder = WKDChild(field, WKDCamundaNamespace, local);
+		if (holder != nil && !WKDHoldsElements(holder)) {
+			[holder detach];
+		}
+	}
+}
+
+/* A constraint with no configuration -- required, readonly -- there or not. */
+static void
+WKDSetFlagConstraint(NSXMLDocument *document, NSXMLElement *field, NSString *name, BOOL on)
+{
+	NSXMLElement *constraint = WKDConstraint(field, name);
+	if (on && constraint == nil) {
+		NSXMLElement *validation = WKDEnsureChild(document, field, WKDCamundaNamespace, @"validation");
+		WKDSetAttribute(WKDAppendCamunda(document, validation, @"constraint"), @"name", name);
+	} else if (!on) {
+		[constraint detach];
+	}
+}
+
+/* A form field's constraints other than required and readonly, which are
+ * its own columns: a name and its configuration. */
+static WKDProperty *
+WKDFieldConstraints(void)
+{
+	NSSet *flags = [NSSet setWithObjects:@"required", @"readonly", nil];
+	WKDEntries entries = ^NSArray *(NSXMLElement *field) {
+		NSMutableArray *found = [NSMutableArray array];
+		for (NSXMLElement *constraint in WKDChildren(WKDChild(field, WKDCamundaNamespace, @"validation"),
+		                                             WKDCamundaNamespace, @"constraint")) {
+			if (![flags containsObject:WKDAttribute(constraint, @"name") ?: @""]) {
+				[found addObject:constraint];
+			}
+		}
+		return found;
+	};
+	NSArray *names = @[ @"minlength", @"maxlength", @"min", @"max" ];
+	WKDProperty *table = WKDTable(@"Constraints",
+		@[ WKDChoiceColumn(@"Constraint", names, @[ @"Shortest", @"Longest", @"Least", @"Most" ], 1),
+		   WKDTextColumn(@"Value", 1) ],
+		@[ @"minlength", @"" ], entries,
+		^NSArray *(NSXMLElement *constraint, NSXMLDocument *document) {
+			return @[ WKDAttribute(constraint, @"name") ?: @"", WKDAttribute(constraint, @"config") ?: @"" ];
+		},
+		^(NSXMLElement *constraint, NSArray *values, NSXMLDocument *document) {
+			WKDSetAttribute(constraint, @"name", values[0]);
+			WKDSetAttribute(constraint, @"config", [values[1] length] > 0 ? values[1] : nil);
+		},
+		^NSXMLElement *(NSXMLElement *field, NSXMLDocument *document) {
+			return WKDAppendCamunda(document, WKDEnsureChild(document, field, WKDCamundaNamespace, @"validation"),
+			                        @"constraint");
+		},
+		^(NSXMLElement *field) {
+			WKDTidyField(field);
+		});
+	table.placeholder = @"A text's length, a number's or a date's bounds";
+	return table;
+}
+
+/* An enum field's values: an id, what is stored, and its name, what is shown. */
+static WKDProperty *
+WKDFieldValues(void)
+{
+	WKDProperty *table = WKDTable(@"Values",
+		@[ WKDTextColumn(@"Id", 1), WKDTextColumn(@"Name", 1.4) ], @[ @"", @"" ],
+		^NSArray *(NSXMLElement *field) {
+			return WKDChildren(field, WKDCamundaNamespace, @"value");
+		},
+		^NSArray *(NSXMLElement *value, NSXMLDocument *document) {
+			return @[ WKDAttribute(value, @"id") ?: @"", WKDAttribute(value, @"name") ?: @"" ];
+		},
+		^(NSXMLElement *value, NSArray *values, NSXMLDocument *document) {
+			WKDSetAttribute(value, @"id", values[0]);
+			WKDSetAttribute(value, @"name", [values[1] length] > 0 ? values[1] : nil);
+		},
+		^NSXMLElement *(NSXMLElement *field, NSXMLDocument *document) {
+			/* Values before validation and properties, as Modeler writes them. */
+			NSXMLElement *value = WKDNewElement(document, WKDCamundaNamespace, @"value");
+			NSXMLElement *after = WKDChild(field, WKDCamundaNamespace, @"validation")
+				?: WKDChild(field, WKDCamundaNamespace, @"properties");
+			NSArray *existing = WKDChildren(field, WKDCamundaNamespace, @"value");
+			if ([existing count] > 0) {
+				[field insertChild:value atIndex:[[existing lastObject] index] + 1];
+			} else if (after != nil) {
+				[field insertChild:value atIndex:[after index]];
+			} else {
+				[field addChild:value];
+			}
+			return value;
+		}, nil);
+	table.placeholder = @"An enum field's choices";
+	return table;
+}
+
+/* A field's camunda:properties: what the form's renderer is told. */
+static WKDProperty *
+WKDFieldProperties(void)
+{
+	WKDProperty *table = WKDTable(@"Properties",
+		@[ WKDTextColumn(@"Property", 1), WKDTextColumn(@"Value", 1.4) ], @[ @"", @"" ],
+		^NSArray *(NSXMLElement *field) {
+			return WKDChildren(WKDChild(field, WKDCamundaNamespace, @"properties"), WKDCamundaNamespace, @"property");
+		},
+		^NSArray *(NSXMLElement *property, NSXMLDocument *document) {
+			return @[ WKDAttribute(property, @"id") ?: @"", WKDAttribute(property, @"value") ?: @"" ];
+		},
+		^(NSXMLElement *property, NSArray *values, NSXMLDocument *document) {
+			WKDSetAttribute(property, @"id", values[0]);
+			WKDSetAttribute(property, @"value", values[1]);
+		},
+		^NSXMLElement *(NSXMLElement *field, NSXMLDocument *document) {
+			return WKDAppendCamunda(document, WKDEnsureChild(document, field, WKDCamundaNamespace, @"properties"),
+			                        @"property");
+		},
+		^(NSXMLElement *field) {
+			WKDTidyField(field);
+		});
+	table.placeholder = @"Hints for the form, by name";
+	return table;
+}
+
+/* camunda:formData's fields: the form the engine makes, a control each. */
+static WKDProperty *
+WKDFormFields(void)
+{
+	NSArray *types = @[ @"string", @"long", @"boolean", @"date", @"enum" ];
+	/* Short titles: the columns are narrow. */
+	WKDColumn *required = WKDTextColumn(@"Req.", 0.55);
+	required.kind = WKDPropertyCheck;
+	WKDColumn *readonly = WKDTextColumn(@"R/O", 0.55);
+	readonly.kind = WKDPropertyCheck;
+	WKDColumn *defaultValue = WKDValueColumn(@"Default", 1);
+	WKDProperty *table = WKDTable(@"Fields",
+		@[ WKDTextColumn(@"Field", 1), WKDTextColumn(@"Label", 1.1),
+		   WKDChoiceColumn(@"Type", types, @[ @"Text", @"Number", @"Yes/No", @"Date", @"Choice" ], 0.95),
+		   defaultValue, required, readonly ],
+		@[ @"", @"", @"string", @"", @"false", @"false" ],
+		^NSArray *(NSXMLElement *element) {
+			return WKDChildren(WKDFormData(element), WKDCamundaNamespace, @"formField");
+		},
+		^NSArray *(NSXMLElement *field, NSXMLDocument *document) {
+			return @[ WKDAttribute(field, @"id") ?: @"", WKDAttribute(field, @"label") ?: @"",
+			          WKDAttribute(field, @"type") ?: @"string", WKDAttribute(field, @"defaultValue") ?: @"",
+			          WKDConstraint(field, @"required") != nil ? @"true" : @"false",
+			          WKDConstraint(field, @"readonly") != nil ? @"true" : @"false" ];
+		},
+		^(NSXMLElement *field, NSArray *values, NSXMLDocument *document) {
+			WKDSetAttribute(field, @"id", values[0]);
+			WKDSetAttribute(field, @"label", [values[1] length] > 0 ? values[1] : nil);
+			WKDSetAttribute(field, @"type", values[2]);
+			WKDSetAttribute(field, @"defaultValue", [values[3] length] > 0 ? values[3] : nil);
+			WKDSetFlagConstraint(document, field, @"required", [values[4] isEqualToString:@"true"]);
+			WKDSetFlagConstraint(document, field, @"readonly", [values[5] isEqualToString:@"true"]);
+			WKDTidyField(field);
+		},
+		^NSXMLElement *(NSXMLElement *element, NSXMLDocument *document) {
+			NSXMLElement *extensions = WKDEnsureChild(document, element, WKDBpmnNamespace, @"extensionElements");
+			return WKDAppendCamunda(document, WKDEnsureChild(document, extensions, WKDCamundaNamespace, @"formData"),
+			                        @"formField");
+		},
+		^(NSXMLElement *element) {
+			NSXMLElement *data = WKDFormData(element);
+			if (data != nil && !WKDHoldsElements(data) && WKDAttribute(data, @"businessKey") == nil) {
+				[data detach];
+			}
+			WKDTidyExtensions(element, nil);
+		});
+	table.details = @[ WKDFieldConstraints(), WKDFieldValues(), WKDFieldProperties() ];
+	table.placeholder = @"The engine makes the form: a control each, the field's variable bound";
+	return table;
+}
+
+/* A start form's field whose value is the new instance's business key. */
+static WKDProperty *
+WKDBusinessKeyField(void)
+{
+	WKDProperty *property = WKDMake(@"Business key", WKDPropertyText, ^NSString *(NSXMLElement *element, NSXMLDocument *document) {
+		return WKDAttribute(WKDFormData(element), @"businessKey");
+	}, WKDEditing(@"Business key", ^(NSXMLElement *element, NSXMLDocument *document, NSString *value, WKDEditor *editor) {
+		if ([value length] > 0) {
+			NSXMLElement *extensions = WKDEnsureChild(document, element, WKDBpmnNamespace, @"extensionElements");
+			WKDSetAttribute(WKDEnsureChild(document, extensions, WKDCamundaNamespace, @"formData"), @"businessKey", value);
+		} else {
+			NSXMLElement *data = WKDFormData(element);
+			WKDSetAttribute(data, @"businessKey", nil);
+			if (data != nil && !WKDHoldsElements(data)) {
+				[data detach];
+			}
+			WKDTidyExtensions(element, nil);
+		}
+	}));
+	property.placeholder = @"The field that names the instance";
+	return property;
+}
+
 NSArray<WKDSection *> *
 WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 {
@@ -975,7 +1203,7 @@ WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 	WKDShapeKind kind = WKDKindOfType(type, &flowNode);
 	if ([type isEqualToString:@"userTask"]) {
 		[sections addObject:WKDMakeSection(@"Assignment", WKDUserTaskProperties())];
-		[sections addObject:WKDMakeSection(@"Form", WKDFormProperties())];
+		[sections addObject:WKDMakeSection(@"Form", [WKDFormProperties() arrayByAddingObject:WKDFormFields()])];
 	} else if ([type isEqualToString:@"serviceTask"] || [type isEqualToString:@"sendTask"]) {
 		[sections addObject:WKDMakeSection(@"Implementation",
 			[WKDImplementationProperties() arrayByAddingObject:WKDFields(YES)])];
@@ -998,7 +1226,8 @@ WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 			[sections addObject:WKDMakeSection(@"Event", event)];
 		}
 		if ([type isEqualToString:@"startEvent"] && WKDDefinitionOf(element) == nil) {
-			[sections addObject:WKDMakeSection(@"Form", WKDFormProperties())];
+			[sections addObject:WKDMakeSection(@"Form", [WKDFormProperties() arrayByAddingObjectsFromArray:
+				@[ WKDBusinessKeyField(), WKDFormFields() ]])];
 		}
 	}
 	if (kind == WKDShapeActivity) {

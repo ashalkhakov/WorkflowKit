@@ -32,6 +32,11 @@
 - (IBAction)arrange:(id)sender;
 /* Server ▸ Deploy: the process and its forms, to the server connected. */
 - (IBAction)deploy:(id)sender;
+/* Diagram ▸ Edit Form: the selected task's or start event's embedded form,
+ * beside the process, in the form designer (the WKDFormDesigner default,
+ * XFormsDesigner); made from its fields first, and named in its form key,
+ * when there is none. */
+- (IBAction)editForm:(id)sender;
 - (IBAction)showOutline:(id)sender;
 - (IBAction)showPalette:(id)sender;
 - (IBAction)showProblems:(id)sender;

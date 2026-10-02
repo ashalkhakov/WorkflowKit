@@ -75,6 +75,25 @@ What an element has a list of is a table, a row an entry:
   business key) and passed back.
 - **Implementation** (service and send tasks): a delegate's fields, text or
   an expression.
+- **Form** (user tasks and start events): the fields the engine makes a
+  form of (`camunda:formData`) -- id, label, type, default, required and
+  read-only -- and under it the selected field's other constraints, an
+  enum's values, and its properties. A start form also names the field
+  whose value is the business key.
+
+### Forms
+
+A form the process names as `camunda:formKey="embedded:deployment:<name>"`
+is an XForms document kept beside the `.bpmn` file and deployed with it.
+**Edit Form…** (the button in the Form section, or Diagram ▸ Edit Form…, ⌘E)
+opens the selected task's or start event's form in the XForms Designer.
+When there is no such form yet, it is made first, from the fields as the
+engine makes their form, written beside the process, and named in the
+form key: one undoable change. The process must have been saved, so that
+there is somewhere beside it.
+
+The form designer is `XFormsDesigner` by default; the `WKDFormDesigner`
+default names another application, by name or path.
 
 **+** adds a row and **−** removes the selected one. Double-click a cell to
 edit it, and Return or leaving it writes it. Each of these is one undoable

@@ -10,4 +10,5 @@
 #define NSButtonTypeSwitch NSSwitchButton
 #define NSBitmapImageFileTypePNG NSPNGFileType
 #define NSBezelStyleSmallSquare NSSmallSquareBezelStyle
+#define NSBezelStyleRounded NSRoundedBezelStyle
 #endif

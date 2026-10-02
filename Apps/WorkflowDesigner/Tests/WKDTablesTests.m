@@ -35,7 +35,7 @@
 {
 	WKDProperty *table = [self table:label of:elementId in:editor];
 	if (master != NSNotFound) {
-		table = table.detail;
+		table = [table.details firstObject];
 	}
 	return [[table rowsIn:editor of:elementId master:master] valueForKey:@"values"];
 }
@@ -45,7 +45,7 @@
 {
 	WKDProperty *table = [self table:label of:elementId in:editor];
 	if (master != NSNotFound) {
-		table = table.detail;
+		table = [table.details firstObject];
 	}
 	NSMutableArray *all = [[table rowsIn:editor of:elementId master:master] mutableCopy];
 	for (NSArray *values in rows) {
@@ -136,6 +136,75 @@
 	XCTAssertTrue([listeners setRows:rows in:editor of:@"review" master:NSNotFound error:NULL]);
 	XCTAssertEqualObjects([[[listeners rowsIn:editor of:@"review" master:NSNotFound] lastObject] values][1],
 	                      @"delegateExpression");
+}
+
+/* Form fields with what is checked of them, their values and the hints
+ * the form is given; what the engine reads. */
+- (void)testAFormsFields
+{
+	WKDEditor *editor = [[WKDEditor alloc] initWithDocument:WKDParse(WKDModellerFile) undoManager:nil];
+	[self add:@[ @[ @"amount", @"Amount", @"long", @"", @"true", @"false" ],
+	             @[ @"kind", @"Kind", @"enum", @"standard", @"false", @"false" ] ]
+	       to:@"Fields" of:@"review" in:editor master:NSNotFound];
+	WKDProperty *fields = [self table:@"Fields" of:@"review" in:editor];
+	XCTAssertEqual([fields.details count], (NSUInteger)3);
+	NSUInteger amount = [[fields rowsIn:editor of:@"review" master:NSNotFound] count] - 2;
+	NSString *reason = nil;
+	NSArray *constraints = @[ [WKDRow rowWithValues:@[ @"min", @"1" ]] ];
+	NSArray *values = @[ [WKDRow rowWithValues:@[ @"standard", @"Standard" ]], [WKDRow rowWithValues:@[ @"rush", @"Rush" ]] ];
+	NSArray *hints = @[ [WKDRow rowWithValues:@[ @"placeholder", @"How many" ]] ];
+	BOOL written = [fields.details[0] setRows:constraints in:editor of:@"review" master:amount error:&reason];
+	XCTAssertTrue(written, @"%@", reason);
+	written = [fields.details[1] setRows:values in:editor of:@"review" master:amount + 1 error:&reason];
+	XCTAssertTrue(written, @"%@", reason);
+	written = [fields.details[2] setRows:hints in:editor of:@"review" master:amount error:&reason];
+	XCTAssertTrue(written, @"%@", reason);
+	WFFormDefinition *form = [[[self engineRead:editor] flowNodeWithId:@"review"] form];
+	WFFormField *amountField = [form.fields objectAtIndex:amount], *kind = [form.fields objectAtIndex:amount + 1];
+	XCTAssertEqualObjects(amountField.fieldId, @"amount");
+	XCTAssertEqual(amountField.type, WFFormFieldTypeLong);
+	XCTAssertTrue(amountField.required);
+	XCTAssertEqualObjects([amountField.constraints valueForKey:@"name"], (@[ @"required", @"min" ]));
+	XCTAssertEqualObjects([amountField.properties objectForKey:@"placeholder"], @"How many");
+	XCTAssertEqualObjects([kind.values valueForKey:@"valueId"], (@[ @"standard", @"rush" ]));
+	XCTAssertNotNil(kind.defaultValue);
+
+	/* Not required any more, and nothing else checked: no validation left. */
+	NSMutableArray *rows = [[fields rowsIn:editor of:@"review" master:NSNotFound] mutableCopy];
+	WKDRow *kindRow = rows[amount + 1];
+	XCTAssertTrue([fields.details[1] setRows:@[] in:editor of:@"review" master:amount + 1 error:NULL]);
+	WKDRow *amountRow = rows[amount];
+	amountRow.values = @[ @"amount", @"Amount", @"long", @"", @"false", @"true" ];
+	XCTAssertTrue([fields setRows:rows in:editor of:@"review" master:NSNotFound error:NULL]);
+	XCTAssertEqualObjects([[fields rowsIn:editor of:@"review" master:NSNotFound][amount] values][5], @"true");
+	XCTAssertTrue([fields.details[0] setRows:@[] in:editor of:@"review" master:amount error:NULL]);
+	(void)kindRow;
+	NSXMLElement *field = nil;
+	for (NSXMLElement *candidate in WKDDescendants([editor elementWithId:@"review"], WKDCamundaNamespace, @"formField")) {
+		if ([WKDAttribute(candidate, @"id") isEqualToString:@"kind"]) {
+			field = candidate;
+		}
+	}
+	XCTAssertNil(WKDChild(field, WKDCamundaNamespace, @"validation"));
+	XCTAssertNil(WKDChild(field, WKDCamundaNamespace, @"value"));
+}
+
+/* A start form's business key field. */
+- (void)testAStartFormsBusinessKey
+{
+	WKDEditor *editor = [[WKDEditor alloc] initWithDocument:WKDParse(WKDModellerFile) undoManager:nil];
+	[self add:@[ @[ @"reference", @"Reference", @"string", @"", @"true", @"false" ] ] to:@"Fields" of:@"start"
+	       in:editor master:NSNotFound];
+	WKDProperty *businessKey = nil;
+	for (WKDSection *section in WKDSectionsFor(editor, @"start")) {
+		for (WKDProperty *property in section.properties) {
+			if ([property.label isEqualToString:@"Business key"]) {
+				businessKey = property;
+			}
+		}
+	}
+	XCTAssertTrue([businessKey setValue:@"reference" in:editor of:@"start" error:NULL]);
+	XCTAssertEqualObjects([[[[self engineRead:editor] flowNodeWithId:@"start"] form] businessKeyFieldId], @"reference");
 }
 
 - (void)testACallActivitysVariables

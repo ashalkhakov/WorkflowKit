@@ -198,6 +198,12 @@
                                     <action selector="arrange:" target="-1" id="WKm-ac-056"/>
                                 </connections>
                             </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-sp-110"/>
+                            <menuItem title="Edit Form…" keyEquivalent="e" id="WKm-mi-111">
+                                <connections>
+                                    <action selector="editForm:" target="-1" id="WKm-ac-111"/>
+                                </connections>
+                            </menuItem>
                         </items>
                     </menu>
                 </menuItem>
