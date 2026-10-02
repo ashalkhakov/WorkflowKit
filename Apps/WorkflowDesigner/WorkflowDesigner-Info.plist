@@ -42,6 +42,25 @@
 			<key>NSDocumentClass</key>
 			<string>WKDDocument</string>
 		</dict>
+		<!-- A process's forms, edited by XFormsDesignKit's editor. -->
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>XForms Form</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.xhtml</string>
+			</array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>xhtml</string>
+			</array>
+			<key>NSDocumentClass</key>
+			<string>XFDDocument</string>
+		</dict>
 	</array>
 	<key>UTImportedTypeDeclarations</key>
 	<array>

@@ -7,8 +7,7 @@
   income worked out, the limit compared, and a reason required to decline.
 -->
 <html xmlns="http://www.w3.org/1999/xhtml"
-      xmlns:xf="http://www.w3.org/2002/xforms"
-      xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+      xmlns:xf="http://www.w3.org/2002/xforms">
   <head>
     <title>Underwrite loan</title>
     <xf:model>
@@ -27,9 +26,9 @@
       </xf:instance>
       <xf:bind ref="applicant" readonly="true()"/>
       <xf:bind ref="employedSince" readonly="true()"/>
-      <xf:bind ref="income" type="xsd:long" readonly="true()"/>
-      <xf:bind ref="debts" type="xsd:long" readonly="true()"/>
-      <xf:bind ref="amount" type="xsd:long" readonly="true()"/>
+      <xf:bind ref="income" readonly="true()"/>
+      <xf:bind ref="debts" readonly="true()"/>
+      <xf:bind ref="amount" readonly="true()"/>
       <xf:bind ref="risk" readonly="true()"/>
       <xf:bind ref="maxLoan" readonly="true()"/>
       <xf:bind ref="approved" required="true()"/>
@@ -47,15 +46,15 @@
     <xf:group>
       <xf:label>Loan</xf:label>
       <xf:output ref="amount"><xf:label>Amount asked for</xf:label></xf:output>
-      <xf:output value="concat(round(amount div income * 100), ' %')">
+      <xf:output value="if(number(income) &gt; 0, concat(round(amount div income * 100), ' %'), '')">
         <xf:label>Share of income</xf:label>
       </xf:output>
-      <xf:output value="concat(round((amount + debts) div income * 100), ' %')">
+      <xf:output value="if(number(income) &gt; 0, concat(round((amount + debts) div income * 100), ' %'), '')">
         <xf:label>With other debts</xf:label>
       </xf:output>
       <xf:output ref="risk"><xf:label>Risk</xf:label></xf:output>
       <xf:output ref="maxLoan"><xf:label>Limit</xf:label></xf:output>
-      <xf:output value="if(number(amount) &gt; number(maxLoan), concat('Over the limit by ', number(amount) - number(maxLoan)), 'Within the limit')">
+      <xf:output value="if(string(maxLoan) = '', '', if(number(amount) &gt; number(maxLoan), concat('Over the limit by ', number(amount) - number(maxLoan)), 'Within the limit'))">
         <xf:label>Against the limit</xf:label>
       </xf:output>
     </xf:group>

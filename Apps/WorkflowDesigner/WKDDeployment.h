@@ -9,11 +9,14 @@
 /* The forms the document names, as deployment resources: order.xhtml. */
 NSArray<NSString *> *WKDEmbeddedForms(NSXMLDocument *document);
 
-/* The resources, name to text: the process as `fileName`, and its forms
- * from `directory`. nil, with the forms there are not, when one is missing
- * or there is no directory to look in. */
+/* The resources, name to text: the process as `fileName`, and its forms --
+ * as `edited` has them, the forms open in an editor, else from
+ * `directory`. nil, with the forms there are not, when one is missing or
+ * there is no directory to look in. */
 NSDictionary<NSString *, NSString *> *WKDDeploymentResources(NSXMLDocument *document, NSString *fileName,
-                                                             NSURL *directory, NSArray<NSString *> **missing);
+                                                             NSURL *directory,
+                                                             NSDictionary<NSString *, NSString *> *edited,
+                                                             NSArray<NSString *> **missing);
 
 /* The form the element names as camunda:formKey="embedded:deployment:<name>",
  * or nil. */

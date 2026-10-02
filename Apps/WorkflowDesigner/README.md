@@ -86,14 +86,17 @@ What an element has a list of is a table, a row an entry:
 A form the process names as `camunda:formKey="embedded:deployment:<name>"`
 is an XForms document kept beside the `.bpmn` file and deployed with it.
 **Edit Form…** (the button in the Form section, or Diagram ▸ Edit Form…, ⌘E)
-opens the selected task's or start event's form in the XForms Designer.
-When there is no such form yet, it is made first, from the fields as the
-engine makes their form, written beside the process, and named in the
-form key: one undoable change. The process must have been saved, so that
-there is somewhere beside it.
+opens the selected task's or start event's form in a window of its own,
+in this app: the XForms Designer's editor, which XFormsKit's
+XFormsDesignKit framework is, with its outline, live preview and
+inspector, and its Form menu beside Diagram. A form is a document like the
+process, saved and undone on its own; `.xhtml` files open in it from
+File ▸ Open too. When there is no such form yet, it is made first, from
+the fields as the engine makes their form, written beside the process,
+and named in the form key: one undoable change. The process must have
+been saved, so that there is somewhere beside it.
 
-The form designer is `XFormsDesigner` by default; the `WKDFormDesigner`
-default names another application, by name or path.
+Deploy sends a form that is open as it stands in its window, saved or not.
 
 **+** adds a row and **−** removes the selected one. Double-click a cell to
 edit it, and Return or leaving it writes it. Each of these is one undoable
@@ -183,14 +186,16 @@ window first.
 
 **On GNUstep**, build the engine library at the top of the repository with
 `make` first. The designer also needs FreeCoreData installed (with `momc`)
-and a built ODataKit checkout, as WorkflowDesk does. Then, in this
-directory:
+and a built ODataKit checkout, as WorkflowDesk does, and a built
+XFormsKit checkout with its form editor (`make designkit` there). Then, in
+this directory:
 
-    make ODATAKIT=...         # WorkflowDesigner.app
-    make ODATAKIT=... run     # open it
-    make ODATAKIT=... check   # the tests: the document model, edits, layout,
-                              # deployments, and that the engine reads what
-                              # the designer writes
+    make ODATAKIT=... XFORMSKIT=...         # WorkflowDesigner.app
+    make ODATAKIT=... XFORMSKIT=... run     # open it
+    make ODATAKIT=... XFORMSKIT=... check   # the tests: the document model,
+                                            # edits, layout, deployments, and
+                                            # that the engine reads what the
+                                            # designer writes
 
 `Tools/` has the designer without a window, for BPMN files kept in a
 repository, such as `Examples/Processes`. They build on GNUstep with
@@ -213,7 +218,7 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
 | `WKDTableEditor` | A table property in the inspector, with its + and − and its detail table. |
 | `WKDExpressionField` | The expression field and the text storage that colours it, ported from the XForms Designer's XPath field, over the engine's `+[WFFeelExpression tokensOfText:place:]` and `+problemInText:place:`. |
-| `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with its DMTabBar (`ThirdParty/`). |
-| `WKDDeployment` | What a deployment sends: the process and the forms it embeds. |
+| `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with the DMTabBar XFormsDesignKit carries. |
+| `WKDDeployment` | What a deployment sends: the process and the forms it embeds, as the form editor has those open in it. |
 | `WKDAppDelegate`, `WKDServerProcessesController` | The server connection, shared by every window, and the Open from Server window. The connection itself is WorkflowDesk's (`../Shared`). |
 | `WKDCanvasView`, `WKDPaletteView`, `WKDRenderer` | Drawing and editing, adapted from CoreWF's graph view. BPMN notation is drawn with `NSBezierPath`, with no images. |

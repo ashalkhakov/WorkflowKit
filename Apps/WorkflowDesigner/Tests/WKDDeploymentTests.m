@@ -56,13 +56,23 @@
 	[@"<review/>" writeToURL:[_directory URLByAppendingPathComponent:@"review.xhtml"] atomically:YES
 	               encoding:NSUTF8StringEncoding error:NULL];
 	NSArray *missing = nil;
-	NSDictionary *resources = WKDDeploymentResources([self documentWithForms], @"order.bpmn", _directory, &missing);
+	NSDictionary *resources = WKDDeploymentResources([self documentWithForms], @"order.bpmn", _directory, nil,
+	                                                 &missing);
 	XCTAssertEqualObjects([[resources allKeys] sortedArrayUsingSelector:@selector(compare:)],
 	                      (@[ @"order.bpmn", @"order.xhtml", @"review.xhtml" ]));
 	XCTAssertEqualObjects([resources objectForKey:@"review.xhtml"], @"<review/>");
 	XCTAssertTrue([[resources objectForKey:@"order.bpmn"] rangeOfString:@"embedded:deployment:order.xhtml"].location
 	              != NSNotFound);
 	XCTAssertEqualObjects(missing, @[]);
+
+	/* A form open in the form editor goes as it is there, saved or not. */
+	resources = WKDDeploymentResources([self documentWithForms], @"order.bpmn", _directory,
+	                                   @{ @"review.xhtml": @"<review>edited</review>" }, &missing);
+	XCTAssertEqualObjects([resources objectForKey:@"review.xhtml"], @"<review>edited</review>");
+	XCTAssertEqualObjects([resources objectForKey:@"order.xhtml"], @"<order/>");
+	resources = WKDDeploymentResources([self documentWithForms], @"order.bpmn", nil,
+	                                   @{ @"order.xhtml": @"<order/>", @"review.xhtml": @"<review/>" }, &missing);
+	XCTAssertNotNil(resources, @"all open: no directory needed");
 }
 
 - (void)testAMissingFormStopsTheDeployment
@@ -70,12 +80,12 @@
 	[@"<order/>" writeToURL:[_directory URLByAppendingPathComponent:@"order.xhtml"] atomically:YES
 	              encoding:NSUTF8StringEncoding error:NULL];
 	NSArray *missing = nil;
-	XCTAssertNil(WKDDeploymentResources([self documentWithForms], @"order.bpmn", _directory, &missing));
+	XCTAssertNil(WKDDeploymentResources([self documentWithForms], @"order.bpmn", _directory, nil, &missing));
 	XCTAssertEqualObjects(missing, @[ @"review.xhtml" ]);
-	XCTAssertNil(WKDDeploymentResources([self documentWithForms], @"order.bpmn", nil, &missing),
+	XCTAssertNil(WKDDeploymentResources([self documentWithForms], @"order.bpmn", nil, nil, &missing),
 	             @"a document never saved has nowhere to find them");
 	XCTAssertEqual([missing count], (NSUInteger)2);
-	XCTAssertNotNil(WKDDeploymentResources(WKDParse(WKDModellerFile), @"order.bpmn", nil, &missing),
+	XCTAssertNotNil(WKDDeploymentResources(WKDParse(WKDModellerFile), @"order.bpmn", nil, nil, &missing),
 	                @"one without forms needs no directory");
 }
 

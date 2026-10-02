@@ -30,12 +30,13 @@
 - (IBAction)zoomOut:(id)sender;
 - (IBAction)actualSize:(id)sender;
 - (IBAction)arrange:(id)sender;
-/* Server ▸ Deploy: the process and its forms, to the server connected. */
+/* Server ▸ Deploy: the process and its forms -- as the form editor has
+ * them, for those open in it -- to the server connected. */
 - (IBAction)deploy:(id)sender;
 /* Diagram ▸ Edit Form: the selected task's or start event's embedded form,
- * beside the process, in the form designer (the WKDFormDesigner default,
- * XFormsDesigner); made from its fields first, and named in its form key,
- * when there is none. */
+ * beside the process, opened in this app's form editor (XFormsDesignKit's);
+ * made from its fields first, and named in its form key, when there is
+ * none. */
 - (IBAction)editForm:(id)sender;
 - (IBAction)showOutline:(id)sender;
 - (IBAction)showPalette:(id)sender;

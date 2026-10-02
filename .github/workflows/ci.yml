@@ -56,8 +56,9 @@ jobs:
       # checkout, not installed.
       ODATAKIT_REF: 8334447fd7a102a10d76becd03386fbfed8773ec
       ODATAKIT: ${{ github.workspace }}/ODataKit
-      # XFormsKit, for WorkflowDesk's forms: built in its checkout.
-      XFORMSKIT_REF: 30d4fd054d57c1878d2f9b016ad0e6aae02f3849
+      # XFormsKit, for WorkflowDesk's forms and the designer's form editor
+      # (XFormsDesignKit): built in its checkout.
+      XFORMSKIT_REF: 2466ffe3fa11f28929c8c4e09e10f4b29beb29ef
       XFORMSKIT: ${{ github.workspace }}/XFormsKit
     defaults:
       run:
@@ -230,6 +231,7 @@ jobs:
         run: |
           . $PREFIX/System/Library/Makefiles/GNUstep.sh
           make -j"$(nproc)"
+          make designkit
 
       - name: WorkflowDesk
         run: |
@@ -238,7 +240,7 @@ jobs:
           make -C Apps/WorkflowDesk check
 
       # The BPMN designer, over ODataKit (ODATAKIT, above) as WorkflowDesk
-      # is: built, and its tests -- the document model, its edits and
+      # is, and XFormsKit's form editor (XFORMSKIT): built, and its tests -- the document model, its edits and
       # layout, deployments, and that the engine reads what it writes -- run.
       - name: WorkflowDesigner
         run: |

@@ -25,13 +25,15 @@ WKDEmbeddedForms(NSXMLDocument *document)
 }
 
 NSDictionary<NSString *, NSString *> *
-WKDDeploymentResources(NSXMLDocument *document, NSString *fileName, NSURL *directory, NSArray<NSString *> **missing)
+WKDDeploymentResources(NSXMLDocument *document, NSString *fileName, NSURL *directory,
+                       NSDictionary<NSString *, NSString *> *edited, NSArray<NSString *> **missing)
 {
 	NSMutableDictionary *resources = [NSMutableDictionary dictionary];
 	[resources setObject:[document XMLStringWithOptions:NSXMLNodePrettyPrint] forKey:fileName];
 	NSMutableArray *absent = [NSMutableArray array];
 	for (NSString *form in WKDEmbeddedForms(document)) {
-		NSString *text = directory != nil
+		NSString *text = [edited objectForKey:form];
+		text = text != nil ? text : directory != nil
 			? [NSString stringWithContentsOfURL:[directory URLByAppendingPathComponent:form]
 			                           encoding:NSUTF8StringEncoding error:NULL]
 			: nil;

@@ -174,6 +174,7 @@ odatastore = built_framework("ODataIncrementalStore")
 httpserverkit = built_framework("HTTPServerKit")
 otelkit = built_framework("OTelKit")
 xformskit = built_framework("XFormsKit")
+xformsdesignkit = built_framework("XFormsDesignKit")
 appkit = sdk_framework("AppKit")
 
 
@@ -338,17 +339,16 @@ wt_sources = phase("PBXSourcesBuildPhase", "WorkflowDeskTests", "Sources", names
 wt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDeskTests", "Frameworks", names(
     [buildfile("WorkflowDeskTests", odatakit, "ODataKit.framework")]))
 
-# Vendored code (ThirdParty/) is compiled as it came, its warnings unheard.
 wg_sources = phase("PBXSourcesBuildPhase", "WorkflowDesigner", "Sources", names(
-    [buildfile("WorkflowDesigner", app_file(designer_refs, f), os.path.basename(f),
-               '{COMPILER_FLAGS = "-w"; }' if f.startswith("ThirdParty/") else None)
+    [buildfile("WorkflowDesigner", app_file(designer_refs, f), os.path.basename(f))
      for f in DESIGNER_SOURCES]))
 wg_resources = phase("PBXResourcesBuildPhase", "WorkflowDesigner", "Resources", names(
     [buildfile("WorkflowDesigner", app_file(designer_res_refs, r), os.path.basename(r))
      for r in DESIGNER_RESOURCES]))
-# The server's API, as WorkflowDesk opens it.
+# The server's API, as WorkflowDesk opens it; and XFormsKit's form editor.
 DESIGNER_FRAMEWORKS = [(p_fw, "WorkflowKit.framework"), (odatakit, "ODataKit.framework"),
-                       (odatastore, "ODataIncrementalStore.framework"), (otelkit, "OTelKit.framework")]
+                       (odatastore, "ODataIncrementalStore.framework"), (otelkit, "OTelKit.framework"),
+                       (xformskit, "XFormsKit.framework"), (xformsdesignkit, "XFormsDesignKit.framework")]
 wg_model = model_phase("WorkflowDesigner")
 wg_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesigner", "Frameworks", names(
     [buildfile("WorkflowDesigner", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
@@ -505,6 +505,10 @@ DESIGNER_S = {
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
     # The model's compiling script writes into the app.
     "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
+    # XFormsKit's frameworks carry no headers, the form editor's either.
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/../XFormsKit/Sources", "$(SRCROOT)/../XFormsKit/Sources/XFormsKit", '
+                           '"$(SRCROOT)/../XFormsKit/Sources/XFormsDesignKit", '
+                           '"$(SRCROOT)/../XFormsKit/Sources/XFormsDesignKit/ThirdParty/DMTabBar")',
 }
 DESIGNER_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesignerTests",
@@ -715,5 +719,7 @@ DESK_EXTERNAL = [
 scheme("WorkflowDesk", DESK_EXTERNAL + [desk_ref], test=desk_tests_ref, run=desk_ref)
 designer_ref = ref(t_designer, "WorkflowDesigner", "WorkflowDesigner.app")
 designer_tests_ref = ref(t_designer_tests, "WorkflowDesignerTests", "WorkflowDesignerTests.xctest")
-scheme("WorkflowDesigner", DESK_EXTERNAL[:3] + [fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
+scheme("WorkflowDesigner", DESK_EXTERNAL + [
+    ref("DK0000000000000000000001", "XFormsDesignKit", "XFormsDesignKit.framework", "../XFormsKit/XFormsKit.xcodeproj"),
+    fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
 print("wrote", proj)

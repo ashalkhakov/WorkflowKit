@@ -146,13 +146,17 @@ with the engine's `WFBpmnReader` saying after each change whether it runs.
 It links the engine, and deploys to and opens from a `wf-serve` through
 the connection WorkflowDesk has: `Apps/Shared` holds what both apps
 compile (the session, sign-in and connect window), so the designer builds
-with `ODATAKIT=...` too. Its document model and editor are Foundation only, and
+with `ODATAKIT=...` too. Its forms open in a window of its own through
+XFormsKit's XFormsDesignKit, the XForms Designer's editor as a framework
+(`XFDDocument`, its second document type), so it builds with
+`XFORMSKIT=...` as well, after `make designkit` in that checkout; its tab
+bars are the DMTabBar that framework carries. Its document model and editor are Foundation only, and
 its tests (`make check`) need no display. A diagram's shapes link to one
 another weakly, so keep the diagram they came from while using them: Apple
 frees it at once, GNUstep later.
 
-XFormsKit's framework carries no headers on either platform, so its users
-include them from `../XFormsKit/Sources`. On GNUstep it needs libs-corebase
+XFormsKit's frameworks carry no headers on either platform, so their users
+include them from `../XFormsKit/Sources` (and `Sources/XFormsDesignKit`). On GNUstep it needs libs-corebase
 and libs-opal in the stack.
 
 ## macOS

@@ -8,8 +8,10 @@
 #import "WKDRenderer.h"
 #import "WKDXML.h"
 #import "WDSession.h"
-#import "ThirdParty/DMTabBar/DMTabBar.h"
-#import "ThirdParty/DMTabBar/DMTabBarItem.h"
+#import "XFormsDesignKit.h"
+/* XFormsDesignKit's, which this app's panes share. */
+#import "DMTabBar.h"
+#import "DMTabBarItem.h"
 
 /* The side panes' widths, and how narrow they and the canvas may get. */
 static const double WKDLeftWidth = 230;
@@ -369,7 +371,8 @@ WKDSelectTab(id sender, NSTabView *tabView)
 		?: [processId stringByAppendingPathExtension:@"bpmn"];
 	NSArray<NSString *> *missing = nil;
 	NSDictionary *resources = WKDDeploymentResources([self editor].document, fileName,
-	                                                 [file URLByDeletingLastPathComponent], &missing);
+	                                                 [file URLByDeletingLastPathComponent], [self editedForms],
+	                                                 &missing);
 	if (resources == nil) {
 		[self alert:@"The process's forms are missing."
 		     detail:[NSString stringWithFormat:@"%@ must be beside the process%@: %@.",
@@ -411,6 +414,25 @@ WKDSelectTab(id sender, NSTabView *tabView)
 }
 
 #pragma mark Forms
+
+/* The process's forms open in the form editor, as they stand there: by
+ * name, those beside the process. */
+- (NSDictionary<NSString *, NSString *> *)editedForms
+{
+	NSURL *directory = [[[self designerDocument] fileURL] URLByDeletingLastPathComponent];
+	if (directory == nil) {
+		return @{};
+	}
+	NSMutableDictionary *edited = [NSMutableDictionary dictionary];
+	for (NSString *name in WKDEmbeddedForms([self editor].document)) {
+		NSDocument *open = [[NSDocumentController sharedDocumentController]
+			documentForURL:[directory URLByAppendingPathComponent:name]];
+		if ([open isKindOfClass:[XFDDocument class]]) {
+			[edited setObject:[(XFDDocument *)open hostXMLString] forKey:name];
+		}
+	}
+	return edited;
+}
 
 /* The element whose form is edited: the one selected, a user task or a
  * start event. */
@@ -458,16 +480,18 @@ WKDSelectTab(id sender, NSTabView *tabView)
 			                         [@"embedded:deployment:" stringByAppendingString:name]);
 		}];
 	}
-	NSString *designer = [[NSUserDefaults standardUserDefaults] stringForKey:@"WKDFormDesigner"] ?: @"XFormsDesigner";
-	NSWorkspace *workspace = [NSWorkspace sharedWorkspace];
-	if (![workspace openFile:[form path] withApplication:designer] && ![workspace openFile:[form path]]) {
-		[self alert:[NSString stringWithFormat:@"%@ could not be opened.", designer]
-		     detail:[NSString stringWithFormat:@"The form is %@.", [form path]]];
-		return;
-	}
-	[self note:nil];
-	self.status = [NSString stringWithFormat:@"%@ is open in %@.", name,
-	               [[designer lastPathComponent] stringByDeletingPathExtension]];
+	/* In this app, an XFDDocument (Info.plist's XForms Form type); brought
+	 * forward when it is open already. */
+	[[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:form display:YES
+		completionHandler:^(NSDocument *opened, BOOL wasOpen, NSError *error) {
+		if (opened == nil) {
+			[self alert:[NSString stringWithFormat:@"%@ could not be opened.", name]
+			     detail:[error localizedDescription] ?: [form path]];
+			return;
+		}
+		[self note:nil];
+		self.status = [NSString stringWithFormat:@"%@ is open in the form editor.", name];
+	}];
 }
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
