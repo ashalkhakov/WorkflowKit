@@ -62,6 +62,25 @@ WKDDrawText(NSString *text, NSRect rect, double size)
 	[text drawWithRect:centred options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes];
 }
 
+void
+WKDDrawLabel(NSString *name, NSRect rect)
+{
+	if ([name length] == 0) {
+		return;
+	}
+	NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+	[style setAlignment:NSTextAlignmentCenter];
+	[style setLineBreakMode:NSLineBreakByWordWrapping];
+	NSDictionary *attributes = @{ NSFontAttributeName: [NSFont systemFontOfSize:10],
+	                              NSForegroundColorAttributeName: WKDInkColor(),
+	                              NSParagraphStyleAttributeName: style };
+	NSRect needed = [name boundingRectWithSize:NSMakeSize(MAX(NSWidth(rect), 20), 1000)
+	                                   options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes];
+	NSRect drawn = NSMakeRect(NSMinX(rect), NSMinY(rect), MAX(NSWidth(rect), 20),
+	                          MAX(NSHeight(rect), NSHeight(needed) + 2));
+	[name drawWithRect:drawn options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes];
+}
+
 #pragma mark Markers
 
 static void
@@ -259,7 +278,7 @@ WKDDrawNode(WKDLook *look, NSRect rect, BOOL names)
 		WKDEventMarker(look.eventDefinition, circle,
 		               [type isEqualToString:@"endEvent"] || [type isEqualToString:@"intermediateThrowEvent"]);
 		if (names) {
-			WKDDrawText(look.name, NSMakeRect(NSMidX(rect) - 50, NSMaxY(rect) + 2, 100, 30), 10);
+			WKDDrawText(look.name, WKDNodeLabelRect(type, rect), 10);
 		}
 		return;
 	}
@@ -308,7 +327,7 @@ WKDDrawNode(WKDLook *look, NSRect rect, BOOL names)
 			WKDPolygon(pentagon, NO);
 		}
 		if (names) {
-			WKDDrawText(look.name, NSMakeRect(NSMidX(rect) - 50, NSMaxY(rect) + 2, 100, 30), 10);
+			WKDDrawText(look.name, WKDNodeLabelRect(type, rect), 10);
 		}
 		return;
 	}
@@ -427,9 +446,7 @@ WKDDrawFlow(NSArray<NSValue *> *points, BOOL isDefault, BOOL conditionalFromActi
 		WKDStroke(diamond, 1, NO);
 	}
 	if ([name length] > 0) {
-		NSUInteger middle = ([points count] - 1) / 2;
-		NSPoint a = [[points objectAtIndex:middle] pointValue], b = [[points objectAtIndex:middle + 1] pointValue];
-		WKDDrawText(name, NSMakeRect((a.x + b.x) / 2 - 50, (a.y + b.y) / 2 - 20, 100, 18), 10);
+		WKDDrawText(name, WKDFlowLabelRect(points), 10);
 	}
 }
 

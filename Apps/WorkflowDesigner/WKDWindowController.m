@@ -13,6 +13,10 @@
 #import "DMTabBar.h"
 #import "DMTabBarItem.h"
 
+/* What the designer puts on the pasteboard: a BPMN document of the
+ * elements copied, beside the same XML as text. */
+static NSString * const WKDFragmentPasteboardType = @"local.workflowkit.bpmn-fragment";
+
 /* The side panes' widths, and how narrow they and the canvas may get. */
 static const double WKDLeftWidth = 230;
 static const double WKDRightWidth = 360;
@@ -27,6 +31,8 @@ static const double WKDCentreMinimum = 320;
 	WKDInspectorView *_processInspector;
 	/* What the last change refused, shown until the next. */
 	NSString *_note;
+	/* Pastes since the last copy: each lands a step further down. */
+	NSUInteger _pastes;
 }
 
 - (instancetype)init
@@ -293,6 +299,67 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	[[self editor] deleteElements:elementIds];
 }
 
+- (void)canvas:(WKDCanvasView *)canvas reconnect:(NSString *)flowId atSource:(BOOL)atSource to:(NSString *)nodeId
+{
+	NSString *reason = nil;
+	BOOL done = [[self editor] reconnect:flowId atSource:atSource to:nodeId error:&reason];
+	[self note:done ? nil : reason];
+}
+
+- (void)canvas:(WKDCanvasView *)canvas moveBend:(NSUInteger)index of:(NSString *)flowId to:(NSPoint)point
+{
+	_note = nil;
+	[[self editor] moveBend:index of:flowId to:point];
+}
+
+- (void)canvas:(WKDCanvasView *)canvas moveLabelOf:(NSString *)elementId by:(NSSize)offset
+{
+	_note = nil;
+	[[self editor] moveLabelOf:elementId by:offset];
+}
+
+- (void)canvas:(WKDCanvasView *)canvas rename:(NSString *)elementId to:(NSString *)name
+{
+	_note = nil;
+	[[self editor] setName:name of:elementId];
+}
+
+/* Rename, Change Type for one node, then the clipboard's. */
+- (NSMenu *)canvasMenu:(WKDCanvasView *)canvas
+{
+	NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Element"];
+	[menu setAutoenablesItems:NO];
+	NSString *selected = [self selectedId];
+	if (selected != nil) {
+		[[menu addItemWithTitle:@"Rename" action:@selector(rename:) keyEquivalent:@""] setTarget:self];
+		NSArray *types = [[self editor] typesFor:selected];
+		if ([types count] > 0) {
+			WKDShape *shape = [[self editor].diagram shapeWithId:selected];
+			NSMenu *submenu = [[NSMenu alloc] initWithTitle:@"Change Type"];
+			[submenu setAutoenablesItems:NO];
+			for (WKDNodeType *type in types) {
+				NSMenuItem *item = (NSMenuItem *)[submenu addItemWithTitle:type.title action:@selector(changeType:) keyEquivalent:@""];
+				[item setTarget:self];
+				[item setRepresentedObject:type];
+				BOOL current = [type.type isEqualToString:shape.type]
+					&& [type.eventDefinition ?: @"" isEqualToString:shape.eventDefinition ?: @""];
+				[item setState:current ? NSControlStateValueOn : NSControlStateValueOff];
+			}
+			NSMenuItem *change = (NSMenuItem *)[menu addItemWithTitle:@"Change Type" action:NULL keyEquivalent:@""];
+			[change setSubmenu:submenu];
+		}
+		[menu addItem:[NSMenuItem separatorItem]];
+	}
+	for (NSArray *entry in @[ @[ @"Cut", NSStringFromSelector(@selector(cut:)) ],
+	                          @[ @"Copy", NSStringFromSelector(@selector(copy:)) ],
+	                          @[ @"Duplicate", NSStringFromSelector(@selector(duplicate:)) ],
+	                          @[ @"Delete", NSStringFromSelector(@selector(delete:)) ] ]) {
+		NSMenuItem *item = (NSMenuItem *)[menu addItemWithTitle:entry[0] action:NSSelectorFromString(entry[1]) keyEquivalent:@""];
+		[item setTarget:[entry[0] isEqualToString:@"Delete"] ? (id)self.canvas : self];
+	}
+	return menu;
+}
+
 - (void)canvasSelectionDidChange:(WKDCanvasView *)canvas
 {
 	/* An element chosen: its inspector to the front. */
@@ -345,6 +412,99 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	_note = nil;
 	[[self editor] arrange];
 	[self.canvas scrollToContent];
+}
+
+- (IBAction)zoomToFit:(id)sender
+{
+	[self.canvas zoomToFit];
+}
+
+- (IBAction)rename:(id)sender
+{
+	if ([self selectedId] != nil) {
+		[self.canvas beginRenaming:[self selectedId]];
+	}
+}
+
+- (IBAction)changeType:(id)sender
+{
+	WKDNodeType *type = [sender representedObject];
+	NSString *selected = [self selectedId];
+	if (![type isKindOfClass:[WKDNodeType class]] || selected == nil) {
+		return;
+	}
+	NSString *reason = nil;
+	BOOL done = [[self editor] changeType:selected to:type error:&reason];
+	[self note:done ? nil : reason];
+}
+
+#pragma mark Clipboard
+
+/* The selection as a fragment of BPMN; nil, with a beep, when there is
+ * nothing in it to copy. */
+- (NSXMLDocument *)fragmentOfSelection
+{
+	NSXMLDocument *fragment = [[self editor] fragmentOfElements:[self.canvas.selection allObjects]];
+	if (fragment == nil) {
+		NSBeep();
+	}
+	return fragment;
+}
+
+- (IBAction)copy:(id)sender
+{
+	NSXMLDocument *fragment = [self fragmentOfSelection];
+	if (fragment == nil) {
+		return;
+	}
+	NSString *xml = [fragment XMLStringWithOptions:NSXMLNodePrettyPrint];
+	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+	[pasteboard declareTypes:@[ WKDFragmentPasteboardType, NSPasteboardTypeString ] owner:nil];
+	[pasteboard setString:xml forType:WKDFragmentPasteboardType];
+	[pasteboard setString:xml forType:NSPasteboardTypeString];
+	_pastes = 0;
+}
+
+- (IBAction)cut:(id)sender
+{
+	if ([self fragmentOfSelection] != nil) {
+		[self copy:sender];
+		[[self editor] deleteElements:[self.canvas.selection allObjects]];
+	}
+}
+
+/* Pasted a step further down each time, the elements pasted selected. */
+- (void)pasteFragment:(NSXMLDocument *)fragment
+{
+	_pastes++;
+	NSString *reason = nil;
+	NSArray *added = [[self editor] paste:fragment offset:NSMakeSize(30.0 * _pastes, 30.0 * _pastes) error:&reason];
+	[self note:added == nil ? reason : nil];
+	if (added != nil) {
+		self.canvas.selection = [NSSet setWithArray:added];
+	}
+}
+
+- (IBAction)paste:(id)sender
+{
+	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+	NSString *xml = [pasteboard stringForType:WKDFragmentPasteboardType] ?: [pasteboard stringForType:NSPasteboardTypeString];
+	NSXMLDocument *fragment = [xml length] > 0 ? [[NSXMLDocument alloc] initWithXMLString:xml options:0 error:NULL] : nil;
+	if (fragment == nil) {
+		[self note:@"The clipboard holds no BPMN to paste."];
+		NSBeep();
+		return;
+	}
+	[self pasteFragment:fragment];
+}
+
+- (IBAction)duplicate:(id)sender
+{
+	NSXMLDocument *fragment = [self fragmentOfSelection];
+	if (fragment != nil) {
+		_pastes = 0;
+		[self pasteFragment:fragment];
+	}
 }
 
 #pragma mark Deploying
@@ -501,6 +661,17 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	}
 	if ([item action] == @selector(deploy:)) {
 		return [self designerDocument].problem == nil;
+	}
+	SEL action = [item action];
+	if (action == @selector(copy:) || action == @selector(cut:) || action == @selector(duplicate:)) {
+		return [self.canvas.selection count] > 0;
+	}
+	if (action == @selector(rename:)) {
+		return [self selectedId] != nil;
+	}
+	if (action == @selector(paste:)) {
+		NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+		return [pasteboard availableTypeFromArray:@[ WKDFragmentPasteboardType, NSPasteboardTypeString ]] != nil;
 	}
 	return YES;
 }

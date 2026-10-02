@@ -1,4 +1,4 @@
-#import "WKDEditor.h"
+#import "WKDEditorPriv.h"
 #import "WKDLayout.h"
 #import "WKDXML.h"
 
@@ -137,7 +137,7 @@ WKDSnapshot(NSXMLDocument *document)
 	}
 }
 
-static NSString *
+NSString *
 WKDIdPrefix(NSString *type)
 {
 	BOOL flowNode = NO;
@@ -241,6 +241,29 @@ WKDIdPrefix(NSString *type)
 	}
 }
 
+- (void)setLabelBounds:(NSRect)bounds of:(NSString *)elementId
+{
+	NSString *local = [_diagram connectionWithId:elementId] != nil ? @"BPMNEdge" : @"BPMNShape";
+	NSXMLElement *owner = [self diagramElement:local of:elementId create:NO];
+	if (owner == nil) {
+		return;
+	}
+	NSXMLElement *label = WKDChild(owner, WKDBpmnDINamespace, @"BPMNLabel");
+	if (label == nil) {
+		label = WKDNewElement(_document, WKDBpmnDINamespace, @"BPMNLabel");
+		[owner addChild:label];
+	}
+	NSXMLElement *box = WKDChild(label, WKDDCNamespace, @"Bounds");
+	if (box == nil) {
+		box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
+		[label addChild:box];
+	}
+	WKDSetAttribute(box, @"x", WKDFormat(bounds.origin.x));
+	WKDSetAttribute(box, @"y", WKDFormat(bounds.origin.y));
+	WKDSetAttribute(box, @"width", WKDFormat(bounds.size.width));
+	WKDSetAttribute(box, @"height", WKDFormat(bounds.size.height));
+}
+
 static NSValue *
 WKDPoint(double x, double y)
 {
@@ -270,6 +293,10 @@ WKDPoint(double x, double y)
 	if (fromBoundary) {
 		/* Down out of the event, then across. */
 		NSPoint start = NSMakePoint(NSMidX(s), NSMaxY(s));
+		if (NSMinY(t) > NSMaxY(s) && NSMidX(s) >= NSMinX(t) + 4 && NSMidX(s) <= NSMaxX(t) - 4) {
+			/* Right under it: straight down into its top. */
+			return @[ [NSValue valueWithPoint:start], WKDPoint(NSMidX(s), NSMinY(t)) ];
+		}
 		if (NSMidY(t) > NSMaxY(s)) {
 			return @[ [NSValue valueWithPoint:start], WKDPoint(NSMidX(s), NSMidY(t)),
 				WKDPoint(NSMidX(t) > NSMidX(s) ? NSMinX(t) : NSMaxX(t), NSMidY(t)) ];
@@ -614,8 +641,7 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	return found;
 }
 
-/* A boundary event's centre on its activity's edge nearest the point. */
-static NSPoint
+NSPoint
 WKDOnEdge(NSRect host, NSPoint point)
 {
 	double x = MIN(MAX(point.x, NSMinX(host)), NSMaxX(host));
@@ -701,28 +727,37 @@ WKDOnEdge(NSRect host, NSPoint point)
 
 #pragma mark Connecting
 
+- (NSString *)refusalToConnect:(WKDShape *)source to:(WKDShape *)target except:(NSString *)flowId
+{
+	WKDShape *sourceScope = source.host != nil ? source.host.parent : source.parent;
+	if (source == nil || target == nil || source.kind == WKDShapeArtifact || target.kind == WKDShapeArtifact) {
+		return @"Sequence flows join flow nodes.";
+	}
+	if (source == target) {
+		return @"A flow cannot go back into the node it leaves.";
+	}
+	if ([source.type isEqualToString:@"endEvent"]) {
+		return @"Nothing flows out of an end event.";
+	}
+	if ([target.type isEqualToString:@"startEvent"] || [target.type isEqualToString:@"boundaryEvent"]) {
+		return @"Nothing flows into a start or boundary event.";
+	}
+	if (sourceScope != target.parent) {
+		return @"A flow stays within its process or subprocess.";
+	}
+	for (WKDConnection *connection in _diagram.connections) {
+		if (!connection.isAssociation && connection.source == source && connection.target == target
+		    && ![connection.elementId isEqualToString:flowId ?: @""]) {
+			return @"The two are joined already.";
+		}
+	}
+	return nil;
+}
+
 - (NSString *)connect:(NSString *)sourceId to:(NSString *)targetId error:(NSString **)reason
 {
 	WKDShape *source = [_diagram shapeWithId:sourceId], *target = [_diagram shapeWithId:targetId];
-	NSString *refusal = nil;
-	WKDShape *sourceScope = source.host != nil ? source.host.parent : source.parent;
-	if (source == nil || target == nil || source.kind == WKDShapeArtifact || target.kind == WKDShapeArtifact) {
-		refusal = @"Sequence flows join flow nodes.";
-	} else if (source == target) {
-		refusal = @"A flow cannot go back into the node it leaves.";
-	} else if ([source.type isEqualToString:@"endEvent"]) {
-		refusal = @"Nothing flows out of an end event.";
-	} else if ([target.type isEqualToString:@"startEvent"] || [target.type isEqualToString:@"boundaryEvent"]) {
-		refusal = @"Nothing flows into a start or boundary event.";
-	} else if (sourceScope != target.parent) {
-		refusal = @"A flow stays within its process or subprocess.";
-	} else {
-		for (WKDConnection *connection in _diagram.connections) {
-			if (!connection.isAssociation && connection.source == source && connection.target == target) {
-				refusal = @"The two are joined already.";
-			}
-		}
-	}
+	NSString *refusal = [self refusalToConnect:source to:target except:nil];
 	if (refusal != nil) {
 		if (reason != NULL) {
 			*reason = refusal;
@@ -781,38 +816,58 @@ WKDOnEdge(NSRect host, NSPoint point)
 		}
 	}
 	[self change:@"Move" with:^{
+		/* How far each shape went, its label with it. */
+		NSMutableDictionary<NSString *, NSValue *> *moved = [NSMutableDictionary dictionary];
+		void (^place)(WKDShape *, NSRect) = ^(WKDShape *shape, NSRect bounds) {
+			NSSize by = NSMakeSize(NSMinX(bounds) - NSMinX(shape.bounds), NSMinY(bounds) - NSMinY(shape.bounds));
+			[self setBounds:bounds of:shape.elementId];
+			if (!NSIsEmptyRect(shape.labelBounds)) {
+				[self setLabelBounds:NSOffsetRect(shape.labelBounds, by.width, by.height) of:shape.elementId];
+			}
+			[moved setObject:[NSValue valueWithSize:by] forKey:shape.elementId];
+		};
 		for (WKDShape *shape in self->_diagram.shapes) {
 			if ([moving containsObject:shape.elementId] && shape.hasBounds) {
-				[self setBounds:NSOffsetRect(shape.bounds, offset.width, offset.height) of:shape.elementId];
+				place(shape, NSOffsetRect(shape.bounds, offset.width, offset.height));
 			}
 		}
 		for (WKDShape *event in slides) {
 			NSRect bounds = NSOffsetRect(event.bounds, offset.width, offset.height);
 			NSPoint centre = WKDOnEdge(event.host.bounds, NSMakePoint(NSMidX(bounds), NSMidY(bounds)));
-			[self setBounds:NSMakeRect(centre.x - NSWidth(bounds) / 2, centre.y - NSHeight(bounds) / 2,
-			                           NSWidth(bounds), NSHeight(bounds)) of:event.elementId];
-		}
-		NSMutableSet *touched = [NSMutableSet setWithSet:moving];
-		for (WKDShape *event in slides) {
-			[touched addObject:event.elementId];
+			place(event, NSMakeRect(centre.x - NSWidth(bounds) / 2, centre.y - NSHeight(bounds) / 2,
+			                        NSWidth(bounds), NSHeight(bounds)));
 		}
 		NSArray *connections = self->_diagram.connections;
 		self->_diagram = [WKDDiagram diagramOfDocument:self->_document];
 		for (WKDConnection *old in connections) {
-			BOOL from = [touched containsObject:old.source.elementId], to = [touched containsObject:old.target.elementId];
-			if (!from && !to) {
+			NSValue *fromMove = [moved objectForKey:old.source.elementId];
+			NSValue *toMove = [moved objectForKey:old.target.elementId];
+			if (fromMove == nil && toMove == nil) {
 				continue;
 			}
-			if (from && to && [moving containsObject:old.source.elementId] && [moving containsObject:old.target.elementId]) {
-				/* Moved whole: the route goes with it. */
-				NSMutableArray *points = [NSMutableArray array];
+			NSSize from = fromMove != nil ? [fromMove sizeValue] : NSZeroSize;
+			NSSize to = toMove != nil ? [toMove sizeValue] : NSZeroSize;
+			WKDConnection *now = [self->_diagram connectionWithId:old.elementId];
+			NSArray *points = nil;
+			if (NSEqualSizes(from, to)) {
+				/* Both ends went the same way: the route goes with them. */
+				NSMutableArray *shifted = [NSMutableArray array];
 				for (NSValue *value in old.waypoints) {
 					NSPoint point = [value pointValue];
-					[points addObject:WKDPoint(point.x + offset.width, point.y + offset.height)];
+					[shifted addObject:WKDPoint(point.x + from.width, point.y + from.height)];
 				}
-				[self setWaypoints:points of:old.elementId];
+				points = shifted;
 			} else {
-				[self reroute:[self->_diagram connectionWithId:old.elementId]];
+				/* One end went: its bends stay where they were, unless the
+				 * route cannot keep them. */
+				points = [WKDEditor keptRoute:old.waypoints source:now.source.bounds target:now.target.bounds
+				                 sourceMoved:from targetMoved:to] ?: [self routeFor:now];
+			}
+			[self setWaypoints:points of:old.elementId];
+			if (!NSIsEmptyRect(old.labelBounds)) {
+				NSRect before = WKDFlowLabelRect(old.waypoints), after = WKDFlowLabelRect(points);
+				[self setLabelBounds:NSOffsetRect(old.labelBounds, NSMinX(after) - NSMinX(before),
+				                                  NSMinY(after) - NSMinY(before)) of:old.elementId];
 			}
 		}
 	}];

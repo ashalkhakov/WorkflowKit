@@ -40,6 +40,27 @@ WKDIsContainerType(NSString *type)
 		|| [type isEqualToString:@"adHocSubProcess"];
 }
 
+NSRect
+WKDNodeLabelRect(NSString *type, NSRect rect)
+{
+	WKDShapeKind kind = WKDKindOfType(type, NULL);
+	if (kind != WKDShapeEvent && kind != WKDShapeGateway) {
+		return NSZeroRect;
+	}
+	return NSMakeRect(NSMidX(rect) - 50, NSMaxY(rect) + 2, 100, 30);
+}
+
+NSRect
+WKDFlowLabelRect(NSArray<NSValue *> *points)
+{
+	if ([points count] < 2) {
+		return NSZeroRect;
+	}
+	NSUInteger middle = ([points count] - 1) / 2;
+	NSPoint a = [[points objectAtIndex:middle] pointValue], b = [[points objectAtIndex:middle + 1] pointValue];
+	return NSMakeRect((a.x + b.x) / 2 - 50, (a.y + b.y) / 2 - 20, 100, 18);
+}
+
 @interface WKDShape ()
 @property (nonatomic, readwrite, strong) NSXMLElement *element;
 @property (nonatomic, readwrite, copy) NSString *elementId;
@@ -54,6 +75,7 @@ WKDIsContainerType(NSString *type)
 @property (nonatomic, readwrite) BOOL interrupting;
 @property (nonatomic, readwrite) BOOL eventSubProcess;
 @property (nonatomic, readwrite, copy) NSString *loop;
+@property (nonatomic, readwrite) NSRect labelBounds;
 @end
 
 @implementation WKDShape
@@ -75,6 +97,7 @@ WKDIsContainerType(NSString *type)
 @property (nonatomic, readwrite) BOOL isDefault;
 @property (nonatomic, readwrite) BOOL hasCondition;
 @property (nonatomic, readwrite) BOOL isAssociation;
+@property (nonatomic, readwrite) NSRect labelBounds;
 @end
 
 @implementation WKDConnection
@@ -86,6 +109,19 @@ WKDIsContainerType(NSString *type)
 @property (nonatomic, readwrite, copy) NSArray<WKDShape *> *shapes;
 @property (nonatomic, readwrite, copy) NSArray<WKDConnection *> *connections;
 @end
+
+/* A BPMNShape's or BPMNEdge's label's bounds, as NSValue; nil for none. */
+static NSValue *
+WKDLabelBoundsOf(NSXMLElement *diagramElement)
+{
+	NSXMLElement *label = WKDChild(diagramElement, WKDBpmnDINamespace, @"BPMNLabel");
+	NSXMLElement *box = label != nil ? WKDChild(label, WKDDCNamespace, @"Bounds") : nil;
+	if (box == nil) {
+		return nil;
+	}
+	return [NSValue valueWithRect:NSMakeRect(WKDNumber(box, @"x"), WKDNumber(box, @"y"),
+	                                         WKDNumber(box, @"width"), WKDNumber(box, @"height"))];
+}
 
 /* A point as NSValue: the two platforms box it differently. */
 static NSValue *
@@ -134,10 +170,14 @@ WKDPointValue(double x, double y)
 	}
 	NSMutableDictionary *bounds = [NSMutableDictionary dictionary];
 	NSMutableDictionary *edges = [NSMutableDictionary dictionary];
+	NSMutableDictionary *labels = [NSMutableDictionary dictionary];
 	for (NSXMLElement *plane in planes) {
 		for (NSXMLElement *shape in WKDChildren(plane, WKDBpmnDINamespace, @"BPMNShape")) {
 			NSXMLElement *box = WKDChild(shape, WKDDCNamespace, @"Bounds");
 			NSString *ref = WKDAttribute(shape, @"bpmnElement");
+			if (ref != nil && WKDLabelBoundsOf(shape) != nil) {
+				[labels setObject:WKDLabelBoundsOf(shape) forKey:ref];
+			}
 			if (box != nil && ref != nil) {
 				[bounds setObject:[NSValue valueWithRect:NSMakeRect(WKDNumber(box, @"x"), WKDNumber(box, @"y"),
 					WKDNumber(box, @"width"), WKDNumber(box, @"height"))] forKey:ref];
@@ -152,6 +192,9 @@ WKDPointValue(double x, double y)
 			if (ref != nil && [points count] >= 2) {
 				[edges setObject:points forKey:ref];
 			}
+			if (ref != nil && WKDLabelBoundsOf(edge) != nil) {
+				[labels setObject:WKDLabelBoundsOf(edge) forKey:ref];
+			}
 		}
 	}
 
@@ -160,6 +203,10 @@ WKDPointValue(double x, double y)
 	NSMutableArray *shapes = [NSMutableArray array];
 	NSMutableArray *flows = [NSMutableArray array];
 	[self readContainer:_process parent:nil bounds:bounds shapes:shapes flows:flows];
+	for (WKDShape *shape in shapes) {
+		NSValue *label = [labels objectForKey:shape.elementId];
+		shape.labelBounds = label != nil ? [label rectValue] : NSZeroRect;
+	}
 	/* Boundary events once every activity is known. */
 	for (WKDShape *shape in shapes) {
 		NSString *host = WKDAttribute(shape.element, @"attachedToRef");
@@ -189,6 +236,8 @@ WKDPointValue(double x, double y)
 			points = @[ WKDPointValue(NSMidX(from), NSMidY(from)), WKDPointValue(NSMidX(to), NSMidY(to)) ];
 		}
 		connection.waypoints = points ?: @[];
+		NSValue *label = [labels objectForKey:connection.elementId];
+		connection.labelBounds = label != nil ? [label rectValue] : NSZeroRect;
 		[connections addObject:connection];
 		[_connectionsById setObject:connection forKey:connection.elementId];
 	}

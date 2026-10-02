@@ -20,8 +20,12 @@
 /* The node in the rectangle; its name inside it, or under it for events
  * and gateways, unless names is NO. */
 void WKDDrawNode(WKDLook *look, NSRect rect, BOOL names);
-/* A sequence flow through the points, its arrowhead at the last. */
+/* A sequence flow through the points, its arrowhead at the last; its name,
+ * when given, where WKDFlowLabelRect puts it. */
 void WKDDrawFlow(NSArray<NSValue *> *points, BOOL isDefault, BOOL conditionalFromActivity, NSString *name);
+/* A name in a label's rectangle, as BPMN DI gives one: centred across it,
+ * from its top, onto more lines than it is tall when the name needs them. */
+void WKDDrawLabel(NSString *name, NSRect rect);
 /* An association through the points: dotted, with an open arrowhead
  * when it is directed. */
 void WKDDrawAssociation(NSArray<NSValue *> *points, BOOL directed);

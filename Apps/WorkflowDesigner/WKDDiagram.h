@@ -40,6 +40,9 @@ typedef NS_ENUM(NSInteger, WKDShapeKind) {
 @property (nonatomic, readonly) BOOL eventSubProcess;
 /* multiInstanceLoopCharacteristics: none, parallel or sequential. */
 @property (nonatomic, readonly, copy) NSString *loop;
+/* Where the diagram puts its name, outside it (BPMNLabel's bounds), as
+ * events' and gateways' are; NSZeroRect where it says nothing. */
+@property (nonatomic, readonly) NSRect labelBounds;
 @end
 
 @interface WKDConnection : NSObject
@@ -56,6 +59,8 @@ typedef NS_ENUM(NSInteger, WKDShapeKind) {
 /* Its source's default flow. */
 @property (nonatomic, readonly) BOOL isDefault;
 @property (nonatomic, readonly) BOOL hasCondition;
+/* Where the diagram puts its name; NSZeroRect where it says nothing. */
+@property (nonatomic, readonly) NSRect labelBounds;
 @end
 
 @interface WKDDiagram : NSObject
@@ -83,6 +88,13 @@ typedef NS_ENUM(NSInteger, WKDShapeKind) {
 @property (nonatomic, readonly) NSRect contentBounds;
 
 @end
+
+/* Where a node's name goes when the diagram does not say: under an event
+ * or a gateway; NSZeroRect for a node that holds its name inside. */
+NSRect WKDNodeLabelRect(NSString *type, NSRect rect);
+/* Where a flow's name goes when the diagram does not say: over the middle
+ * of its middle segment. */
+NSRect WKDFlowLabelRect(NSArray<NSValue *> *points);
 
 /* The local names of the flow nodes of each kind. */
 WKDShapeKind WKDKindOfType(NSString *type, BOOL *isFlowNode);

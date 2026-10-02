@@ -10,10 +10,16 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../WKDDiagram.m \
 	../WKDLayout.m \
 	../WKDEditor.m \
+	../WKDEditor+Canvas.m \
+	../WKDEditor+Clipboard.m \
+	../WKDEditor+Types.m \
 	../WKDProperties.m \
 	../WKDDeployment.m \
 	WKDDiagramTests.m \
 	WKDEditorTests.m \
+	WKDCanvasEditsTests.m \
+	WKDClipboardTests.m \
+	WKDTypesTests.m \
 	WKDLayoutTests.m \
 	WKDPropertiesTests.m \
 	WKDTablesTests.m \

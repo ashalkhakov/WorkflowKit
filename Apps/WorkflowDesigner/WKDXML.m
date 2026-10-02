@@ -236,3 +236,84 @@ WKDElementWithId(NSXMLDocument *document, NSString *elementId)
 	}
 	return nil;
 }
+
+/* The namespace a prefix stands for in the document. */
+static NSString *
+WKDNamespaceOf(NSXMLDocument *document, NSString *prefix)
+{
+	for (NSXMLNode *namespace in [[document rootElement] namespaces]) {
+		if ([([namespace name] ?: @"") isEqualToString:prefix]) {
+			return [namespace stringValue];
+		}
+	}
+	return nil;
+}
+
+/* The namespace a qualified name is in where the element is, as `from`
+ * declares it; nil for a name with no prefix (an attribute's) or one it
+ * does not declare. */
+static NSString *
+WKDNamespaceOfName(NSXMLElement *element, NSString *name, NSXMLDocument *from, BOOL defaulted)
+{
+	NSRange colon = [name rangeOfString:@":"];
+	if (colon.location == NSNotFound && !defaulted) {
+		return nil;
+	}
+	NSString *prefix = colon.location != NSNotFound ? [name substringToIndex:colon.location] : @"";
+	NSXMLNode *resolved = [element resolveNamespaceForName:name];
+	return [[resolved stringValue] length] > 0 ? [resolved stringValue] : WKDNamespaceOf(from, prefix);
+}
+
+/* "prefix:local" in this document, as `from` wrote it there. */
+static NSString *
+WKDRequalify(NSXMLDocument *document, NSXMLElement *element, NSString *name, NSXMLDocument *from)
+{
+	NSString *uri = WKDNamespaceOfName(element, name, from, NO);
+	if (uri == nil) {
+		return name;
+	}
+	NSRange colon = [name rangeOfString:@":"];
+	return WKDQualify(WKDPrefix(document, uri, YES), [name substringFromIndex:NSMaxRange(colon)]);
+}
+
+NSXMLElement *
+WKDAdoptInto(NSXMLDocument *document, NSXMLElement *element, NSXMLDocument *from, NSXMLElement *parent,
+             NSUInteger index)
+{
+	NSString *uri = [element URI];
+	if ([uri length] == 0) {
+		uri = WKDNamespaceOfName(element, [element name], from, YES);
+	}
+	NSString *local = [element localName] ?: [element name];
+	NSXMLElement *adopted = [uri length] > 0 ? WKDNewElement(document, uri, local)
+	                                         : [[NSXMLElement alloc] initWithName:local];
+	/* In place first: what it holds is named by the document's root. */
+	[parent insertChild:adopted atIndex:MIN(index, [parent childCount])];
+	for (NSXMLNode *attribute in [element attributes]) {
+		NSString *name = [attribute name];
+		NSString *value = [attribute stringValue];
+		/* GNUstep names a parsed attribute without its prefix; its URI
+		 * says which namespace it is in. */
+		NSString *attributeURI = [[attribute URI] length] > 0 ? [attribute URI]
+		                                                      : WKDNamespaceOfName(element, name, from, NO);
+		NSRange colon = [name rangeOfString:@":"];
+		NSString *attributeLocal = colon.location != NSNotFound ? [name substringFromIndex:NSMaxRange(colon)]
+		                                                        : ([attribute localName] ?: name);
+		if ([attributeURI isEqualToString:WKDXSINamespace] && [attributeLocal isEqualToString:@"type"]) {
+			value = WKDRequalify(document, element, value, from);
+		}
+		if (attributeURI != nil) {
+			WKDSetQualifiedAttribute(document, adopted, attributeURI, attributeLocal, value);
+		} else {
+			WKDSetAttribute(adopted, name, value);
+		}
+	}
+	for (NSXMLNode *child in [element children]) {
+		if ([child kind] == NSXMLElementKind) {
+			WKDAdoptInto(document, (NSXMLElement *)child, from, adopted, [adopted childCount]);
+		} else {
+			[adopted addChild:[child copy]];
+		}
+	}
+	return adopted;
+}

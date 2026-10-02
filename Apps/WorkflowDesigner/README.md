@@ -142,8 +142,35 @@ write.
   and dragging on empty canvas draws a band around shapes.
 - **Move:** drag the selection. A subprocess moves with its contents, and
   an activity with its boundary events. A boundary event dragged alone
-  slides along its activity's edge. Flows are routed again with right-angle
-  bends.
+  slides along its activity's edge. A flow whose ends both move goes with
+  them; one with a single end moved keeps its bends, the bend next to that
+  end sliding to keep its segment straight, and is routed again with
+  right-angle bends only when it has none or they would land inside a
+  shape. Names go with their nodes and flows.
+- **Rename:** double-click a node or a flow, or select one and press Return
+  (or Diagram ▸ Rename, ⌘R), and type its name over it. Return keeps it,
+  Escape leaves it as it was.
+- **Flows' ends and bends:** a selected flow shows its ends as squares and
+  its bends as circles. Drag an end onto another node to reconnect it, by
+  the rules a new flow keeps to; drag a bend where it should go. A bend
+  lines up with its neighbours when it comes within a few pixels of
+  straight.
+- **Names:** an event's, a gateway's or a flow's name can be dragged on its
+  own. Where it is goes into the diagram (`BPMNLabel`), as Camunda Modeler
+  writes it, and the labels in a modeller's files are shown where it put
+  them.
+- **Change Type:** right-click a node: a task becomes another kind of task,
+  a gateway another gateway, an event another event its flows allow, with
+  each definition BPMN gives it. What only the old type had -- a user
+  task's assignment and form, a service task's topic, a gateway's default
+  where the new one has none -- goes; its name, parameters, listeners and
+  flows stay.
+- **Cut, Copy, Paste, Duplicate (⌘D):** copied nodes take what they hold,
+  their boundary events, the flows between them and the messages, signals,
+  errors and escalations they name. They go on the clipboard as a BPMN
+  document, which other modellers and text editors read too, and are
+  pasted under fresh ids, a step further down each time. BPMN copied from
+  another file pastes in this one's namespace prefixes.
 - **Connect:** select a shape and drag from the blue handle at its top
   right onto another. On macOS, Option-dragging from a shape does the same.
   The designer refuses flows the engine would: out of an end event, into a
@@ -162,7 +189,8 @@ write.
   where the two face each other, and go round other shapes.
 - **Associations**, such as a compensation boundary's link to its handler,
   are drawn dotted and listed in the outline with ⇢.
-- **Undo and Redo** cover every change. **View** zooms in and out.
+- **Undo and Redo** cover every change. **View** zooms in and out, and
+  **Zoom to Fit** (⌘9) shows the whole diagram.
 
 ## The server
 
@@ -213,7 +241,7 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | Where | What |
 | --- | --- |
 | `WKDDiagram` | What the canvas draws, read from the XML: shapes with their bounds, subprocess and boundary host, and flows with their waypoints. It is read again after every change. |
-| `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. |
+| `WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. Its categories hold what the canvas changes directly (`+Canvas`: names, reconnections, bends, labels, kept routes), the clipboard (`+Clipboard`) and type changes (`+Types`). |
 | `WKDLayout` | A layered (Sugiyama) layout, adapted from CoreWF's: layers by longest path, ordered to cross as little as they can, then placed by sweeps that move each layer as near its neighbours as its order and spacing allow (isotonic regression). Edges can leave a node's bottom. |
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
 | `WKDTableEditor` | A table property in the inspector, with its + and − and its detail table. |

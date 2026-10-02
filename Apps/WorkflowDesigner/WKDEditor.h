@@ -1,6 +1,15 @@
 #import <Foundation/Foundation.h>
 #import "WKDDiagram.h"
 
+/* A type a node can have: its BPMN name, its event's definition (nil for
+ * none), and what to call it. */
+@interface WKDNodeType : NSObject
+@property (nonatomic, readonly, copy) NSString *type;
+@property (nonatomic, readonly, copy) NSString *eventDefinition;
+@property (nonatomic, readonly, copy) NSString *title;
++ (instancetype)type:(NSString *)type eventDefinition:(NSString *)eventDefinition title:(NSString *)title;
+@end
+
 /*
  * Every change to a BPMN document goes through here: elements and their
  * references -- a flow's ends, the nodes' incoming and outgoing, a
@@ -75,5 +84,61 @@
                       fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity;
 /* The default size of a node of the type. */
 + (NSSize)sizeOfType:(NSString *)type;
+
+@end
+
+/* What the canvas changes directly (WKDEditor+Canvas.m). */
+@interface WKDEditor (WKDCanvas)
+
+/* Its name, as one step: a node's or flow's name attribute, an
+ * annotation's text; nil or empty for none. */
+- (void)setName:(NSString *)name of:(NSString *)elementId;
+/* The flow's source (atSource) or target is another node now, by the
+ * rules a new flow keeps to; its route is drawn afresh. NO, with why, when
+ * it cannot be. */
+- (BOOL)reconnect:(NSString *)flowId atSource:(BOOL)atSource to:(NSString *)nodeId error:(NSString **)reason;
+/* One of a flow's bends -- a waypoint other than its ends -- at the point. */
+- (void)moveBend:(NSUInteger)index of:(NSString *)flowId to:(NSPoint)point;
+/* The name of an event, a gateway or a flow moved by the offset, from where
+ * the diagram puts it or, when it says nothing, where it is drawn. */
+- (void)moveLabelOf:(NSString *)elementId by:(NSSize)offset;
+/* A flow's route after its ends moved by these offsets, its bends kept:
+ * each end's point goes with its shape, and the bend next to it slides
+ * along to keep the segment between them straight across or up and
+ * down. nil when the route cannot keep them -- it has none, or the
+ * bend would land inside the shape -- and the router should draw it. */
++ (NSArray<NSValue *> *)keptRoute:(NSArray<NSValue *> *)points source:(NSRect)source target:(NSRect)target
+                      sourceMoved:(NSSize)sourceMoved targetMoved:(NSSize)targetMoved;
+
+@end
+
+/* Copying and pasting (WKDEditor+Clipboard.m). */
+@interface WKDEditor (WKDClipboard)
+
+/* The elements as a BPMN document of their own, for the clipboard: the
+ * nodes, with what they contain and what is attached to them, the flows
+ * between them, their diagram, and the messages, signals, errors and
+ * escalations they name. nil when none of them can be copied. */
+- (NSXMLDocument *)fragmentOfElements:(NSArray<NSString *> *)elementIds;
+/* What -fragmentOfElements: made -- from this document or another -- added to
+ * the process under fresh ids, its diagram moved by the offset, as one
+ * step. The ids of the nodes and flows added at the top, or nil with why
+ * there is nothing to paste. */
+- (NSArray<NSString *> *)paste:(NSXMLDocument *)copy offset:(NSSize)offset error:(NSString **)reason;
+
+@end
+
+/* A node's type changed in place (WKDEditor+Types.m). */
+@interface WKDEditor (WKDTypes)
+
+/* What a node can be changed into in place: the other tasks for a task,
+ * the other gateways for a gateway, and for an event the other events its
+ * flows allow, each with the definitions BPMN gives it. */
+- (NSArray<WKDNodeType *> *)typesFor:(NSString *)elementId;
+/* The node, of the type now, as one step: what only its old type had --
+ * a form for a user task, a topic for a service task, a gateway's default
+ * where the new one has none -- goes, the rest stays. NO, with why, for a
+ * type -typesFor: does not offer. */
+- (BOOL)changeType:(NSString *)elementId to:(WKDNodeType *)type error:(NSString **)reason;
 
 @end

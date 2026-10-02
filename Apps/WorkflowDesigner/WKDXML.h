@@ -46,5 +46,12 @@ NSString *WKDChildText(NSXMLElement *parent, NSString *uri, NSString *local);
 /* Sets the child's text, making the child; nil or empty removes it. */
 NSXMLElement *WKDSetChildText(NSXMLDocument *document, NSXMLElement *parent, NSString *uri, NSString *local,
                               NSString *text);
+/* An element of another document made again in this one, under the parent
+ * at the index: each element and qualified attribute -- an xsi:type's value
+ * too -- in the prefix this document gives its namespace, declared on its
+ * root when it gives none. `from` is the document the element was written
+ * in. The element made. */
+NSXMLElement *WKDAdoptInto(NSXMLDocument *document, NSXMLElement *element, NSXMLDocument *from, NSXMLElement *parent,
+                           NSUInteger index);
 /* Every element of the document with the id. */
 NSXMLElement *WKDElementWithId(NSXMLDocument *document, NSString *elementId);

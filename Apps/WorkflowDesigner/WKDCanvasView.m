@@ -10,10 +10,18 @@ typedef NS_ENUM(NSInteger, WKDGesture) {
 	WKDGestureConnect,
 	WKDGestureResize,
 	WKDGestureBand,
+	/* A selected flow's end dragged to another node. */
+	WKDGestureReconnect,
+	/* A selected flow's bend dragged. */
+	WKDGestureBend,
+	/* A name dragged on its own. */
+	WKDGestureLabel,
 };
 
 /* Room around the diagram to draw into. */
 static const double WKDRoom = 300;
+/* A flow's handles: their size, and how near a click must be. */
+static const double WKDHandle = 7;
 
 @implementation WKDCanvasView
 {
@@ -21,6 +29,13 @@ static const double WKDRoom = 300;
 	NSPoint _down;
 	NSPoint _at;
 	NSString *_from;
+	/* A reconnection's end, a bend's index. */
+	BOOL _atSource;
+	NSUInteger _bend;
+	/* The field a name is typed in, and whose name it is. */
+	NSTextField *_nameField;
+	NSString *_renaming;
+	BOOL _cancelRenaming;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame
@@ -89,6 +104,9 @@ static const double WKDRoom = 300;
 		}
 	}
 	_selection = kept;
+	if (_renaming != nil && [diagram shapeWithId:_renaming] == nil && [diagram connectionWithId:_renaming] == nil) {
+		[self endRenaming:NO];
+	}
 	[self resize];
 }
 
@@ -113,6 +131,18 @@ static const double WKDRoom = 300;
 	}
 }
 
+- (void)zoomToFit
+{
+	NSRect content = self.diagram.contentBounds;
+	NSSize visible = [[self enclosingScrollView] contentSize];
+	if (NSIsEmptyRect(content) || visible.width <= 0 || visible.height <= 0) {
+		return;
+	}
+	content = NSInsetRect(content, -40, -40);
+	self.zoom = MIN(2, MIN(visible.width / NSWidth(content), visible.height / NSHeight(content)));
+	[self scrollPoint:content.origin];
+}
+
 - (IBAction)selectAll:(id)sender
 {
 	NSMutableSet *all = [NSMutableSet set];
@@ -120,6 +150,44 @@ static const double WKDRoom = 300;
 		[all addObject:shape.elementId];
 	}
 	self.selection = all;
+}
+
+#pragma mark Labels
+
+/* Where an event's, a gateway's or a flow's name is drawn: where the
+ * diagram puts it, else under the node or over the flow's middle; empty
+ * for one without a name, or that holds it inside. */
+- (NSRect)labelOfShape:(WKDShape *)shape
+{
+	if ([shape.name length] == 0) {
+		return NSZeroRect;
+	}
+	NSRect drawn = WKDNodeLabelRect(shape.type, shape.bounds);
+	return NSIsEmptyRect(drawn) || NSIsEmptyRect(shape.labelBounds) ? drawn : shape.labelBounds;
+}
+
+- (NSRect)labelOfConnection:(WKDConnection *)connection
+{
+	if ([connection.name length] == 0) {
+		return NSZeroRect;
+	}
+	return NSIsEmptyRect(connection.labelBounds) ? WKDFlowLabelRect(connection.waypoints) : connection.labelBounds;
+}
+
+/* The owner of the name at the point. */
+- (NSString *)labelAt:(NSPoint)point
+{
+	for (WKDConnection *connection in self.diagram.connections) {
+		if (NSPointInRect(point, [self labelOfConnection:connection])) {
+			return connection.elementId;
+		}
+	}
+	for (WKDShape *shape in [self.diagram.shapes reverseObjectEnumerator]) {
+		if (shape.hasBounds && NSPointInRect(point, [self labelOfShape:shape])) {
+			return shape.elementId;
+		}
+	}
+	return nil;
 }
 
 #pragma mark Hit testing
@@ -164,6 +232,12 @@ static const double WKDRoom = 300;
 	return [_selection count] == 1 ? [self.diagram shapeWithId:[_selection anyObject]] : nil;
 }
 
+/* The one flow selected, if one is. */
+- (WKDConnection *)selectedConnection
+{
+	return [_selection count] == 1 ? [self.diagram connectionWithId:[_selection anyObject]] : nil;
+}
+
 /* The handle a connection is dragged from, beside the selected shape. */
 static NSRect
 WKDConnectHandle(NSRect bounds)
@@ -177,14 +251,28 @@ WKDResizeHandle(NSRect bounds)
 	return NSMakeRect(NSMaxX(bounds) - 8, NSMaxY(bounds) - 8, 10, 10);
 }
 
+static NSRect
+WKDPointHandle(NSPoint point, double zoom)
+{
+	double size = WKDHandle / zoom;
+	return NSMakeRect(point.x - size / 2, point.y - size / 2, size, size);
+}
+
 #pragma mark Drawing
+
+/* How far a shape has gone in the gesture under way. */
+- (NSSize)offsetOf:(WKDShape *)shape
+{
+	if (_gesture == WKDGestureMove && [self isMoving:shape]) {
+		return NSMakeSize(_at.x - _down.x, _at.y - _down.y);
+	}
+	return NSZeroSize;
+}
 
 - (NSRect)movedBounds:(WKDShape *)shape
 {
-	NSRect bounds = shape.bounds;
-	if (_gesture == WKDGestureMove && [self isMoving:shape]) {
-		bounds = NSOffsetRect(bounds, _at.x - _down.x, _at.y - _down.y);
-	}
+	NSSize offset = [self offsetOf:shape];
+	NSRect bounds = NSOffsetRect(shape.bounds, offset.width, offset.height);
 	if (_gesture == WKDGestureResize && [shape.elementId isEqualToString:_from]) {
 		bounds.size.width = MAX(60, NSWidth(bounds) + _at.x - _down.x);
 		bounds.size.height = MAX(60, NSHeight(bounds) + _at.y - _down.y);
@@ -214,29 +302,95 @@ WKDResizeHandle(NSRect bounds)
 	return look;
 }
 
+/* Where a bend being dragged goes: the pointer, lined up with the points
+ * either side of it when it is within a few pixels of their x or y, so
+ * that a segment straight across or up and down is easy to come back to. */
+- (NSPoint)bendAt:(NSPoint)point of:(WKDConnection *)connection index:(NSUInteger)index
+{
+	double snap = 8 / _zoom;
+	NSArray *points = connection.waypoints;
+	for (NSInteger neighbour = (NSInteger)index - 1; neighbour <= (NSInteger)index + 1; neighbour += 2) {
+		if (neighbour < 0 || neighbour >= (NSInteger)[points count]) {
+			continue;
+		}
+		NSPoint other = [[points objectAtIndex:(NSUInteger)neighbour] pointValue];
+		if (fabs(point.x - other.x) < snap) {
+			point.x = other.x;
+		}
+		if (fabs(point.y - other.y) < snap) {
+			point.y = other.y;
+		}
+	}
+	return NSMakePoint(round(point.x), round(point.y));
+}
+
+/* The flow's route as the gesture under way leaves it: its ends' shapes
+ * moved or resized, a bend dragged. */
+- (NSArray<NSValue *> *)pointsOf:(WKDConnection *)connection
+{
+	NSArray *points = connection.waypoints;
+	if (_gesture == WKDGestureBend && [connection.elementId isEqualToString:_from] && _bend < [points count]) {
+		NSMutableArray *moved = [points mutableCopy];
+		[moved replaceObjectAtIndex:_bend withObject:[NSValue valueWithPoint:[self bendAt:_at of:connection index:_bend]]];
+		return moved;
+	}
+	NSSize from = [self offsetOf:connection.source], to = [self offsetOf:connection.target];
+	BOOL resized = _gesture == WKDGestureResize
+		&& ([connection.source.elementId isEqualToString:_from] || [connection.target.elementId isEqualToString:_from]);
+	if (NSEqualSizes(from, to) && !resized) {
+		if (from.width == 0 && from.height == 0) {
+			return points;
+		}
+		NSMutableArray *shifted = [NSMutableArray array];
+		for (NSValue *value in points) {
+			NSPoint point = [value pointValue];
+			[shifted addObject:[NSValue valueWithPoint:NSMakePoint(point.x + from.width, point.y + from.height)]];
+		}
+		return shifted;
+	}
+	NSRect source = [self movedBounds:connection.source], target = [self movedBounds:connection.target];
+	NSArray *kept = resized ? nil : [WKDEditor keptRoute:points source:source target:target sourceMoved:from
+	                                         targetMoved:to];
+	return kept ?: [WKDEditor routeFrom:source to:target fromBoundary:connection.source.host != nil
+	                        fromGateway:connection.source.kind == WKDShapeGateway
+	                         toActivity:connection.target.kind == WKDShapeActivity];
+}
+
 - (void)drawRect:(NSRect)dirty
 {
 	[WKDPaperColor() setFill];
 	/* Within the view: since macOS 14 views do not clip to their bounds,
 	 * and the rectangle to draw may reach past them -- over the tab bar. */
 	NSRectFill(NSIntersectionRect(dirty, [self bounds]));
+	NSSize labelMoved = _gesture == WKDGestureLabel ? NSMakeSize(_at.x - _down.x, _at.y - _down.y) : NSZeroSize;
 	for (WKDShape *shape in self.diagram.shapes) {
-		if (shape.hasBounds && NSIntersectsRect(NSInsetRect([self movedBounds:shape], -60, -40), dirty)) {
-			WKDDrawNode([self lookOf:shape], [self movedBounds:shape], YES);
+		if (!shape.hasBounds) {
+			continue;
+		}
+		NSRect bounds = [self movedBounds:shape];
+		NSRect label = [self labelOfShape:shape];
+		if (!NSIsEmptyRect(label)) {
+			NSSize offset = [shape.elementId isEqualToString:_from] && _gesture == WKDGestureLabel
+				? labelMoved : [self offsetOf:shape];
+			label = NSOffsetRect(label, offset.width, offset.height);
+		}
+		if (!NSIntersectsRect(NSUnionRect(NSInsetRect(bounds, -60, -40), label), dirty)) {
+			continue;
+		}
+		if ([shape.elementId isEqualToString:_renaming]) {
+			WKDLook *look = [self lookOf:shape];
+			look.name = nil;
+			WKDDrawNode(look, bounds, YES);
+		} else if (!NSIsEmptyRect(label)) {
+			WKDDrawNode([self lookOf:shape], bounds, NO);
+			WKDDrawLabel(shape.name, label);
+		} else {
+			WKDDrawNode([self lookOf:shape], bounds, YES);
 		}
 	}
 	[WKDInkColor() setStroke];
 	for (WKDConnection *connection in self.diagram.connections) {
-		NSArray *points = connection.waypoints;
-		BOOL moved = _gesture == WKDGestureMove && ([self isMoving:connection.source] || [self isMoving:connection.target]);
-		BOOL resized = _gesture == WKDGestureResize
-			&& ([connection.source.elementId isEqualToString:_from] || [connection.target.elementId isEqualToString:_from]);
-		if (moved || resized) {
-			points = [WKDEditor routeFrom:[self movedBounds:connection.source] to:[self movedBounds:connection.target]
-			                 fromBoundary:connection.source.host != nil
-			                  fromGateway:connection.source.kind == WKDShapeGateway
-			                   toActivity:connection.target.kind == WKDShapeActivity];
-		}
+		NSArray *points = [self pointsOf:connection];
 		if ([_selection containsObject:connection.elementId]) {
 			[WKDSelectionColor() setStroke];
 		}
@@ -245,9 +399,18 @@ WKDResizeHandle(NSRect bounds)
 			                              isEqualToString:@"None"]);
 		} else {
 			WKDDrawFlow(points, connection.isDefault,
-			            connection.hasCondition && connection.source.kind == WKDShapeActivity, connection.name);
+			            connection.hasCondition && connection.source.kind == WKDShapeActivity, nil);
 		}
 		[WKDInkColor() setStroke];
+		NSRect label = [self labelOfConnection:connection];
+		if (!NSIsEmptyRect(label) && ![connection.elementId isEqualToString:_renaming]) {
+			if (NSIsEmptyRect(connection.labelBounds)) {
+				label = WKDFlowLabelRect(points);
+			} else if (_gesture == WKDGestureLabel && [connection.elementId isEqualToString:_from]) {
+				label = NSOffsetRect(label, labelMoved.width, labelMoved.height);
+			}
+			WKDDrawLabel(connection.name, label);
+		}
 	}
 	for (NSString *elementId in _selection) {
 		WKDShape *shape = [self.diagram shapeWithId:elementId];
@@ -255,8 +418,28 @@ WKDResizeHandle(NSRect bounds)
 			WKDDrawSelection([self movedBounds:shape]);
 		}
 	}
+	[self drawHandles];
+	if (_gesture == WKDGestureConnect || _gesture == WKDGestureReconnect) {
+		[self drawRubberBand];
+	}
+	if (_gesture == WKDGestureBand) {
+		NSRect band = [self band];
+		[[WKDSelectionColor() colorWithAlphaComponent:0.12] setFill];
+		NSRectFillUsingOperation(band, NSCompositingOperationSourceOver);
+		[WKDSelectionColor() setStroke];
+		[NSBezierPath strokeRect:band];
+	}
+}
+
+/* A selected node's connect and resize handles; a selected flow's ends
+ * and bends. */
+- (void)drawHandles
+{
+	if (_gesture != WKDGestureNone) {
+		return;
+	}
 	WKDShape *selected = [self selectedShape];
-	if (selected.hasBounds && _gesture == WKDGestureNone && selected.kind != WKDShapeArtifact) {
+	if (selected.hasBounds && selected.kind != WKDShapeArtifact) {
 		[WKDSelectionColor() setFill];
 		NSRect handle = WKDConnectHandle(selected.bounds);
 		[[NSBezierPath bezierPathWithOvalInRect:handle] fill];
@@ -271,27 +454,47 @@ WKDResizeHandle(NSRect bounds)
 			NSRectFill(WKDResizeHandle(selected.bounds));
 		}
 	}
-	if (_gesture == WKDGestureConnect) {
-		WKDShape *source = [self.diagram shapeWithId:_from];
-		NSBezierPath *line = [NSBezierPath bezierPath];
-		[line moveToPoint:NSMakePoint(NSMidX(source.bounds), NSMidY(source.bounds))];
-		[line lineToPoint:_at];
-		CGFloat pattern[2] = { 5, 3 };
-		[line setLineDash:pattern count:2 phase:0];
-		[WKDSelectionColor() setStroke];
-		[line setLineWidth:1.5];
-		[line stroke];
-		WKDShape *target = [self shapeAt:_at];
-		if (target != nil && target != source) {
-			WKDDrawSelection(target.bounds);
+	WKDConnection *flow = [self selectedConnection];
+	if (flow != nil && !flow.isAssociation) {
+		NSArray *points = flow.waypoints;
+		for (NSUInteger i = 0; i < [points count]; i++) {
+			NSRect handle = WKDPointHandle([[points objectAtIndex:i] pointValue], _zoom);
+			BOOL end = i == 0 || i + 1 == [points count];
+			NSBezierPath *path = end ? [NSBezierPath bezierPathWithRect:handle]
+			                         : [NSBezierPath bezierPathWithOvalInRect:handle];
+			[(end ? WKDSelectionColor() : WKDPaperColor()) setFill];
+			[path fill];
+			[WKDSelectionColor() setStroke];
+			[path setLineWidth:1 / _zoom];
+			[path stroke];
 		}
 	}
-	if (_gesture == WKDGestureBand) {
-		NSRect band = [self band];
-		[[WKDSelectionColor() colorWithAlphaComponent:0.12] setFill];
-		NSRectFillUsingOperation(band, NSCompositingOperationSourceOver);
-		[WKDSelectionColor() setStroke];
-		[NSBezierPath strokeRect:band];
+}
+
+/* A new flow or a moved end, dashed from where it stays to the pointer,
+ * and the node it would join. */
+- (void)drawRubberBand
+{
+	NSPoint fixed;
+	WKDShape *excluded = nil;
+	if (_gesture == WKDGestureConnect) {
+		excluded = [self.diagram shapeWithId:_from];
+		fixed = NSMakePoint(NSMidX(excluded.bounds), NSMidY(excluded.bounds));
+	} else {
+		WKDConnection *flow = [self.diagram connectionWithId:_from];
+		fixed = [(_atSource ? [flow.waypoints lastObject] : [flow.waypoints firstObject]) pointValue];
+	}
+	NSBezierPath *line = [NSBezierPath bezierPath];
+	[line moveToPoint:fixed];
+	[line lineToPoint:_at];
+	CGFloat pattern[2] = { 5, 3 };
+	[line setLineDash:pattern count:2 phase:0];
+	[WKDSelectionColor() setStroke];
+	[line setLineWidth:1.5];
+	[line stroke];
+	WKDShape *target = [self shapeAt:_at];
+	if (target != nil && target != excluded) {
+		WKDDrawSelection(target.bounds);
 	}
 }
 
@@ -307,8 +510,29 @@ WKDResizeHandle(NSRect bounds)
 	return [self convertPoint:[event locationInWindow] fromView:nil];
 }
 
+/* A selected flow's handle at the point: its source end, its target end,
+ * or a bend. NO when there is none there. */
+- (BOOL)flowHandleAt:(NSPoint)point flow:(WKDConnection **)outFlow index:(NSUInteger *)outIndex
+{
+	WKDConnection *flow = [self selectedConnection];
+	if (flow == nil || flow.isAssociation) {
+		return NO;
+	}
+	NSArray *points = flow.waypoints;
+	for (NSUInteger i = 0; i < [points count]; i++) {
+		NSRect handle = NSInsetRect(WKDPointHandle([[points objectAtIndex:i] pointValue], _zoom), -3 / _zoom, -3 / _zoom);
+		if (NSPointInRect(point, handle)) {
+			*outFlow = flow;
+			*outIndex = i;
+			return YES;
+		}
+	}
+	return NO;
+}
+
 - (void)mouseDown:(NSEvent *)event
 {
+	[self endRenaming:YES];
 	[[self window] makeFirstResponder:self];
 	NSPoint point = [self pointOf:event];
 	_down = _at = point;
@@ -333,9 +557,38 @@ WKDResizeHandle(NSRect bounds)
 		_from = selected.elementId;
 		return;
 	}
-	WKDShape *shape = [self shapeAt:point];
+	WKDConnection *handleFlow = nil;
+	NSUInteger handle = 0;
+	if ([self flowHandleAt:point flow:&handleFlow index:&handle]) {
+		_from = handleFlow.elementId;
+		if (handle == 0 || handle + 1 == [handleFlow.waypoints count]) {
+			_gesture = WKDGestureReconnect;
+			_atSource = handle == 0;
+		} else {
+			_gesture = WKDGestureBend;
+			_bend = handle;
+		}
+		return;
+	}
 	BOOL extend = ([event modifierFlags] & NSEventModifierFlagShift) != 0;
+	NSString *labelled = [self labelAt:point];
+	if (labelled != nil && !extend) {
+		if ([event clickCount] >= 2) {
+			[self beginRenaming:labelled];
+			return;
+		}
+		self.selection = [NSSet setWithObject:labelled];
+		_gesture = WKDGestureLabel;
+		_from = labelled;
+		return;
+	}
+	WKDShape *shape = [self shapeAt:point];
 	if (shape != nil) {
+		if ([event clickCount] >= 2 && !extend) {
+			self.selection = [NSSet setWithObject:shape.elementId];
+			[self beginRenaming:shape.elementId];
+			return;
+		}
 		if (([event modifierFlags] & NSEventModifierFlagOption) != 0) {
 			_gesture = WKDGestureConnect;
 			_from = shape.elementId;
@@ -356,6 +609,9 @@ WKDResizeHandle(NSRect bounds)
 	WKDConnection *connection = [self connectionAt:point];
 	if (connection != nil) {
 		self.selection = extend ? [_selection setByAddingObject:connection.elementId] : [NSSet setWithObject:connection.elementId];
+		if ([event clickCount] >= 2 && !extend && !connection.isAssociation) {
+			[self beginRenaming:connection.elementId];
+		}
 		return;
 	}
 	if (!extend) {
@@ -380,9 +636,10 @@ WKDResizeHandle(NSRect bounds)
 	_gesture = WKDGestureNone;
 	_at = [self pointOf:event];
 	NSSize offset = NSMakeSize(round(_at.x - _down.x), round(_at.y - _down.y));
+	BOOL dragged = fabs(offset.width) >= 2 || fabs(offset.height) >= 2;
 	switch (gesture) {
 	case WKDGestureMove:
-		if (fabs(offset.width) >= 2 || fabs(offset.height) >= 2) {
+		if (dragged) {
 			NSMutableArray *shapes = [NSMutableArray array];
 			for (NSString *elementId in _selection) {
 				if ([self.diagram shapeWithId:elementId] != nil) {
@@ -399,6 +656,24 @@ WKDResizeHandle(NSRect bounds)
 		}
 		break;
 	}
+	case WKDGestureReconnect: {
+		WKDShape *target = [self shapeAt:_at];
+		if (target != nil && dragged) {
+			[self.delegate canvas:self reconnect:_from atSource:_atSource to:target.elementId];
+		}
+		break;
+	}
+	case WKDGestureBend:
+		if (dragged) {
+			[self.delegate canvas:self moveBend:_bend of:_from
+			                     to:[self bendAt:_at of:[self.diagram connectionWithId:_from] index:_bend]];
+		}
+		break;
+	case WKDGestureLabel:
+		if (dragged) {
+			[self.delegate canvas:self moveLabelOf:_from by:offset];
+		}
+		break;
 	case WKDGestureResize: {
 		WKDShape *shape = [self.diagram shapeWithId:_from];
 		if (shape != nil) {
@@ -426,12 +701,26 @@ WKDResizeHandle(NSRect bounds)
 	[self setNeedsDisplay:YES];
 }
 
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+	NSPoint point = [self pointOf:event];
+	NSString *hit = [self labelAt:point] ?: [self shapeAt:point].elementId ?: [self connectionAt:point].elementId;
+	if (hit != nil && ![_selection containsObject:hit]) {
+		self.selection = [NSSet setWithObject:hit];
+	}
+	return [_selection count] > 0 ? [self.delegate canvasMenu:self] : nil;
+}
+
 - (void)keyDown:(NSEvent *)event
 {
 	NSString *characters = [event charactersIgnoringModifiers];
 	unichar key = [characters length] > 0 ? [characters characterAtIndex:0] : 0;
 	if (key == NSDeleteCharacter || key == NSBackspaceCharacter || key == NSDeleteFunctionKey) {
 		[self delete:self];
+		return;
+	}
+	if ((key == NSCarriageReturnCharacter || key == NSEnterCharacter) && [_selection count] == 1) {
+		[self beginRenaming:[_selection anyObject]];
 		return;
 	}
 	if (key == 27) {
@@ -456,6 +745,103 @@ WKDResizeHandle(NSRect bounds)
 		return [_selection count] > 0;
 	}
 	return YES;
+}
+
+#pragma mark Renaming
+
+/* Where a name is typed: inside a task or subprocess, over its label
+ * for an event, a gateway or a flow. */
+- (NSRect)nameFieldRectFor:(NSString *)elementId
+{
+	WKDShape *shape = [self.diagram shapeWithId:elementId];
+	if (shape != nil) {
+		NSRect label = WKDNodeLabelRect(shape.type, shape.bounds);
+		if (NSIsEmptyRect(label)) {
+			return WKDIsContainerType(shape.type) || shape.kind == WKDShapeArtifact
+				? NSMakeRect(NSMinX(shape.bounds) + 4, NSMinY(shape.bounds) + 2, MAX(NSWidth(shape.bounds) - 8, 80), 22)
+				: NSInsetRect(shape.bounds, 4, MAX(4, NSHeight(shape.bounds) / 2 - 22));
+		}
+		NSRect at = NSIsEmptyRect(shape.labelBounds) ? label : shape.labelBounds;
+		return NSMakeRect(NSMidX(at) - 60, NSMinY(at), 120, 40);
+	}
+	WKDConnection *flow = [self.diagram connectionWithId:elementId];
+	if (flow != nil) {
+		NSRect at = NSIsEmptyRect(flow.labelBounds) ? WKDFlowLabelRect(flow.waypoints) : flow.labelBounds;
+		return NSMakeRect(NSMidX(at) - 60, NSMinY(at), 120, 40);
+	}
+	return NSZeroRect;
+}
+
+- (void)beginRenaming:(NSString *)elementId
+{
+	[self endRenaming:YES];
+	WKDShape *shape = [self.diagram shapeWithId:elementId];
+	WKDConnection *flow = shape == nil ? [self.diagram connectionWithId:elementId] : nil;
+	if ((shape == nil && flow == nil) || flow.isAssociation) {
+		return;
+	}
+	NSRect frame = [self nameFieldRectFor:elementId];
+	if (NSIsEmptyRect(frame)) {
+		return;
+	}
+	_nameField = [[NSTextField alloc] initWithFrame:frame];
+	[_nameField setStringValue:(shape != nil ? shape.name : flow.name) ?: @""];
+	[_nameField setFont:[NSFont systemFontOfSize:11]];
+	[_nameField setAlignment:NSTextAlignmentCenter];
+	[_nameField setEditable:YES];
+	[_nameField setBezeled:YES];
+	[[_nameField cell] setWraps:YES];
+	[[_nameField cell] setScrollable:NO];
+	[_nameField setDelegate:self];
+	_renaming = [elementId copy];
+	_cancelRenaming = NO;
+	[self addSubview:_nameField];
+	[[self window] makeFirstResponder:_nameField];
+	[self setNeedsDisplay:YES];
+}
+
+/* The field gone; with keep, its name given to the element. */
+- (void)endRenaming:(BOOL)keep
+{
+	if (_nameField == nil) {
+		return;
+	}
+	NSTextField *field = _nameField;
+	NSString *elementId = _renaming;
+	_nameField = nil;
+	_renaming = nil;
+	NSString *name = [field stringValue];
+	[field setDelegate:nil];
+	[field removeFromSuperview];
+	[[self window] makeFirstResponder:self];
+	[self setNeedsDisplay:YES];
+	if (keep && !_cancelRenaming) {
+		[self.delegate canvas:self rename:elementId to:name];
+	}
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)notification
+{
+	if ([notification object] == _nameField) {
+		[self endRenaming:YES];
+	}
+}
+
+- (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)command
+{
+	if (control != _nameField) {
+		return NO;
+	}
+	if (command == @selector(cancelOperation:)) {
+		_cancelRenaming = YES;
+		[self endRenaming:NO];
+		return YES;
+	}
+	if (command == @selector(insertNewline:)) {
+		[self endRenaming:YES];
+		return YES;
+	}
+	return NO;
 }
 
 @end

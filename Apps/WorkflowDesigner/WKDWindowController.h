@@ -38,6 +38,19 @@
  * made from its fields first, and named in its form key, when there is
  * none. */
 - (IBAction)editForm:(id)sender;
+/* View ▸ Zoom to Fit: the whole diagram in the window. */
+- (IBAction)zoomToFit:(id)sender;
+/* Diagram ▸ Rename: the selected element's name typed over it. */
+- (IBAction)rename:(id)sender;
+/* A Change Type menu item's type (its represented object) for the
+ * selected node. */
+- (IBAction)changeType:(id)sender;
+/* The selection to the pasteboard as BPMN, and back as copies under ids
+ * of their own, a step further down each time; Duplicate both at once. */
+- (IBAction)copy:(id)sender;
+- (IBAction)cut:(id)sender;
+- (IBAction)paste:(id)sender;
+- (IBAction)duplicate:(id)sender;
 - (IBAction)showOutline:(id)sender;
 - (IBAction)showPalette:(id)sender;
 - (IBAction)showProblems:(id)sender;

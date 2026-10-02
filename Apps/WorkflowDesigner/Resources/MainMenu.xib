@@ -127,6 +127,11 @@
                                     <action selector="paste:" target="-1" id="WKm-ac-040"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Duplicate" keyEquivalent="d" id="WKm-mi-121">
+                                <connections>
+                                    <action selector="duplicate:" target="-1" id="WKm-ac-121"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Delete" id="WKm-mi-041">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
@@ -158,6 +163,11 @@
                             <menuItem title="Actual Size" keyEquivalent="0" id="WKm-mi-051">
                                 <connections>
                                     <action selector="actualSize:" target="-1" id="WKm-ac-052"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Zoom to Fit" keyEquivalent="9" id="WKm-mi-122">
+                                <connections>
+                                    <action selector="zoomToFit:" target="-1" id="WKm-ac-122"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="WKm-vs-001"/>
@@ -196,6 +206,11 @@
                             <menuItem title="Arrange" keyEquivalent="l" id="WKm-mi-055">
                                 <connections>
                                     <action selector="arrange:" target="-1" id="WKm-ac-056"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Rename" keyEquivalent="r" id="WKm-mi-123">
+                                <connections>
+                                    <action selector="rename:" target="-1" id="WKm-ac-123"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="WKm-sp-110"/>

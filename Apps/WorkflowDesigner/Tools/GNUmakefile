@@ -9,7 +9,8 @@
 include $(GNUSTEP_MAKEFILES)/common.make
 
 TOOL_NAME = wkd-arrange wkd-render
-WKD_MODEL = ../WKDXML.m ../WKDDiagram.m ../WKDLayout.m ../WKDEditor.m
+WKD_MODEL = ../WKDXML.m ../WKDDiagram.m ../WKDLayout.m ../WKDEditor.m \
+	../WKDEditor+Canvas.m ../WKDEditor+Clipboard.m ../WKDEditor+Types.m
 
 wkd-arrange_OBJC_FILES = wkd-arrange.m $(WKD_MODEL)
 wkd-arrange_OBJCFLAGS += -fobjc-arc -fblocks -Wall

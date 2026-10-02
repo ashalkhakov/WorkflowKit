@@ -33,6 +33,9 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDDiagram.m \
 	WKDLayout.m \
 	WKDEditor.m \
+	WKDEditor+Canvas.m \
+	WKDEditor+Clipboard.m \
+	WKDEditor+Types.m \
 	WKDRenderer.m \
 	WKDCanvasView.m \
 	WKDPaletteView.m \
