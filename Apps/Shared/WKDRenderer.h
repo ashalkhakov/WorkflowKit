@@ -29,6 +29,10 @@ void WKDDrawLabel(NSString *name, NSRect rect);
 /* An association through the points: dotted, with an open arrowhead
  * when it is directed. */
 void WKDDrawAssociation(NSArray<NSValue *> *points, BOOL directed);
+/* The outline of a node of the type in the rectangle: a circle for an
+ * event, a diamond for a gateway, a rounded box for the rest -- for marks
+ * laid over a node in its own shape. */
+NSBezierPath *WKDNodeOutline(NSString *type, NSRect rect);
 /* A selection outline around the rectangle. */
 void WKDDrawSelection(NSRect rect);
 /* The distance from the point to the polyline. */

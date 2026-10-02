@@ -145,8 +145,10 @@ app whose document is the BPMN XML, edited in place through `WKDEditor`,
 with the engine's `WFBpmnReader` saying after each change whether it runs.
 It links the engine, and deploys to and opens from a `wf-serve` through
 the connection WorkflowDesk has: `Apps/Shared` holds what both apps
-compile (the session, sign-in and connect window), so the designer builds
-with `ODATAKIT=...` too. Its forms open in a window of its own through
+compile -- the session, sign-in and connect window, and the BPMN document
+model, editor, layout and renderer (`WKD*`), with which WorkflowDesk's
+operations window draws a process and where its instances are -- so the
+designer builds with `ODATAKIT=...` too. Its forms open in a window of its own through
 XFormsKit's XFormsDesignKit, the XForms Designer's editor as a framework
 (`XFDDocument`, its second document type), so it builds with
 `XFORMSKIT=...` as well, after `make designkit` in that checkout; its tab

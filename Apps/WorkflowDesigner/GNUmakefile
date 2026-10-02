@@ -29,15 +29,6 @@ APP_NAME = WorkflowDesigner
 
 WorkflowDesigner_OBJC_FILES = \
 	main.m \
-	WKDXML.m \
-	WKDDiagram.m \
-	WKDLayout.m \
-	WKDEditor.m \
-	WKDEditor+Canvas.m \
-	WKDEditor+Clipboard.m \
-	WKDEditor+Types.m \
-	WKDEditor+Alignment.m \
-	WKDRenderer.m \
 	WKDCanvasView.m \
 	WKDPaletteView.m \
 	WKDProperties.m \
@@ -51,6 +42,15 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDWindowController.m \
 	WKDServerProcessesController.m \
 	WKDAppDelegate.m \
+	../Shared/WKDXML.m \
+	../Shared/WKDEditor.m \
+	../Shared/WKDEditor+Canvas.m \
+	../Shared/WKDEditor+Clipboard.m \
+	../Shared/WKDEditor+Types.m \
+	../Shared/WKDEditor+Alignment.m \
+	../Shared/WKDLayout.m \
+	../Shared/WKDDiagram.m \
+	../Shared/WKDRenderer.m \
 	../Shared/WDConnectWindowController.m \
 	../Shared/WDEntities.m \
 	../Shared/WDSession.m \

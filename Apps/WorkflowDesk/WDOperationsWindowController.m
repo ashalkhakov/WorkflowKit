@@ -1,6 +1,9 @@
 #import "WDOperationsWindowController.h"
+#import "WDDiagramView.h"
 #import "WDInterface.h"
 #import "WDSession.h"
+#import "WKDDiagram.h"
+#import "WKDEditor.h"
 
 static NSSortDescriptor *
 WDSort(NSString *key, BOOL ascending)
@@ -16,6 +19,11 @@ WDSort(NSString *key, BOOL ascending)
 	 * for an older one is dropped. */
 	NSUInteger _instancesRead;
 	NSUInteger _detailsRead;
+	NSUInteger _marksRead;
+	/* Each definition's diagram, by its id, once read; and the
+	 * document each was read from, which its shapes need kept. */
+	NSMutableDictionary<NSString *, WKDDiagram *> *_diagrams;
+	NSMutableDictionary<NSString *, NSXMLDocument *> *_documents;
 }
 
 - (instancetype)initWithSession:(WDSession *)session
@@ -23,6 +31,8 @@ WDSort(NSString *key, BOOL ascending)
 	if ((self = [super initWithWindowNibName:@"OperationsWindow"])) {
 		_session = session;
 		_status = @"";
+		_diagrams = [NSMutableDictionary dictionary];
+		_documents = [NSMutableDictionary dictionary];
 		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(sessionDidChange:)
 		                                             name:WDSessionDidChangeNotification object:session];
 	}
@@ -61,6 +71,10 @@ WDSort(NSString *key, BOOL ascending)
 		}
 		[views addObjectsFromArray:[view subviews]];
 	}
+	__weak WDOperationsWindowController *weakSelf = self;
+	self.diagramView.clicked = ^(NSString *activityId) {
+		[weakSelf describeActivity:activityId];
+	};
 	[self refresh:self];
 }
 
@@ -105,6 +119,8 @@ WDSort(NSString *key, BOOL ascending)
 - (IBAction)refresh:(id)sender
 {
 	self.status = @"";
+	[_diagrams removeAllObjects];
+	[_documents removeAllObjects];
 	[self read:@"WFDefinitionRecord" where:nil into:self.definitions then:^{
 		[self selectFirstOf:self.definitions];
 		[self definitionSelectionDidChange];
@@ -129,6 +145,7 @@ WDSort(NSString *key, BOOL ascending)
 {
 	NSManagedObject *definition = [self selectedOf:self.definitions];
 	self.definitionSelected = definition != nil;
+	[self showDiagramOf:definition];
 	NSUInteger read = ++_instancesRead;
 	if (definition == nil) {
 		[self.instances setContent:@[]];
@@ -175,9 +192,148 @@ WDSort(NSString *key, BOOL ascending)
 					[[list firstObject] substringFromIndex:2]];
 			}
 			[self jobSelectionDidChange];
+			if (controller == self.activities || controller == self.incidents) {
+				[self markDiagram];
+			}
 		}];
 	}
 	[self jobSelectionDidChange];
+	[self markDiagram];
+}
+
+#pragma mark The diagram
+
+/* The definition's diagram: read once through its Bpmn operation, laid
+ * out as the designer lays out a file without one. */
+- (void)showDiagramOf:(NSManagedObject *)definition
+{
+	NSString *definitionId = [definition valueForKey:@"definitionId"];
+	WKDDiagram *known = definitionId != nil ? [_diagrams objectForKey:definitionId] : nil;
+	if (definition == nil || known != nil) {
+		self.diagramView.placeholder = definition == nil ? @"No process selected." : nil;
+		self.diagramView.diagram = known;
+		[self markDiagram];
+		return;
+	}
+	self.diagramView.diagram = nil;
+	self.diagramView.placeholder = @"Reading the diagram…";
+	[self setLoading:YES];
+	[_session invoke:@"Bpmn" on:definition parameters:nil completion:^(id result, NSError *error) {
+		[self setLoading:NO];
+		NSXMLDocument *document = [result isKindOfClass:[NSString class]]
+			? [[NSXMLDocument alloc] initWithXMLString:result options:0 error:NULL] : nil;
+		if (document == nil) {
+			self.diagramView.placeholder = [NSString stringWithFormat:@"Could not read the diagram: %@",
+				[error localizedDescription] ?: @"the server sent no BPMN"];
+			[self.diagramView setNeedsDisplay:YES];
+			return;
+		}
+		WKDEditor *editor = [[WKDEditor alloc] initWithDocument:document undoManager:nil];
+		[editor completeDiagram];
+		[self->_documents setObject:editor.document forKey:definitionId];
+		[self->_diagrams setObject:editor.diagram forKey:definitionId];
+		if ([[[self selectedOf:self.definitions] valueForKey:@"definitionId"] isEqual:definitionId]) {
+			self.diagramView.placeholder = nil;
+			self.diagramView.diagram = editor.diagram;
+			[self markDiagram];
+		}
+	}];
+}
+
+- (void)setShowsAllInstances:(BOOL)showsAllInstances
+{
+	_showsAllInstances = showsAllInstances;
+	[self markDiagram];
+}
+
+/* Where the instance selected is on the diagram, from the activities and
+ * incidents read for it; or, showing all, where every running instance of
+ * the definition is, read for them. */
+- (void)markDiagram
+{
+	NSUInteger read = ++_marksRead;
+	if (!self.showsAllInstances) {
+		NSCountedSet *active = [NSCountedSet set], *incidents = [NSCountedSet set];
+		NSMutableSet *finished = [NSMutableSet set];
+		for (NSManagedObject *activity in [self.activities arrangedObjects]) {
+			NSString *activityId = [activity valueForKey:@"activityId"];
+			if (activityId == nil) {
+				continue;
+			}
+			if ([activity valueForKey:@"endTime"] == nil) {
+				[active addObject:activityId];
+			} else if (![[activity valueForKey:@"canceled"] boolValue]) {
+				[finished addObject:activityId];
+			}
+		}
+		for (NSManagedObject *incident in [self.incidents arrangedObjects]) {
+			if ([incident valueForKey:@"activityId"] != nil) {
+				[incidents addObject:[incident valueForKey:@"activityId"]];
+			}
+		}
+		[self.diagramView setActive:active finished:finished incidents:incidents];
+		return;
+	}
+	NSArray *ids = [[self.instances arrangedObjects] valueForKey:@"executionId"];
+	if ([ids count] == 0) {
+		[self.diagramView setActive:nil finished:nil incidents:nil];
+		return;
+	}
+	NSFetchRequest *running = [NSFetchRequest fetchRequestWithEntityName:@"WFHistoricActivityInstance"];
+	[running setPredicate:[NSPredicate predicateWithFormat:@"processInstanceId IN %@ AND endTime == nil", ids]];
+	NSFetchRequest *failing = [NSFetchRequest fetchRequestWithEntityName:@"WFIncident"];
+	[failing setPredicate:[NSPredicate predicateWithFormat:@"processInstanceId IN %@", ids]];
+	[self setLoading:YES];
+	[_session fetch:running completion:^(NSArray *activities, NSError *error) {
+		[self->_session fetch:failing completion:^(NSArray *incidentRows, NSError *incidentError) {
+			[self setLoading:NO];
+			if (read != self->_marksRead) {
+				return;
+			}
+			if (activities == nil || incidentRows == nil) {
+				self.status = [NSString stringWithFormat:@"Could not read where the instances are: %@",
+					[(error ?: incidentError) localizedDescription]];
+			}
+			NSCountedSet *active = [NSCountedSet set], *incidents = [NSCountedSet set];
+			for (NSManagedObject *activity in activities ?: @[]) {
+				if ([activity valueForKey:@"activityId"] != nil) {
+					[active addObject:[activity valueForKey:@"activityId"]];
+				}
+			}
+			for (NSManagedObject *incident in incidentRows ?: @[]) {
+				if ([incident valueForKey:@"activityId"] != nil) {
+					[incidents addObject:[incident valueForKey:@"activityId"]];
+				}
+			}
+			[self.diagramView setActive:active finished:nil incidents:incidents];
+		}];
+	}];
+}
+
+/* What the diagram shows of the activity clicked, in the status line. */
+- (void)describeActivity:(NSString *)activityId
+{
+	WKDShape *shape = [self.diagramView.diagram shapeWithId:activityId];
+	if (shape == nil) {
+		self.status = @"";
+		return;
+	}
+	NSString *name = [shape.name length] > 0 ? shape.name : shape.elementId;
+	NSMutableArray *parts = [NSMutableArray array];
+	NSUInteger tokens = [self.diagramView.active countForObject:activityId];
+	if (tokens > 0) {
+		[parts addObject:self.showsAllInstances
+			? [NSString stringWithFormat:@"%lu instance%@ here now", (unsigned long)tokens, tokens == 1 ? @"" : @"s"]
+			: @"the instance is here now"];
+	} else if ([self.diagramView.finished containsObject:activityId]) {
+		[parts addObject:@"done"];
+	}
+	NSUInteger incidents = [self.diagramView.incidents countForObject:activityId];
+	if (incidents > 0) {
+		[parts addObject:[NSString stringWithFormat:@"%lu incident%@", (unsigned long)incidents, incidents == 1 ? @"" : @"s"]];
+	}
+	self.status = [parts count] > 0 ? [NSString stringWithFormat:@"%@: %@", name, [parts componentsJoinedByString:@", "]]
+	                                : name;
 }
 
 - (void)jobSelectionDidChange

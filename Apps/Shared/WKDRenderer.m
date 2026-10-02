@@ -450,6 +450,26 @@ WKDDrawFlow(NSArray<NSValue *> *points, BOOL isDefault, BOOL conditionalFromActi
 	}
 }
 
+NSBezierPath *
+WKDNodeOutline(NSString *type, NSRect rect)
+{
+	switch (WKDKindOfType(type, NULL)) {
+	case WKDShapeEvent:
+		return [NSBezierPath bezierPathWithOvalInRect:rect];
+	case WKDShapeGateway: {
+		NSBezierPath *diamond = [NSBezierPath bezierPath];
+		[diamond moveToPoint:NSMakePoint(NSMidX(rect), NSMinY(rect))];
+		[diamond lineToPoint:NSMakePoint(NSMaxX(rect), NSMidY(rect))];
+		[diamond lineToPoint:NSMakePoint(NSMidX(rect), NSMaxY(rect))];
+		[diamond lineToPoint:NSMakePoint(NSMinX(rect), NSMidY(rect))];
+		[diamond closePath];
+		return diamond;
+	}
+	default:
+		return [NSBezierPath bezierPathWithRoundedRect:rect xRadius:10 yRadius:10];
+	}
+}
+
 void
 WKDDrawSelection(NSRect rect)
 {

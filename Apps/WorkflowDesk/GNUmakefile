@@ -22,6 +22,13 @@ WorkflowDesk_OBJC_FILES = \
 	main.m \
 	WDAppDelegate.m \
 	../Shared/WDConnectWindowController.m \
+	WDDiagramView.m \
+	../Shared/WKDXML.m \
+	../Shared/WKDDiagram.m \
+	../Shared/WKDRenderer.m \
+	../Shared/WKDEditor.m \
+	../Shared/WKDEditor+Canvas.m \
+	../Shared/WKDLayout.m \
 	../Shared/WDEntities.m \
 	WDFormDocument.m \
 	WDFormWindowController.m \
@@ -41,7 +48,7 @@ WorkflowDesk_RESOURCE_FILES = \
 
 WorkflowDesk_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 
-WorkflowDesk_OBJCFLAGS += -fobjc-arc -fblocks -Wall
+WorkflowDesk_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include WKDGNUstepCompat.h
 WorkflowDesk_INCLUDE_DIRS = -I../Shared \
 	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \
 	-I$(ODATAKIT)/Source/OTelKit/include

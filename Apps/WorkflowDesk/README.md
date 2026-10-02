@@ -9,6 +9,14 @@ only, and it has two windows:
   form, or start a process.
 - **Operations** shows the deployed process definitions, each one's running
   instances, and for the instance selected:
+  - the process's diagram, with where the instance is on it, as Camunda's
+    Cockpit shows it: the activities it is in now outlined in blue (with
+    how many tokens, when more than one), those it has finished and the
+    flows between them shaded green, and incidents as red badges. **All
+    running instances** shows, instead, how many of the definition's
+    instances are at each activity. A click on an activity says what is
+    there in the status line. A process deployed without a diagram is laid
+    out as the designer lays one out;
   - its variables, the activities it has been through, its incidents and
     its jobs;
   - controls to suspend and resume a definition or an instance, cancel an
@@ -25,6 +33,7 @@ back as the form leaves it.
 | `../Shared/WDSignIn` | OpenID Connect sign-in: the authorization code flow with PKCE, in the system browser, back to a loopback redirect. It is the store's credential provider. |
 | `../Shared/WDConnectWindowController` | The connect window, which WorkflowDesigner opens too. |
 | `WDFormDocument` | Puts the task's instance into its form. |
+| `WDDiagramView` | The diagram with where instances are, drawn by the designer's renderer (`../Shared/WKDRenderer`) from its document model (`../Shared/WKDDiagram`). |
 | `Resources/*.xib` | The windows. Each list is an `NSArrayController` with Cocoa Bindings. |
 
 ## Running it
