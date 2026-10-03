@@ -31,7 +31,8 @@ only, and it has two windows:
 Forms are the engine's XForms documents, rendered by XFormsKit. The
 server holds the instance a form opens with; the app puts it into the
 document, checks the required and invalid fields, and sends the instance
-back as the form leaves it.
+back as the form leaves it. Return in a field commits it, as it does in any
+XForms form; the form is sent with its button, or ⌘Return.
 
 | Where | What |
 | --- | --- |
