@@ -37,7 +37,7 @@ jobs:
       # A commit, not a branch: it decides the recipe hash the stack is
       # cached under. #1, gnustep-gui's bound table columns transformed,
       # which WorkflowDesk's lists need.
-      GNUSTEP_PATCHES_REF: fdcd3d84e06a5abce302cca14f40a55ee3178011
+      GNUSTEP_PATCHES_REF: 6eee3cc7bc1c751b88877b3fe4a6581517cccecb
       # FreeCoreData, pinned to a commit like the stack: #57, whose
       # coredata-model.make generates the entities' classes as the library
       # builds, on top of #55, which serializes every store round trip (the
