@@ -58,7 +58,7 @@ jobs:
       ODATAKIT: ${{ github.workspace }}/ODataKit
       # XFormsKit, for WorkflowDesk's forms and the designer's form editor
       # (XFormsDesignKit): built in its checkout.
-      XFORMSKIT_REF: 77b24fd0947b65c0c9dd26d83ab2f9766b6abce6
+      XFORMSKIT_REF: d08eeb2e9e1998343f9ee16bfcda5eaa64c4626b
       XFORMSKIT: ${{ github.workspace }}/XFormsKit
     defaults:
       run:
