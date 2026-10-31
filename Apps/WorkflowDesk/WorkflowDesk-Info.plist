@@ -24,5 +24,12 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- Sparkle (Apps/Shared/WKDUpdater.h): this app's appcast in the newest
+	     release, and the public half of the key its updates are signed
+	     with. -->
+	<key>SUFeedURL</key>
+	<string>https://github.com/ashalkhakov/WorkflowKit/releases/latest/download/appcast-WorkflowDesk.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>9cBO16YcwJZy7uzpT8tSbD/UnYF9HNTekubfnW8WlUE=</string>
 </dict>
 </plist>

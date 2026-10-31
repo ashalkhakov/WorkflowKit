@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=WorkflowDesigner
+GenericName=Process Designer
+Comment=Draw BPMN processes, their decisions and forms, and deploy them
+Exec=AppRun designer %f
+Icon=workflowdesigner
+Terminal=false
+Categories=Office;Development;
+MimeType=application/xml;

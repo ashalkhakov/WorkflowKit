@@ -1,5 +1,5 @@
 #import <XCTest/XCTest.h>
-#import "WKDLayout.h"
+#import <DiagramKit/DKLayeredLayout.h>
 
 @interface WKDLayoutTests : XCTestCase
 @end
@@ -9,7 +9,7 @@
 static NSRect
 WKDFrame(NSDictionary *origins, NSString *nodeId, NSSize size)
 {
-	NSPoint origin = [[origins objectForKey:nodeId] pointValue];
+	NSPoint origin = [[origins objectForKey:nodeId] rectValue].origin;
 	return NSMakeRect(origin.x, origin.y, size.width, size.height);
 }
 
@@ -18,7 +18,7 @@ WKDFrame(NSDictionary *origins, NSString *nodeId, NSSize size)
  * activity's other successors. */
 - (void)testABoundaryBranchHangsBelow
 {
-	WKDLayout *layout = [[WKDLayout alloc] init];
+	DKLayeredLayout *layout = [[DKLayeredLayout alloc] init];
 	NSSize big = NSMakeSize(300, 230), task = NSMakeSize(100, 80);
 	[layout addNode:@"start" size:NSMakeSize(36, 36)];
 	[layout addNode:@"work" size:big];
@@ -41,7 +41,7 @@ WKDFrame(NSDictionary *origins, NSString *nodeId, NSSize size)
 
 - (void)testAChainIsOneStraightLine
 {
-	WKDLayout *layout = [[WKDLayout alloc] init];
+	DKLayeredLayout *layout = [[DKLayeredLayout alloc] init];
 	[layout addNode:@"a" size:NSMakeSize(36, 36)];
 	[layout addNode:@"b" size:NSMakeSize(100, 80)];
 	[layout addNode:@"c" size:NSMakeSize(36, 36)];
@@ -59,7 +59,7 @@ WKDFrame(NSDictionary *origins, NSString *nodeId, NSSize size)
 
 - (void)testBranchesShareALayerWithoutOverlapping
 {
-	WKDLayout *layout = [[WKDLayout alloc] init];
+	DKLayeredLayout *layout = [[DKLayeredLayout alloc] init];
 	for (NSString *node in @[ @"split", @"x", @"y", @"z", @"join" ]) {
 		[layout addNode:node size:NSMakeSize(100, 80)];
 	}
@@ -79,7 +79,7 @@ WKDFrame(NSDictionary *origins, NSString *nodeId, NSSize size)
 
 - (void)testALoopIsLaidOutAsIfItRanForward
 {
-	WKDLayout *layout = [[WKDLayout alloc] init];
+	DKLayeredLayout *layout = [[DKLayeredLayout alloc] init];
 	for (NSString *node in @[ @"start", @"work", @"check", @"end" ]) {
 		[layout addNode:node size:NSMakeSize(50, 50)];
 	}
@@ -98,7 +98,7 @@ WKDFrame(NSDictionary *origins, NSString *nodeId, NSSize size)
 {
 	/* a → b → c → d, and a → d around them: d's placeholder path keeps
 	 * the long edge to one side. */
-	WKDLayout *layout = [[WKDLayout alloc] init];
+	DKLayeredLayout *layout = [[DKLayeredLayout alloc] init];
 	for (NSString *node in @[ @"a", @"b", @"c", @"d", @"e" ]) {
 		[layout addNode:node size:NSMakeSize(40, 40)];
 	}

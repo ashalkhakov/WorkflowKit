@@ -1,6 +1,7 @@
 #import "WKDPaletteView.h"
 #import "WKDEditor.h"
 #import "WKDRenderer.h"
+#import <DiagramKitUI/DKAppKitSurface.h>
 
 static const double WKDCell = 44;
 
@@ -118,7 +119,7 @@ WKDTools(void)
 	if (WKDIsContainerType(type) || [type isEqualToString:@"callActivity"] || WKDKindOfType(type, NULL) == WKDShapeActivity) {
 		drawn = NSInsetRect(box, 0, 4);
 	}
-	WKDDrawNode(look, drawn, NO);
+	WKDDrawNode([DKAppKitSurface surface], look, drawn, NO);
 }
 
 - (void)drawRect:(NSRect)dirty

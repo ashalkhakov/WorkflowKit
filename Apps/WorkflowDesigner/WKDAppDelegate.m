@@ -5,13 +5,20 @@
 #import "WDConnectWindowController.h"
 #import "WDSession.h"
 #import "WDTracing.h"
+#import "WKDMenuStyle.h"
+#import "WKDUpdater.h"
+#if __has_include(<XFormsDesignKit/XFormsDesignKit.h>)
+#import <XFormsDesignKit/XFormsDesignKit.h>
+#else
 #import "XFormsDesignKit.h"
+#endif
 
 @implementation WKDAppDelegate
 {
 	WDConnectWindowController *_connect;
 	WKDServerProcessesController *_processes;
 	NSMutableArray *_waiting;
+	WKDUpdater *_updater;
 }
 
 + (WKDAppDelegate *)shared
@@ -29,6 +36,30 @@
 	NSInteger after = diagram >= 0 ? diagram + 1 : [menu numberOfItems];
 	[menu insertItem:[XFDDocument formMenuItem] atIndex:after];
 	[menu insertItem:[WKDDecisionWindowController decisionMenuItem] atIndex:after + 1];
+	/* Updates (WKDUpdater.h), set up before the app finishes launching, as
+	 * Sparkle asks. */
+	_updater = [[WKDUpdater alloc] initStarting:YES];
+	[_updater addMenuItemWithTarget:self];
+}
+
+- (IBAction)checkForUpdates:(id)sender
+{
+	[_updater checkForUpdates:sender];
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+	if ([item action] == @selector(checkForUpdates:)) {
+		return [_updater canCheckForUpdates];
+	}
+	return YES;
+}
+
+/* Where the menus are in the windows (WKDMenuStyle.h), a designer with no
+ * window left shows nothing of itself: it quits with its last one. */
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)application
+{
+	return WKDMenusInWindows();
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification

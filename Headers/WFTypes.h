@@ -1,4 +1,10 @@
 #import <Foundation/Foundation.h>
+
+/* WorkflowKit's own: exported where it is built for Windows (the GNUmakefile),
+   imported everywhere else, as FOUNDATION_EXPORT. */
+#ifndef WORKFLOWKIT_EXPORT
+#define WORKFLOWKIT_EXPORT FOUNDATION_EXPORT
+#endif
 #import <dispatch/dispatch.h>
 
 /*
@@ -98,8 +104,8 @@ typedef NS_ENUM(NSInteger, WFErrorCode) {
 	WFErrorInvalidFormData
 };
 
-extern NSString * const WFErrorDomain;
+WORKFLOWKIT_EXPORT NSString * const WFErrorDomain;
 /* In an error about text -- an expression the engine cannot read --
  * where in the text, as an NSValue holding an NSRange. */
-extern NSString * const WFErrorRangeKey;
-extern NSString * const WFErrorRefKey;
+WORKFLOWKIT_EXPORT NSString * const WFErrorRangeKey;
+WORKFLOWKIT_EXPORT NSString * const WFErrorRefKey;

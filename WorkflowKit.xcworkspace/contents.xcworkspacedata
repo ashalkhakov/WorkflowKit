@@ -4,10 +4,4 @@
    <FileRef
       location = "group:WorkflowKit.xcodeproj">
    </FileRef>
-   <FileRef
-      location = "group:../ODataKit/ODataKit.xcodeproj">
-   </FileRef>
-   <FileRef
-      location = "group:../XFormsKit/XFormsKit.xcodeproj">
-   </FileRef>
 </Workspace>

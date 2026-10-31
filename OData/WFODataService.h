@@ -1,5 +1,11 @@
 #import <ODataService/ODataService.h>
 
+/* WorkflowKitOData's own: exported where it is built for Windows (the GNUmakefile),
+   imported everywhere else, as FOUNDATION_EXPORT. */
+#ifndef WORKFLOWKITODATA_EXPORT
+#define WORKFLOWKITODATA_EXPORT FOUNDATION_EXPORT
+#endif
+
 @class WFProcessEngine;
 
 /*
@@ -107,15 +113,15 @@
  * The service requires a signed-in caller: without an authenticator, or a
  * principal, a request is answered 401.
  */
-FOUNDATION_EXPORT NSString * const WFODataScopeWork;                /* Tasks.Work */
-FOUNDATION_EXPORT NSString * const WFODataScopeOperationsRead;      /* Operations.Read */
-FOUNDATION_EXPORT NSString * const WFODataScopeOperationsManage;    /* Operations.Manage */
-FOUNDATION_EXPORT NSString * const WFODataScopeDeploy;              /* Deployments.Create */
-FOUNDATION_EXPORT NSString * const WFODataScopeExternalWork;        /* ExternalTasks.Work */
-FOUNDATION_EXPORT NSString * const WFODataScopeReadAllTasks;        /* Tasks.ReadAll */
-FOUNDATION_EXPORT NSString * const WFODataScopeAssignTasks;         /* Tasks.Assign */
-FOUNDATION_EXPORT NSString * const WFODataScopeReadAllDefinitions;  /* ProcessDefinitions.ReadAll */
-FOUNDATION_EXPORT NSString * const WFODataScopeStartAny;            /* ProcessInstances.StartAny */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeWork;                /* Tasks.Work */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeOperationsRead;      /* Operations.Read */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeOperationsManage;    /* Operations.Manage */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeDeploy;              /* Deployments.Create */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeExternalWork;        /* ExternalTasks.Work */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeReadAllTasks;        /* Tasks.ReadAll */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeAssignTasks;         /* Tasks.Assign */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeReadAllDefinitions;  /* ProcessDefinitions.ReadAll */
+WORKFLOWKITODATA_EXPORT NSString * const WFODataScopeStartAny;            /* ProcessInstances.StartAny */
 
 @interface WFODataService : NSObject
 

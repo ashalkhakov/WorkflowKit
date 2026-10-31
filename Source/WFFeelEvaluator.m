@@ -15,9 +15,15 @@ WFFeelIsBoolean(id value)
 	if (![value isKindOfClass:[NSNumber class]] || [value isKindOfClass:[NSDecimalNumber class]]) {
 		return NO;
 	}
+	/* true and false: NSNumber's two shared instances, or a number made from
+	 * a BOOL or a char, told by its type -- except where BOOL is an int
+	 * (Windows), whose type is every int's: there only the instances are. */
+	if (value == (id)@YES || value == (id)@NO) {
+		return YES;
+	}
 	const char *type = [(NSNumber *)value objCType];
-	return strcmp(type, @encode(BOOL)) == 0 || strcmp(type, @encode(char)) == 0
-		|| strcmp(type, "B") == 0;
+	return (strcmp(@encode(BOOL), @encode(int)) != 0 && strcmp(type, @encode(BOOL)) == 0)
+		|| strcmp(type, @encode(char)) == 0 || strcmp(type, "B") == 0;
 }
 
 BOOL

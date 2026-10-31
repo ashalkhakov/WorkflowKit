@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <DiagramKitUI/DKCanvasView.h>
 
 @class WKDDiagram;
 
@@ -16,8 +17,13 @@
  *
  * It fits itself to its area when given a new diagram. A click on an
  * activity names it, through the clicked block.
+ *
+ * A DiagramKit canvas, its own data source and delegate: it zooms
+ * (Command-scroll), pans (Space-drag, the middle button), exports (PDF, PNG)
+ * and prints as DKCanvasView does; a click names what is under it rather
+ * than selecting it.
  */
-@interface WDDiagramView : NSView
+@interface WDDiagramView : DKCanvasView <DKCanvasDataSource, DKCanvasDelegate>
 
 @property (nonatomic, strong) WKDDiagram *diagram;
 /* Tokens on each activity now, by its id. */

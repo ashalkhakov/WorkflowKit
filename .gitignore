@@ -11,3 +11,7 @@ DerivedData/
 *.momd
 # the library resource bundle gnustep-make builds
 /WorkflowKit/
+# Releases this builds on, on Apple (gnustep-release-actions' scripts/deps.sh apple)
+.deps/
+# make -f Makefile.apple
+build/

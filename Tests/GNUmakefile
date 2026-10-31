@@ -64,9 +64,12 @@ XCTEST ?= xctest
 
 # Bounded: a test waiting on an instance that never settles would otherwise
 # hang the job until CI kills it, saying nothing about which test it was in.
-TEST_TIMEOUT ?= 300
+# Every store's tests take three minutes on a Linux runner, more than five on
+# a Windows one.
+TEST_TIMEOUT ?= 900
 
 .PHONY: run-tests
 run-tests: all
 	LD_LIBRARY_PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$$LD_LIBRARY_PATH" \
+	PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$$PATH" \
 	  timeout -s ABRT $(TEST_TIMEOUT) $(XCTEST) $(BUNDLE_NAME).bundle

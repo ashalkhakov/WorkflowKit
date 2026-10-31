@@ -1,0 +1,64 @@
+name: Build
+
+# WorkflowKit, built, tested and installed the familiar way (make, make
+# check, make install) by gnustep-release-actions' workflows, the same as
+# every repository's: the engine library, its OData API, wf-serve and the
+# apps, WorkflowDesk and WorkflowDesigner, with the chooser between them
+# (WorkflowLauncher). The tests run on every store the engine can use: in
+# memory, SQLite, and FreeCoreData's PostgreSQL and MySQL stores against the
+# servers the workflow starts (databases). Every push uploads what is
+# installed: the libraries, for what builds on WorkflowKit (library); for
+# macOS WorkflowDesk and WorkflowDesigner, signed and notarized with their
+# Sparkle appcasts on a release (appcast-WorkflowDesk.xml,
+# appcast-WorkflowDesigner.xml), and the frameworks as XCFrameworks; for
+# Linux an AppImage; and for Windows an installer,
+# WorkflowKit-<version>-win64.msi, wf-serve in its runtime. A v* tag (or a run started by hand with one) also releases them,
+# attached to the tag's release (a pre-release when the tag has a '-').
+# What it builds on is in .github/pins.env.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'A v* tag to build and release (empty: this branch, as artifacts)'
+        required: false
+        default: ''
+
+# Pushes only: a push to a branch already shows its checks on the branch's
+# pull request. A newer push supersedes the run before it; a release is
+# never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    uses: ashalkhakov/gnustep-release-actions/.github/workflows/linux.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      library: true
+      extra-packages: libsqlite3-dev libpq-dev libmariadb-dev
+      databases: postgres mysql
+
+  macos:
+    uses: ashalkhakov/gnustep-release-actions/.github/workflows/macos.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      apps: WorkflowDesk=WorkflowDesk WorkflowDesigner=WorkflowDesigner
+      library: true
+    secrets: inherit
+
+  windows:
+    uses: ashalkhakov/gnustep-release-actions/.github/workflows/windows.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      library: true
+      # dlfcn: ODataKit's HTTPServerKit and ODataService import libdl.dll.
+      extra-packages: sqlite3 postgresql libmariadbclient dlfcn
+      databases: postgres mysql
+    secrets: inherit

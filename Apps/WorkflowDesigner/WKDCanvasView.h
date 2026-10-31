@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <DiagramKitUI/DKCanvasView.h>
 
 @class WKDCanvasView, WKDDiagram, WKDLook;
 
@@ -29,6 +30,13 @@
  * on BPMN's shapes. A flipped view in a scroll view, in the diagram's own
  * coordinates; zooming scales its bounds.
  *
+ * A DiagramKit canvas (DKCanvasView), its own data source and delegate: it
+ * zooms (Command-scroll), pans (Space-drag, the middle button), exports
+ * (PDF, PNG, SVG) and prints as DiagramKit's canvas does, and sizes itself
+ * to the diagram in its scroll view; the gestures below are its own,
+ * through the canvas's mouse hooks, and what they ask for goes to the
+ * canvasDelegate.
+ *
  * Shift- or Command-click adds to the selection or takes out of it, and a
  * band dragged over empty canvas adds what it encloses; the arrow keys
  * nudge what is selected, by ten with Shift. A shape dragged snaps its
@@ -46,7 +54,7 @@
  * Moves, connections and resizes are shown as the mouse goes and asked of
  * the delegate when it is released: one change each, one undo step.
  */
-@interface WKDCanvasView : NSView <NSTextFieldDelegate>
+@interface WKDCanvasView : DKCanvasView <DKCanvasDataSource, DKCanvasDelegate, NSTextFieldDelegate>
 
 @property (nonatomic, strong) WKDDiagram *diagram;
 /* The ids of the shapes and flows selected. */
@@ -56,8 +64,9 @@
 @property (nonatomic, readonly, copy) NSArray<NSString *> *orderedSelection;
 /* What a click puts down; nil to select and move. */
 @property (nonatomic, strong) WKDLook *tool;
-@property (nonatomic) double zoom;
-@property (nonatomic, weak) IBOutlet id<WKDCanvasDelegate> delegate;
+/* What the gestures ask for: the document's window controller. (The
+ * canvas's own delegate, DiagramKit's, is the view itself.) */
+@property (nonatomic, weak) id<WKDCanvasDelegate> canvasDelegate;
 
 - (IBAction)selectAll:(id)sender;
 - (void)scrollToContent;

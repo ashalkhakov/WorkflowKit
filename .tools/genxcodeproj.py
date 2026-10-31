@@ -59,7 +59,13 @@ def own(paths):
 # WorkflowDesk (Apps/WorkflowDesk), over ODataKit's client and XFormsKit's
 # form view, whose frameworks the workspace builds from their projects.
 DESK = "Apps/WorkflowDesk/"
-DESK_SOURCES = make_list(DESK + "GNUmakefile", "WorkflowDesk_OBJC_FILES")             # X.m
+# Where a GNUmakefile names a file's GNUstep half (X-GNUstep.m), the Xcode
+# target compiles its Apple half (X-Apple.m): the updater, Sparkle's here.
+def apple(paths):
+    return [p.replace("-GNUstep.m", "-Apple.m") for p in paths]
+
+
+DESK_SOURCES = apple(make_list(DESK + "GNUmakefile", "WorkflowDesk_OBJC_FILES"))      # X.m
 DESK_RESOURCES = make_list(DESK + "GNUmakefile", "WorkflowDesk_RESOURCE_FILES")       # Resources/X.xib
 DESK_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESK, "*.h")))
 DESK_TESTS = [t for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
@@ -69,7 +75,7 @@ DESK_TESTED = [t[3:] for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDes
 # WorkflowDesigner (Apps/WorkflowDesigner), over the engine's framework, whose
 # BPMN reader checks what it draws.
 DESIGNER = "Apps/WorkflowDesigner/"
-DESIGNER_SOURCES = make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_OBJC_FILES")
+DESIGNER_SOURCES = apple(make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_OBJC_FILES"))
 DESIGNER_RESOURCES = make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_RESOURCE_FILES")
 DESIGNER_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "*.h")))
 DESIGNER_TEST_FILES = make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_OBJC_FILES")
@@ -131,11 +137,15 @@ def app_file(refs, path):
 
 
 desk_refs = {f: fileref(DESK + f, f, ftype(f)) for f in own(DESK_SOURCES) + DESK_HEADERS + ["WorkflowDesk-Info.plist"]}
-desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), "file.xib") for r in own(DESK_RESOURCES)}
+def restype(name):
+    return {".xib": "file.xib", ".png": "image.png"}.get(os.path.splitext(name)[1], ftype(name))
+
+
+desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), restype(r)) for r in own(DESK_RESOURCES)}
 desk_test_refs = {t: fileref(DESK + "Tests/" + t, t, ftype(t)) for t in DESK_TESTS}
 designer_refs = {f: fileref(DESIGNER + f, f, ftype(f))
                  for f in own(DESIGNER_SOURCES) + DESIGNER_HEADERS + ["WorkflowDesigner-Info.plist"]}
-designer_res_refs = {r: fileref(DESIGNER + r, os.path.basename(r), "file.xib") for r in own(DESIGNER_RESOURCES)}
+designer_res_refs = {r: fileref(DESIGNER + r, os.path.basename(r), restype(r)) for r in own(DESIGNER_RESOURCES)}
 designer_test_refs = {t: fileref(DESIGNER + "Tests/" + t, t, ftype(t)) for t in DESIGNER_TESTS + DESIGNER_TEST_HEADERS}
 
 
@@ -157,14 +167,16 @@ foundation = sdk_framework("Foundation")
 coredata = sdk_framework("CoreData")
 
 
-# A framework another project in the workspace builds: found by name in the
-# build directory, which is what makes Xcode build it first.
+# A framework of a release this builds on (ODataKit's, XFormsKit's): its
+# XCFramework in .deps/, by the version .github/pins.env names
+# (gnustep-release-actions' scripts/deps.sh apple), as Sparkle's.
 def built_framework(name):
-    return add(oid("built", name), name + ".framework", [
+    return add(oid("deps", name), name + ".xcframework", [
         ("isa", "PBXFileReference"),
-        ("explicitFileType", "wrapper.framework"),
-        ("path", name + ".framework"),
-        ("sourceTree", "BUILT_PRODUCTS_DIR"),
+        ("lastKnownFileType", "wrapper.xcframework"),
+        ("name", name + ".xcframework"),
+        ("path", ".deps/%s.xcframework" % name),
+        ("sourceTree", "SOURCE_ROOT"),
     ])
 
 
@@ -175,6 +187,18 @@ httpserverkit = built_framework("HTTPServerKit")
 otelkit = built_framework("OTelKit")
 xformskit = built_framework("XFormsKit")
 xformsdesignkit = built_framework("XFormsDesignKit")
+# DiagramKit: the process diagrams' layout (and, in DiagramKitUI, their canvas).
+diagramkit = built_framework("DiagramKit")
+diagramkitui = built_framework("DiagramKitUI")
+# Sparkle, the apps' updates: its XCFramework in .deps/, by the version
+# .github/pins.env names (gnustep-release-actions' scripts/deps.sh apple).
+sparkle = add(oid("deps", "Sparkle"), "Sparkle.xcframework", [
+    ("isa", "PBXFileReference"),
+    ("lastKnownFileType", "wrapper.xcframework"),
+    ("name", "Sparkle.xcframework"),
+    ("path", ".deps/Sparkle.xcframework"),
+    ("sourceTree", "SOURCE_ROOT"),
+])
 appkit = sdk_framework("AppKit")
 
 
@@ -302,7 +326,9 @@ d_frameworks = phase("PBXFrameworksBuildPhase", "PurchaseRequestDemo", "Framewor
     [buildfile("PurchaseRequestDemo", p_fw, "WorkflowKit.framework")]))
 
 DESK_FRAMEWORKS = [(odatakit, "ODataKit.framework"), (odatastore, "ODataIncrementalStore.framework"),
-                   (otelkit, "OTelKit.framework"), (xformskit, "XFormsKit.framework")]
+                   (otelkit, "OTelKit.framework"), (xformskit, "XFormsKit.framework"),
+                   (diagramkit, "DiagramKit.framework"), (diagramkitui, "DiagramKitUI.framework"),
+                   (sparkle, "Sparkle.xcframework")]
 w_sources = phase("PBXSourcesBuildPhase", "WorkflowDesk", "Sources", names(
     [buildfile("WorkflowDesk", app_file(desk_refs, f), os.path.basename(f)) for f in DESK_SOURCES]))
 w_resources = phase("PBXResourcesBuildPhase", "WorkflowDesk", "Resources", names(
@@ -357,7 +383,9 @@ wg_resources = phase("PBXResourcesBuildPhase", "WorkflowDesigner", "Resources", 
 # The server's API, as WorkflowDesk opens it; and XFormsKit's form editor.
 DESIGNER_FRAMEWORKS = [(p_fw, "WorkflowKit.framework"), (odatakit, "ODataKit.framework"),
                        (odatastore, "ODataIncrementalStore.framework"), (otelkit, "OTelKit.framework"),
-                       (xformskit, "XFormsKit.framework"), (xformsdesignkit, "XFormsDesignKit.framework")]
+                       (xformskit, "XFormsKit.framework"), (xformsdesignkit, "XFormsDesignKit.framework"),
+                       (diagramkit, "DiagramKit.framework"), (diagramkitui, "DiagramKitUI.framework"),
+                       (sparkle, "Sparkle.xcframework")]
 wg_model = model_phase("WorkflowDesigner")
 wg_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesigner", "Frameworks", names(
     [buildfile("WorkflowDesigner", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
@@ -378,7 +406,8 @@ gt_sources = phase("PBXSourcesBuildPhase", "WorkflowDesignerTests", "Sources", n
     [buildfile("WorkflowDesignerTests", designer_test_refs[t], t) for t in DESIGNER_TESTS] +
     [buildfile("WorkflowDesignerTests", app_file(designer_refs, f), os.path.basename(f)) for f in DESIGNER_TESTED]))
 gt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesignerTests", "Frameworks", names(
-    [buildfile("WorkflowDesignerTests", p_fw, "WorkflowKit.framework")]))
+    [buildfile("WorkflowDesignerTests", p_fw, "WorkflowKit.framework"),
+     buildfile("WorkflowDesignerTests", diagramkit, "DiagramKit.framework")]))
 
 
 # ---------------------------------------------------------------- groups
@@ -423,7 +452,7 @@ g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/C
 g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_plugin, p_desk,
                                             p_desk_tests, p_designer, p_designer_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
-                                                  httpserverkit, otelkit, xformskit])
+                                                  httpserverkit, otelkit, xformskit, diagramkit, diagramkitui, sparkle])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
                [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_apps, g_configs,
                 g_frameworks, g_products])
@@ -504,9 +533,6 @@ DESK_S = {
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
     # The model's compiling script writes into the app.
     "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
-    # XFormsKit's framework carries no headers: its apps, like this one on
-    # GNUstep, include them from its tree.
-    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/../XFormsKit/Sources", "$(SRCROOT)/../XFormsKit/Sources/XFormsKit")',
 }
 DESK_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDeskTests",
@@ -523,10 +549,6 @@ DESIGNER_S = {
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
     # The model's compiling script writes into the app.
     "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
-    # XFormsKit's frameworks carry no headers, the form editor's either.
-    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/../XFormsKit/Sources", "$(SRCROOT)/../XFormsKit/Sources/XFormsKit", '
-                           '"$(SRCROOT)/../XFormsKit/Sources/XFormsDesignKit", '
-                           '"$(SRCROOT)/../XFormsKit/Sources/XFormsDesignKit/ThirdParty/DMTabBar")',
 }
 DESIGNER_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesignerTests",
@@ -729,21 +751,8 @@ scheme("wf-serve", [plugin_ref, serve_ref], run=serve_ref, directory="$(PROJECT_
        arguments=["-Config Examples/server.plist", "-Plugins $(BUILT_PRODUCTS_DIR)"])
 desk_ref = ref(t_desk, "WorkflowDesk", "WorkflowDesk.app")
 desk_tests_ref = ref(t_desk_tests, "WorkflowDeskTests", "WorkflowDeskTests.xctest")
-# The frameworks of the projects beside this one that the app embeds, built
-# first by name: the IDE does not always find them as implicit dependencies,
-# and then compiles the app before their headers are there. Their targets'
-# ids are fixed in those projects.
-DESK_EXTERNAL = [
-    ref("AA0000000000000000000006", "ODataKit", "ODataKit.framework", ODATAKIT + "/ODataKit.xcodeproj"),
-    ref("AA0000000000000000000002", "ODataIncrementalStore", "ODataIncrementalStore.framework",
-        ODATAKIT + "/ODataKit.xcodeproj"),
-    ref("4CBB61F9CEEAF8A9C5A1F7CF", "OTelKit", "OTelKit.framework", ODATAKIT + "/ODataKit.xcodeproj"),
-    ref("EE0000010000000000000001", "XFormsKit", "XFormsKit.framework", "../XFormsKit/XFormsKit.xcodeproj"),
-]
-scheme("WorkflowDesk", DESK_EXTERNAL + [desk_ref], test=desk_tests_ref, run=desk_ref)
+scheme("WorkflowDesk", [desk_ref], test=desk_tests_ref, run=desk_ref)
 designer_ref = ref(t_designer, "WorkflowDesigner", "WorkflowDesigner.app")
 designer_tests_ref = ref(t_designer_tests, "WorkflowDesignerTests", "WorkflowDesignerTests.xctest")
-scheme("WorkflowDesigner", DESK_EXTERNAL + [
-    ref("DK0000000000000000000001", "XFormsDesignKit", "XFormsDesignKit.framework", "../XFormsKit/XFormsKit.xcodeproj"),
-    fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
+scheme("WorkflowDesigner", [fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
 print("wrote", proj)

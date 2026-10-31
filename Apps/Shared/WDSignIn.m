@@ -6,11 +6,7 @@
 #import "ODataTransport.h"
 #import "ODataSchema.h"
 #endif
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#import "WDSockets.h"
 #ifdef __APPLE__
 #include <CommonCrypto/CommonDigest.h>
 #else
@@ -162,13 +158,13 @@ WDQueryItems(NSURLComponents *components)
 
 @implementation WDLoopback
 {
-	int _socket;
+	WDSocket _socket;
 }
 
 - (instancetype)init
 {
 	if ((self = [super init])) {
-		_socket = -1;
+		_socket = WDInvalidSocket;
 	}
 	return self;
 }
@@ -180,45 +176,37 @@ WDQueryItems(NSURLComponents *components)
 
 - (void)close
 {
-	if (_socket >= 0) {
-		close(_socket);
-		_socket = -1;
+	if (_socket != WDInvalidSocket) {
+		WDSocketClose(_socket);
+		_socket = WDInvalidSocket;
 	}
 }
 
 - (BOOL)listen:(NSError **)error
 {
-	_socket = socket(AF_INET, SOCK_STREAM, 0);
-	struct sockaddr_in address;
-	memset(&address, 0, sizeof address);
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	address.sin_port = 0;
-	socklen_t length = sizeof address;
-	if (_socket < 0 || bind(_socket, (struct sockaddr *)&address, sizeof address) != 0
-	    || listen(_socket, 4) != 0 || getsockname(_socket, (struct sockaddr *)&address, &length) != 0) {
+	uint16_t port = 0;
+	_socket = WDSocketListenOnLoopback(&port);
+	if (_socket == WDInvalidSocket) {
 		if (error != NULL) {
 			*error = WDError(WDSignInErrorNetwork, [NSString stringWithFormat:
-				@"Could not listen on 127.0.0.1 for the browser's return (%s).", strerror(errno)]);
+				@"Could not listen on 127.0.0.1 for the browser's return (%@).", WDSocketLastError()]);
 		}
-		[self close];
 		return NO;
 	}
 	_redirectURL = [NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:%u/callback",
-		(unsigned)ntohs(address.sin_port)]];
+		(unsigned)port]];
 	return YES;
 }
 
 /* Polls a while for fd to be readable, minding cancel. */
-- (BOOL)waitForInput:(int)fd until:(NSDate *)deadline
+- (BOOL)waitForInput:(WDSocket)fd until:(NSDate *)deadline
 {
 	while (!self.cancelled && [deadline timeIntervalSinceNow] > 0) {
-		struct pollfd ready = { fd, POLLIN, 0 };
-		int count = poll(&ready, 1, 250);
-		if (count > 0) {
+		int ready = WDSocketWaitReadable(fd, 250);
+		if (ready > 0) {
 			return YES;
 		}
-		if (count < 0 && errno != EINTR) {
+		if (ready < 0) {
 			return NO;
 		}
 	}
@@ -226,7 +214,7 @@ WDQueryItems(NSURLComponents *components)
 }
 
 static void
-WDSend(int fd, NSString *status, NSString *body)
+WDSend(WDSocket fd, NSString *status, NSString *body)
 {
 	NSData *content = [body dataUsingEncoding:NSUTF8StringEncoding];
 	NSString *head = [NSString stringWithFormat:@"HTTP/1.1 %@\r\nContent-Type: text/html; charset=utf-8\r\n"
@@ -237,11 +225,7 @@ WDSend(int fd, NSString *status, NSString *body)
 	const char *bytes = [response bytes];
 	size_t left = [response length];
 	while (left > 0) {
-#ifdef MSG_NOSIGNAL
-		ssize_t sent = send(fd, bytes, left, MSG_NOSIGNAL);
-#else
-		ssize_t sent = send(fd, bytes, left, 0);
-#endif
+		ssize_t sent = WDSocketSend(fd, bytes, left);
 		if (sent <= 0) {
 			break;
 		}
@@ -270,14 +254,10 @@ WDPage(NSString *title, NSString *text)
 {
 	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
 	while ([self waitForInput:_socket until:deadline]) {
-		int client = accept(_socket, NULL, NULL);
-		if (client < 0) {
+		WDSocket client = WDSocketAccept(_socket);
+		if (client == WDInvalidSocket) {
 			continue;
 		}
-#ifdef SO_NOSIGPIPE
-		int on = 1;
-		setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof on);
-#endif
 		NSMutableData *request = [NSMutableData data];
 		NSData *end = [@"\r\n\r\n" dataUsingEncoding:NSASCIIStringEncoding];
 		NSDate *patience = [NSDate dateWithTimeIntervalSinceNow:10];
@@ -285,7 +265,7 @@ WDPage(NSString *title, NSString *text)
 		       && [request rangeOfData:end options:0 range:NSMakeRange(0, [request length])].location == NSNotFound
 		       && [self waitForInput:client until:patience]) {
 			char buffer[2048];
-			ssize_t count = recv(client, buffer, sizeof buffer, 0);
+			ssize_t count = WDSocketReceive(client, buffer, sizeof buffer);
 			if (count <= 0) {
 				break;
 			}
@@ -298,7 +278,7 @@ WDPage(NSString *title, NSString *text)
 			: nil;
 		if (![[line firstObject] isEqualToString:@"GET"] || ![[target path] isEqualToString:@"/callback"]) {
 			WDSend(client, @"404 Not Found", WDPage(@"Not found", @"WorkflowDesk is waiting for a sign-in."));
-			close(client);
+			WDSocketClose(client);
 			continue;
 		}
 		NSDictionary *query = WDQueryItems(target);
@@ -307,7 +287,7 @@ WDPage(NSString *title, NSString *text)
 		} else {
 			WDSend(client, @"200 OK", WDPage(@"Signed in", @"You can close this page and return to WorkflowDesk."));
 		}
-		close(client);
+		WDSocketClose(client);
 		return query;
 	}
 	if (error != NULL) {
