@@ -37,6 +37,7 @@ WorkflowDesk_OBJC_FILES = \
 	WDOperationsWindowController.m \
 	../Shared/WDSession.m \
 	../Shared/WDSignIn.m \
+	../Shared/WDSockets-posix.m \
 	../Shared/WDTracing.m \
 	../Shared/WKDUpdater-GNUstep.m \
 	WDTasksWindowController.m
@@ -67,6 +68,12 @@ override XFORMSKIT := $(abspath $(XFORMSKIT))
 WorkflowDesk_INCLUDE_DIRS += -I$(XFORMSKIT)/Sources -I$(XFORMSKIT)/Sources/XFormsKit
 WorkflowDesk_LIB_DIRS += -L$(XFORMSKIT)/XFormsKit.framework/Versions/Current
 XFORMSKIT_LIBRARY_PATH = $(XFORMSKIT)/XFormsKit.framework/Versions/Current:
+endif
+
+# Sockets for signing in (../Shared/WDSockets.h): Winsock's on Windows.
+ifneq ($(filter mingw% windows%,$(GNUSTEP_TARGET_OS)),)
+WorkflowDesk_OBJC_FILES := $(subst WDSockets-posix.m,WDSockets-windows.m,$(WorkflowDesk_OBJC_FILES))
+WorkflowDesk_GUI_LIBS += -lws2_32
 endif
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make

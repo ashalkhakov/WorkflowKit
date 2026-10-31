@@ -16,6 +16,7 @@
 		0862F251875882E6A92E34BF /* WFExternalTaskService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 7A577AA1A65296CA1B70B333 /* WFExternalTaskService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		0920F0706741DCC202158D0B /* WFFeelHighlight.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 6CF02E9DA91CFF81CC4D1652 /* WFFeelHighlight.m */; };
 		093549C7715808C0792C76ED /* WKDDeploymentTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 5ADEA80CC3DDC83E359C64A1 /* WKDDeploymentTests.m */; };
+		0997E98154D5CBD0CFCC88E1 /* WDSockets-posix.m in WorkflowDeskTests */ = { isa = PBXBuildFile; fileRef = 12F1728DC8C53FC608096CEB /* WDSockets-posix.m */; };
 		0A9242E7A08E50D314BE27FA /* WKDCanvasView.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = EA3CFA9063A06159975FB60C /* WKDCanvasView.m */; };
 		0C04DCF55A68A4700B72AF65 /* WKDDecisions.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = D9D435707CF73CEF47005164 /* WKDDecisions.m */; };
 		0C5E0A4FDDFDBF2AE434F855 /* WFCondition.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = FC5C70D77DBA9E9AEAB0900D /* WFCondition.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -179,6 +180,7 @@
 		C85D4A1A06AB8A0FEF3CE655 /* WDOperationsWindowController.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 0D1FB1C599D4D34F84B4390A /* WDOperationsWindowController.m */; };
 		C9BC57AD27B47C31FE88259B /* WKDEditor.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 08C32B435BCEC2F67BFB8754 /* WKDEditor.m */; };
 		C9E1E42267E920663F62226B /* WorkflowDesigner.png in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 43A7BA4462DDF908263C0FAA /* WorkflowDesigner.png */; };
+		CA529E2F85C4DAB4F71380BF /* WDSockets-posix.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 12F1728DC8C53FC608096CEB /* WDSockets-posix.m */; };
 		CAC7B143B70B350B7A8CCF88 /* WKDLayout.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 5559340D0975380CE5724634 /* WKDLayout.m */; };
 		CBC9C00AF7F3D2CE553F89EC /* WFHandlers.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 7FA7333994D222D02A271C2E /* WFHandlers.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		CD71BCC5D2D5A1F9BA4918A7 /* WFDecisionService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = A89B0E83D105E87C5D232DBA /* WFDecisionService.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -203,6 +205,7 @@
 		DEEBF07E0D45051CE12E8695 /* ODataKit.framework in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = F308B2510F1C0D890B6F2016 /* ODataKit.framework */; };
 		E072A4F861AED46DD3E26589 /* WKDLayoutTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = E429B6036062E322C41BF768 /* WKDLayoutTests.m */; };
 		E1C91F3206430D02AF4FAADD /* WKDPaletteView.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = F54E7C8C6697D42F4C535A11 /* WKDPaletteView.m */; };
+		E30B3BD666F6565960E1D104 /* WDSockets-posix.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 12F1728DC8C53FC608096CEB /* WDSockets-posix.m */; };
 		E491A232D003FCF2C247FE19 /* WFDmn.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 14623503F8D06CC9A54D2436 /* WFDmn.m */; };
 		E5027DAA68766D2C448401A6 /* WDFormDocument.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 0DF9A194328F5C1D79DAEA7E /* WDFormDocument.m */; };
 		E541394DA073CBB8065F89A7 /* DesignerWindow.xib in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 6F5AD69F87BAA681C05B9A2A /* DesignerWindow.xib */; };
@@ -343,6 +346,7 @@
 		0FBE0B36CE777D3717DE2714 /* WFCompensationTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFCompensationTests.inc; sourceTree = "<group>"; };
 		0FE395E00ECEDFAAD2E5175F /* WFExpressionTextTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFExpressionTextTests.m; sourceTree = "<group>"; };
 		1289DE37EC202E36DE9793B1 /* WFTaskQuery.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFTaskQuery.h; sourceTree = "<group>"; };
+		12F1728DC8C53FC608096CEB /* WDSockets-posix.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "WDSockets-posix.m"; sourceTree = "<group>"; };
 		14623503F8D06CC9A54D2436 /* WFDmn.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDmn.m; sourceTree = "<group>"; };
 		14C3A8952B45C2F1F18C2F0A /* WFBpmn.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFBpmn.h; sourceTree = "<group>"; };
 		153EB9D97DC2549983EE37E9 /* WFProcessDefinition.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFProcessDefinition.m; sourceTree = "<group>"; };
@@ -454,6 +458,7 @@
 		80D5AF64D40A221F0EEE27D6 /* WKDExpressionField.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WKDExpressionField.h; sourceTree = "<group>"; };
 		8106FE300C5479A2FB0A9A8C /* WKDEditor+Lanes.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "WKDEditor+Lanes.m"; sourceTree = "<group>"; };
 		825D48990A3A486FE7FE5C59 /* WFDelegationTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFDelegationTests.inc; sourceTree = "<group>"; };
+		8270004339717ADBF7BD0A4C /* WDSockets.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WDSockets.h; sourceTree = "<group>"; };
 		82A4864EAEF5AEB472FAF8F3 /* WFSQLiteTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFSQLiteTests.m; sourceTree = "<group>"; };
 		82A9264CEF1DD63DE1DC4914 /* WFTypes.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFTypes.h; sourceTree = "<group>"; };
 		82F51E4810BFBB8BEAC2202C /* ODataIncrementalStore.framework */ = { isa = PBXFileReference; explicitFileType = wrapper.framework; path = ODataIncrementalStore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -465,6 +470,7 @@
 		8723624EFFEBCFE763304089 /* WKDDecisionWindowController.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WKDDecisionWindowController.m; sourceTree = "<group>"; };
 		87B97A6D8F35B48ABF6277B7 /* WDAppDelegate.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WDAppDelegate.m; sourceTree = "<group>"; };
 		881CCFC8447B7FFD030F2456 /* WDFormWindowController.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WDFormWindowController.h; sourceTree = "<group>"; };
+		8826FE6E0A2F7F3089F1E77E /* WDSockets-windows.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "WDSockets-windows.m"; sourceTree = "<group>"; };
 		88DFC0BF478C3BD323EE97EB /* FormWindow.xib */ = { isa = PBXFileReference; lastKnownFileType = file.xib; path = FormWindow.xib; sourceTree = "<group>"; };
 		8934E1B4B99F564C935EC08A /* WFConditionalEventTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFConditionalEventTests.inc; sourceTree = "<group>"; };
 		8A35C88BF4743A10FE106DEA /* WKDExpressionField.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WKDExpressionField.m; sourceTree = "<group>"; };
@@ -1006,6 +1012,9 @@
 				8D3C24F630F8E8E305757691 /* WDSession.m */,
 				339028922FAD5135DC942AFC /* WDSignIn.h */,
 				DF787AED42FA4250E0E11D3C /* WDSignIn.m */,
+				8270004339717ADBF7BD0A4C /* WDSockets.h */,
+				12F1728DC8C53FC608096CEB /* WDSockets-posix.m */,
+				8826FE6E0A2F7F3089F1E77E /* WDSockets-windows.m */,
 				6DF5A5ED520E75FD86FE21B0 /* WDTracing.h */,
 				67B24703A45CD039231852E6 /* WDTracing.m */,
 				3C697DF2959F5EFF7661EBED /* WKDDiagram.h */,
@@ -1426,6 +1435,7 @@
 				29571E3FA4A2284491FF9128 /* WDEntities.m in WorkflowDesigner */,
 				0534C1B5539022A05AC638A2 /* WDSession.m in WorkflowDesigner */,
 				1877C754F8D816156BE7DC22 /* WDSignIn.m in WorkflowDesigner */,
+				E30B3BD666F6565960E1D104 /* WDSockets-posix.m in WorkflowDesigner */,
 				A7477E4619ED773905063E23 /* WDTracing.m in WorkflowDesigner */,
 				3774879A616F91FAF8300C43 /* WKDUpdater-Apple.m in WorkflowDesigner */,
 			);
@@ -1504,6 +1514,7 @@
 				46CD7048FE43619048300A74 /* WDSignInTests.m in WorkflowDeskTests */,
 				9B6BEA4B264560C65141C4A1 /* WDFormDocument.m in WorkflowDeskTests */,
 				347FC2EA91986FDA48740F12 /* WDSignIn.m in WorkflowDeskTests */,
+				0997E98154D5CBD0CFCC88E1 /* WDSockets-posix.m in WorkflowDeskTests */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1568,6 +1579,7 @@
 				C85D4A1A06AB8A0FEF3CE655 /* WDOperationsWindowController.m in WorkflowDesk */,
 				916196146375DE626035F4DE /* WDSession.m in WorkflowDesk */,
 				303EB6F40FAEAAC7E0A60D5B /* WDSignIn.m in WorkflowDesk */,
+				CA529E2F85C4DAB4F71380BF /* WDSockets-posix.m in WorkflowDesk */,
 				6BE33E52911C4843D9008F07 /* WDTracing.m in WorkflowDesk */,
 				8F01D1F389FB4DE08CE31809 /* WKDUpdater-Apple.m in WorkflowDesk */,
 				79364317002E8ACB80D714DB /* WDTasksWindowController.m in WorkflowDesk */,

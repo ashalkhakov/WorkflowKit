@@ -8,6 +8,7 @@ BUNDLE_NAME = WorkflowDeskTests
 WorkflowDeskTests_OBJC_FILES = \
 	../WDFormDocument.m \
 	../../Shared/WDSignIn.m \
+	../../Shared/WDSockets-posix.m \
 	WDFormDocumentTests.m \
 	WDSignInTests.m
 
@@ -21,6 +22,12 @@ ODATAKIT_LIBRARY_PATH = $(ODATAKIT)/obj:
 endif
 WorkflowDeskTests_BUNDLE_LIBS += -lODataKit -lXCTest -ldispatch -lgnutls
 WorkflowDeskTests_NEEDS_GUI = no
+
+# Sockets for signing in (../Shared/WDSockets.h): Winsock's on Windows.
+ifneq ($(filter mingw% windows%,$(GNUSTEP_TARGET_OS)),)
+WorkflowDeskTests_OBJC_FILES := $(subst WDSockets-posix.m,WDSockets-windows.m,$(WorkflowDeskTests_OBJC_FILES))
+WorkflowDeskTests_BUNDLE_LIBS += -lws2_32
+endif
 
 include $(GNUSTEP_MAKEFILES)/bundle.make
 

@@ -63,6 +63,7 @@ WorkflowDesigner_OBJC_FILES = \
 	../Shared/WDEntities.m \
 	../Shared/WDSession.m \
 	../Shared/WDSignIn.m \
+	../Shared/WDSockets-posix.m \
 	../Shared/WDTracing.m \
 	../Shared/WKDUpdater-GNUstep.m
 
@@ -97,6 +98,12 @@ XFORMSKIT_LIBRARY_PATH = $(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/C
 endif
 WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lODataIncrementalStore -lODataKit -lOTelKit \
 	-lXFormsDesignKit -lXFormsKit -lGSUpdater -lCoreData -ldispatch -lgnutls
+
+# Sockets for signing in (../Shared/WDSockets.h): Winsock's on Windows.
+ifneq ($(filter mingw% windows%,$(GNUSTEP_TARGET_OS)),)
+WorkflowDesigner_OBJC_FILES := $(subst WDSockets-posix.m,WDSockets-windows.m,$(WorkflowDesigner_OBJC_FILES))
+WorkflowDesigner_GUI_LIBS += -lws2_32
+endif
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 include $(GNUSTEP_MAKEFILES)/application.make
