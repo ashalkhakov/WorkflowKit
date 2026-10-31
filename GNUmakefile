@@ -1,11 +1,18 @@
 # WorkflowKit on GNUstep.
 #
-#   make                 the library, obj/libWorkflowKit.so
+#   make                 the library, obj/libWorkflowKit.so; with ODataKit
+#                        installed (or ODATAKIT, below) its OData API,
+#                        wf-serve (Server/) and the apps (Apps/) too
+#   make check           the XCTest suite, on every store there is a server
+#                        for; wf-serve over HTTP; the apps' tests; the demo
+#   make install         the library, and wf-serve and the apps
 #   make examples        the demo tools in Examples/
 #   make test            the library, then the XCTest suite (tools-xctest)
 #
-# Built against the patched stack from ../gnustep-patches, never a distro
-# GNUstep: see CLAUDE.md for the docker box and CI for the pinned recipe.
+# Built against the patched GNUstep stack and the releases of FreeCoreData,
+# ODataKit and XFormsKit that .github/pins.env names, which
+# gnustep-release-actions' scripts/deps.sh unpacks into /opt/gnustep (CI,
+# .github/workflows/build.yml); see CLAUDE.md for the docker box.
 #
 # A library rather than a framework, like RDLKit: on GNUstep a framework puts
 # its binary under WorkflowKit.framework/Versions/<v>/<target>/, which every
@@ -89,9 +96,16 @@ WorkflowKit_HAS_RESOURCE_BUNDLE = yes
 #
 #   make ODATAKIT=../ODataStore      (after make in ../ODataStore)
 #   make test ODATAKIT=../ODataStore
+#
+# An installed ODataKit (its ODataService headers) builds them as well.
 ifneq ($(ODATAKIT),)
 override ODATAKIT := $(abspath $(ODATAKIT))
 odata = yes
+endif
+ifeq ($(odata),)
+ifneq ($(wildcard $(GNUSTEP_LOCAL_HEADERS)/ODataService $(GNUSTEP_SYSTEM_HEADERS)/ODataService),)
+odata = yes
+endif
 endif
 export ODATAKIT odata
 ifeq ($(odata),yes)
@@ -120,11 +134,50 @@ include $(GNUSTEP_MAKEFILES)/coredata-model.make
 
 include $(GNUSTEP_MAKEFILES)/library.make
 
+# wf-serve with FreeCoreData's PostgreSQL and MySQL stores, where they are
+# installed (FREECOREDATA_PARTS in .github/pins.env).
+ifneq ($(wildcard $(GNUSTEP_LOCAL_LIBRARIES)/libCDPostgreSQLStore*),)
+postgresql ?= yes
+endif
+ifneq ($(wildcard $(GNUSTEP_LOCAL_LIBRARIES)/libCDMySQLStore*),)
+mysql ?= yes
+endif
+export postgresql mysql
+
+# The tests' databases: gnustep-release-actions' databases.sh names its
+# servers POSTGRES_URL and MYSQL_URL.
+export WORKFLOWKIT_TEST_POSTGRES_URL ?= $(POSTGRES_URL)
+export WORKFLOWKIT_TEST_MYSQL_URL ?= $(MYSQL_URL)
+
+# wf-serve and the apps, over the OData API.
+WF_PARTS = $(if $(filter yes,$(odata)),Server Apps/WorkflowDesk Apps/WorkflowDesigner)
+
+after-all::
+	@for part in $(WF_PARTS); do $(MAKE) -C $$part || exit 1; done
+
+after-install::
+	@for part in $(WF_PARTS); do $(MAKE) -C $$part install || exit 1; done
+
+after-clean::
+	@for part in $(WF_PARTS) Tests Examples Examples/Plugins; do $(MAKE) -C $$part clean || exit 1; done
+
+check:: all
+	$(MAKE) -C Tests run-tests
+	$(MAKE) examples
+ifeq ($(odata),yes)
+	$(MAKE) -C Examples/Plugins
+	$(MAKE) -C Server check
+	$(MAKE) -C Apps/WorkflowDesk check
+	$(MAKE) -C Apps/WorkflowDesigner check
+	$(MAKE) -C Apps/WorkflowDesigner/Tools
+endif
+	timeout 120 $(MAKE) -C Examples run
+
 .PHONY: examples test server
 examples: all
 	$(MAKE) -C Examples
 
-# wf-serve (Server/), with the OData API: needs ODATAKIT.
+# wf-serve (Server/), with the OData API.
 server: all
 	$(MAKE) -C Server
 

@@ -1,0 +1,37 @@
+name: Build
+
+# WorkflowKit, built, tested and installed the familiar way (make, make
+# check, make install) by gnustep-release-actions' workflows, the same as
+# every repository's: the engine library, its OData API, wf-serve and the
+# apps, WorkflowDesk and WorkflowDesigner. The tests run on every store the
+# engine can use: in memory, SQLite, and FreeCoreData's PostgreSQL and MySQL
+# stores against the servers the workflow starts (databases). What it builds
+# on is in .github/pins.env.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'A v* tag to build and release (empty: this branch, as artifacts)'
+        required: false
+        default: ''
+
+# Pushes only: a push to a branch already shows its checks on the branch's
+# pull request. A newer push supersedes the run before it; a release is
+# never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    uses: ashalkhakov/gnustep-release-actions/.github/workflows/linux.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      extra-packages: libsqlite3-dev libpq-dev libmariadb-dev
+      databases: postgres mysql

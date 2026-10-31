@@ -1,19 +1,19 @@
 # WorkflowDesk on GNUstep: the task list and operations app, a client of
-# wf-serve's OData API. Needs gnustep-gui, FreeCoreData installed (with
-# momc), and built checkouts of ODataKit and XFormsKit:
+# wf-serve's OData API. Needs gnustep-gui, FreeCoreData (with momc),
+# ODataKit and XFormsKit installed (the releases .github/pins.env names), or
+# built checkouts of the last two that ODATAKIT and XFORMSKIT name:
 #
-#   make -C $ODATAKIT && make -C $XFORMSKIT
-#   make ODATAKIT=$ODATAKIT XFORMSKIT=$XFORMSKIT          # WorkflowDesk.app
-#   make ODATAKIT=... XFORMSKIT=... run                   # open it
-#   make ODATAKIT=... check                               # its tests
+#   make                                                  # WorkflowDesk.app
+#   make ODATAKIT=$ODATAKIT XFORMSKIT=$XFORMSKIT          # against checkouts
+#   make run                                              # open it
+#   make check                                            # its tests
 #
 # Its model is the engine's, compiled from ../../Model into its resources.
 include $(GNUSTEP_MAKEFILES)/common.make
 
-ifeq ($(ODATAKIT),)
-$(error Set ODATAKIT to a built ODataKit checkout)
-endif
+ifneq ($(ODATAKIT),)
 override ODATAKIT := $(abspath $(ODATAKIT))
+endif
 export ODATAKIT
 
 APP_NAME = WorkflowDesk
@@ -50,29 +50,26 @@ WorkflowDesk_RESOURCE_FILES = \
 WorkflowDesk_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 
 WorkflowDesk_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include WKDGNUstepCompat.h
-WorkflowDesk_INCLUDE_DIRS = -I../Shared \
+WorkflowDesk_INCLUDE_DIRS = -I../Shared
+WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lOTelKit -lXFormsKit -lCoreData -ldispatch -lgnutls
+ifneq ($(ODATAKIT),)
+WorkflowDesk_INCLUDE_DIRS += \
 	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \
 	-I$(ODATAKIT)/Source/OTelKit/include
-WorkflowDesk_LIB_DIRS = -L$(ODATAKIT)/obj
-WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lOTelKit -lCoreData -ldispatch -lgnutls
-
+WorkflowDesk_LIB_DIRS += -L$(ODATAKIT)/obj
+ODATAKIT_LIBRARY_PATH = $(ODATAKIT)/obj:
+endif
 ifneq ($(XFORMSKIT),)
 override XFORMSKIT := $(abspath $(XFORMSKIT))
 WorkflowDesk_INCLUDE_DIRS += -I$(XFORMSKIT)/Sources -I$(XFORMSKIT)/Sources/XFormsKit
 WorkflowDesk_LIB_DIRS += -L$(XFORMSKIT)/XFormsKit.framework/Versions/Current
-WorkflowDesk_GUI_LIBS += -lXFormsKit
 XFORMSKIT_LIBRARY_PATH = $(XFORMSKIT)/XFormsKit.framework/Versions/Current:
 endif
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 include $(GNUSTEP_MAKEFILES)/application.make
 
-ifeq ($(XFORMSKIT),)
-before-all::
-	@echo "Set XFORMSKIT to a built XFormsKit checkout" >&2; exit 1
-endif
-
-export LD_LIBRARY_PATH := $(ODATAKIT)/obj:$(XFORMSKIT_LIBRARY_PATH)$(LD_LIBRARY_PATH)
+export LD_LIBRARY_PATH := $(ODATAKIT_LIBRARY_PATH)$(XFORMSKIT_LIBRARY_PATH)$(LD_LIBRARY_PATH)
 
 .PHONY: run check
 run: all

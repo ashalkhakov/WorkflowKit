@@ -2,28 +2,32 @@
 # gnustep-gui, the engine library, built at the top of this repository
 # (`make`), whose reader checks that the process is one the engine runs,
 # and -- to deploy, and to open what is deployed -- FreeCoreData installed
-# (with momc) and a built ODataKit checkout, as WorkflowDesk does; and, to
-# edit forms, a built XFormsKit checkout with its XFormsDesignKit (`make
-# designkit` in it), whose editor opens a process's forms in this app:
+# (with momc) and ODataKit, as WorkflowDesk does; and, to edit forms,
+# XFormsKit with its XFormsDesignKit, whose editor opens a process's forms
+# in this app. Installed (the releases .github/pins.env names), or built
+# checkouts that ODATAKIT and XFORMSKIT name (`make designkit` in the
+# latter):
 #
-#   make ODATAKIT=$ODATAKIT XFORMSKIT=$XFORMSKIT   # WorkflowDesigner.app
-#   make ODATAKIT=... XFORMSKIT=... run            # open it
-#   make ODATAKIT=... XFORMSKIT=... check          # its tests: the document
+#   make                                           # WorkflowDesigner.app
+#   make ODATAKIT=$ODATAKIT XFORMSKIT=$XFORMSKIT   # against checkouts
+#   make run                                       # open it
+#   make check                                     # its tests: the document
 #                                                  # model, edits, layout,
 #                                                  # deployments
 include $(GNUSTEP_MAKEFILES)/common.make
 
-ifeq ($(ODATAKIT),)
-$(error Set ODATAKIT to a built ODataKit checkout)
-endif
+ifneq ($(ODATAKIT),)
 override ODATAKIT := $(abspath $(ODATAKIT))
-export ODATAKIT
-ifeq ($(XFORMSKIT),)
-$(error Set XFORMSKIT to a built XFormsKit checkout, its XFormsDesignKit made)
 endif
+export ODATAKIT
+ifneq ($(XFORMSKIT),)
 override XFORMSKIT := $(abspath $(XFORMSKIT))
-export XFORMSKIT
 XFORMSDESIGNKIT = $(XFORMSKIT)/Sources/XFormsDesignKit
+else
+# Installed, its headers are laid out as in its tree.
+XFORMSDESIGNKIT = $(GNUSTEP_LOCAL_HEADERS)/XFormsDesignKit
+endif
+export XFORMSKIT
 
 APP_NAME = WorkflowDesigner
 
@@ -73,20 +77,29 @@ WorkflowDesigner_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 WorkflowDesigner_MAIN_MODEL_FILE = MainMenu.xib
 WorkflowDesigner_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include WKDGNUstepCompat.h
 WorkflowDesigner_INCLUDE_DIRS = -I../../Headers -I../Shared \
-	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \
-	-I$(ODATAKIT)/Source/OTelKit/include \
-	-I$(XFORMSKIT)/Sources -I$(XFORMSKIT)/Sources/XFormsKit \
 	-I$(XFORMSDESIGNKIT) -I$(XFORMSDESIGNKIT)/ThirdParty/DMTabBar
-WorkflowDesigner_LIB_DIRS = -L../../$(GNUSTEP_OBJ_DIR) -L$(ODATAKIT)/obj \
+WorkflowDesigner_LIB_DIRS = -L../../$(GNUSTEP_OBJ_DIR)
+ifneq ($(ODATAKIT),)
+WorkflowDesigner_INCLUDE_DIRS += \
+	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \
+	-I$(ODATAKIT)/Source/OTelKit/include
+WorkflowDesigner_LIB_DIRS += -L$(ODATAKIT)/obj
+ODATAKIT_LIBRARY_PATH = $(ODATAKIT)/obj:
+endif
+ifneq ($(XFORMSKIT),)
+WorkflowDesigner_INCLUDE_DIRS += -I$(XFORMSKIT)/Sources -I$(XFORMSKIT)/Sources/XFormsKit
+WorkflowDesigner_LIB_DIRS += \
 	-L$(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current \
 	-L$(XFORMSKIT)/XFormsKit.framework/Versions/Current
+XFORMSKIT_LIBRARY_PATH = $(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current:$(XFORMSKIT)/XFormsKit.framework/Versions/Current:
+endif
 WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lODataIncrementalStore -lODataKit -lOTelKit \
 	-lXFormsDesignKit -lXFormsKit -lCoreData -ldispatch -lgnutls
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 include $(GNUSTEP_MAKEFILES)/application.make
 
-export LD_LIBRARY_PATH := $(CURDIR)/../../$(GNUSTEP_OBJ_DIR):$(ODATAKIT)/obj:$(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current:$(XFORMSKIT)/XFormsKit.framework/Versions/Current:$(LD_LIBRARY_PATH)
+export LD_LIBRARY_PATH := $(CURDIR)/../../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$(XFORMSKIT_LIBRARY_PATH)$(LD_LIBRARY_PATH)
 
 .PHONY: run check
 run: all

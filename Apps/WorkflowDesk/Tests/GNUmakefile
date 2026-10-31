@@ -12,9 +12,13 @@ WorkflowDeskTests_OBJC_FILES = \
 	WDSignInTests.m
 
 WorkflowDeskTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall
-WorkflowDeskTests_INCLUDE_DIRS = -I.. -I../../Shared \
+WorkflowDeskTests_INCLUDE_DIRS = -I.. -I../../Shared
+ifneq ($(ODATAKIT),)
+WorkflowDeskTests_INCLUDE_DIRS += \
 	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include
 ADDITIONAL_LIB_DIRS += -L$(ODATAKIT)/obj
+ODATAKIT_LIBRARY_PATH = $(ODATAKIT)/obj:
+endif
 WorkflowDeskTests_BUNDLE_LIBS += -lODataKit -lXCTest -ldispatch -lgnutls
 WorkflowDeskTests_NEEDS_GUI = no
 
@@ -25,5 +29,5 @@ TEST_TIMEOUT ?= 120
 
 .PHONY: run-tests
 run-tests: all
-	LD_LIBRARY_PATH="$(ODATAKIT)/obj:$$LD_LIBRARY_PATH" \
+	LD_LIBRARY_PATH="$(ODATAKIT_LIBRARY_PATH)$$LD_LIBRARY_PATH" \
 	  timeout -s ABRT $(TEST_TIMEOUT) $(XCTEST) $(BUNDLE_NAME).bundle

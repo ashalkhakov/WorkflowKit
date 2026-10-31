@@ -11,12 +11,13 @@ what the engine loads, persists and fires, and what it rejects.
 ## Build against the patched GNUstep, never a distro one
 
 The stack comes from `../gnustep-patches`, which this machine's GNUstep
-projects share, built by its `Scripts/build-gnustep.sh`. CI checks that
-repository out at the commit pinned by `GNUSTEP_PATCHES_REF` in
-`.github/workflows/ci.yml` and builds what the engine and WorkflowDesk need:
-`libobjc2 libdispatch tools-make libs-base libs-gui libs-back libs-corebase
-libs-opal tools-xctest` (CoreBase and Opal for XFormsKit). `ois-dev` has
-them all.
+projects share, built by its `Scripts/build-gnustep.sh`. CI
+(`.github/workflows/build.yml`, gnustep-release-actions' workflows) unpacks
+its release, and FreeCoreData's, ODataKit's and XFormsKit's, at the exact
+versions `.github/pins.env` names; to move one, edit it there. `ois-dev`
+has the stack's components: `libobjc2 libdispatch tools-make libs-base
+libs-gui libs-back libs-corebase libs-opal tools-xctest` (CoreBase and Opal
+for XFormsKit).
 
 If a bug here turns out to be GNUstep's, work in that repository and read its
 `CLAUDE.md` first: reproduce in the docker container, fix, turn the
@@ -46,7 +47,7 @@ the command there. Against a prefix of your own, source
 roots the gnustep layout knows.
 
 The store is Core Data: FreeCoreData on GNUstep (installed in `ois-dev`,
-built from the pinned `FREECOREDATA_REF` in CI), Apple's on macOS. Its model
+the release `.github/pins.env` names in CI), Apple's on macOS. Its model
 is `Model/WorkflowKit.xcdatamodeld`, compiled by `momc`; edit it there, never
 build a model in code. Its entities' classes are generated from it as the
 library builds -- by Xcode, and on GNUstep by FreeCoreData's
@@ -85,8 +86,9 @@ ODataKit: `ODATAKIT` names a built checkout (`/w/odatakit-*` in
 .tools/gnustep.sh make test ODATAKIT=/w/odatakit-host
 ```
 
-CI builds ODataKit at the commit pinned by `ODATAKIT_REF` in
-`.github/workflows/ci.yml`, and the OData API with it.
+CI installs the ODataKit release `.github/pins.env` names; with it
+installed, `make` builds the OData API, wf-serve and the apps, and `make
+check` runs all their tests.
 
 The engine's server is `WFServerApplication` (`OData/WFODataServer.h`, in
 WorkflowKitOData): an application of ODataKit's HTTPServerKit that opens a
