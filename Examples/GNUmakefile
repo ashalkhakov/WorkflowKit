@@ -16,5 +16,6 @@ include $(GNUSTEP_MAKEFILES)/tool.make
 .PHONY: run
 run: all
 	LD_LIBRARY_PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$$LD_LIBRARY_PATH" \
+	PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$$PATH" \
 	WORKFLOWKIT_MODEL="$(CURDIR)/../WorkflowKit/Versions/0/Resources/WorkflowKit.momd" \
 	  $(GNUSTEP_OBJ_DIR)/PurchaseRequestDemo

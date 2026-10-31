@@ -45,4 +45,5 @@ TEST_TIMEOUT ?= 120
 .PHONY: run-tests
 run-tests: all
 	LD_LIBRARY_PATH="$(CURDIR)/../../../$(GNUSTEP_OBJ_DIR):$$LD_LIBRARY_PATH" \
+	PATH="$(CURDIR)/../../../$(GNUSTEP_OBJ_DIR):$$PATH" \
 	  timeout -s ABRT $(TEST_TIMEOUT) $(XCTEST) $(BUNDLE_NAME).bundle

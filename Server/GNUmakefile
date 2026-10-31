@@ -37,7 +37,9 @@ endif
 include $(GNUSTEP_MAKEFILES)/tool.make
 
 # The uninstalled libraries, and the model the library build compiled.
+# The uninstalled libraries: on LD_LIBRARY_PATH, and on Windows on PATH.
 export LD_LIBRARY_PATH := $(CURDIR)/../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$(LD_LIBRARY_PATH)
+export PATH := $(CURDIR)/../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$(PATH)
 export WORKFLOWKIT_MODEL ?= $(CURDIR)/../WorkflowKit/Versions/0/Resources/WorkflowKit.momd
 
 .PHONY: run check
