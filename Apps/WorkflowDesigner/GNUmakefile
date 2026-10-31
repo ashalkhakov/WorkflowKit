@@ -95,8 +95,9 @@ WorkflowDesigner_LIB_DIRS += \
 	-L$(XFORMSKIT)/XFormsKit.framework/Versions/Current
 XFORMSKIT_LIBRARY_PATH = $(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current:$(XFORMSKIT)/XFormsKit.framework/Versions/Current:
 endif
-# DiagramKit: the process diagram's layout (../Shared/WKDEditor.m).
-WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lDiagramKit -lODataIncrementalStore -lODataKit -lOTelKit \
+# DiagramKit: the process diagram's layout (../Shared/WKDEditor.m); and
+# DiagramKitUI's canvas, which WKDCanvasView is.
+WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lDiagramKitUI -lDiagramKit -lODataIncrementalStore -lODataKit -lOTelKit \
 	-lXFormsDesignKit -lXFormsKit -lGSUpdater -lCoreData -ldispatch -lgnutls
 
 # Sockets for signing in (../Shared/WDSockets.h): Winsock's on Windows.

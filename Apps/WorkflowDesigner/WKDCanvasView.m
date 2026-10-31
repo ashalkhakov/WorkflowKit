@@ -25,6 +25,8 @@ static const double WKDHandle = 7;
 
 @implementation WKDCanvasView
 {
+	/* The ids selected (selection). */
+	NSSet<NSString *> *_picked;
 	WKDGesture _gesture;
 	NSPoint _down;
 	NSPoint _at;
@@ -44,12 +46,19 @@ static const double WKDHandle = 7;
 	BOOL _cancelRenaming;
 }
 
+- (void)setUpCanvas
+{
+	_picked = [NSSet set];
+	_guideX = _guideY = NAN;
+	self.dataSource = self;
+	self.delegate = self;
+	self.margin = WKDRoom;
+}
+
 - (instancetype)initWithFrame:(NSRect)frame
 {
 	if ((self = [super initWithFrame:frame])) {
-		_zoom = 1;
-		_selection = [NSSet set];
-		_guideX = _guideY = NAN;
+		[self setUpCanvas];
 	}
 	return self;
 }
@@ -57,48 +66,19 @@ static const double WKDHandle = 7;
 - (instancetype)initWithCoder:(NSCoder *)coder
 {
 	if ((self = [super initWithCoder:coder])) {
-		_zoom = 1;
-		_selection = [NSSet set];
-		_guideX = _guideY = NAN;
+		[self setUpCanvas];
 	}
 	return self;
 }
 
-- (BOOL)isFlipped
-{
-	return YES;
-}
-
-- (BOOL)acceptsFirstResponder
-{
-	return YES;
-}
-
 #pragma mark Size
 
-/* The diagram's extent with room around it, from the origin at least. */
-- (NSRect)canvasRect
+/* The diagram's extent with room around it; DiagramKit's canvas adds its
+ * margin and fills the scroll view. */
+- (NSRect)diagramBoundsForCanvas:(DKCanvasView *)canvas
 {
 	NSRect content = self.diagram.contentBounds;
-	NSRect canvas = NSMakeRect(0, 0, 1, 1);
-	if (!NSIsEmptyRect(content)) {
-		canvas = NSUnionRect(canvas, NSInsetRect(content, -WKDRoom / 3, -WKDRoom / 3));
-		canvas.size.width += WKDRoom;
-		canvas.size.height += WKDRoom;
-	}
-	NSSize visible = [[self enclosingScrollView] contentSize];
-	canvas.size.width = MAX(NSWidth(canvas), visible.width / _zoom);
-	canvas.size.height = MAX(NSHeight(canvas), visible.height / _zoom);
-	return canvas;
-}
-
-- (void)resize
-{
-	NSRect canvas = [self canvasRect];
-	[self setFrameSize:NSMakeSize(NSWidth(canvas) * _zoom, NSHeight(canvas) * _zoom)];
-	[self setBoundsOrigin:canvas.origin];
-	[self setBoundsSize:canvas.size];
-	[self setNeedsDisplay:YES];
+	return NSIsEmptyRect(content) ? NSZeroRect : NSInsetRect(content, -WKDRoom / 3, -WKDRoom / 3);
 }
 
 - (void)setDiagram:(WKDDiagram *)diagram
@@ -106,31 +86,32 @@ static const double WKDHandle = 7;
 	_diagram = diagram;
 	/* What was selected and is gone is no longer selected. */
 	NSMutableSet *kept = [NSMutableSet set];
-	for (NSString *elementId in _selection) {
+	for (NSString *elementId in _picked) {
 		if ([diagram shapeWithId:elementId] != nil || [diagram connectionWithId:elementId] != nil) {
 			[kept addObject:elementId];
 		}
 	}
-	_selection = kept;
+	_picked = kept;
 	[self keepOrder];
 	if (_renaming != nil && [diagram shapeWithId:_renaming] == nil && [diagram connectionWithId:_renaming] == nil) {
 		[self endRenaming:NO];
 	}
-	[self resize];
+	[self reloadData];
 }
 
-- (void)setZoom:(double)zoom
+/* The selection, in this view's order (orderedSelection): its own, not the
+ * DiagramKit canvas's, whose gestures it does not use. */
+- (NSSet<NSString *> *)selection
 {
-	_zoom = MAX(0.25, MIN(4, zoom));
-	[self resize];
+	return _picked;
 }
 
 - (void)setSelection:(NSSet<NSString *> *)selection
 {
-	_selection = [selection copy] ?: [NSSet set];
+	_picked = [selection copy] ?: [NSSet set];
 	[self keepOrder];
 	[self setNeedsDisplay:YES];
-	[self.delegate canvasSelectionDidChange:self];
+	[self.canvasDelegate canvasSelectionDidChange:self];
 }
 
 /* What stays selected keeps its place; what is new comes after it, in the
@@ -139,17 +120,17 @@ static const double WKDHandle = 7;
 {
 	NSMutableArray *order = [NSMutableArray array];
 	for (NSString *elementId in _order) {
-		if ([_selection containsObject:elementId]) {
+		if ([_picked containsObject:elementId]) {
 			[order addObject:elementId];
 		}
 	}
 	NSMutableArray *added = [NSMutableArray array];
 	for (WKDShape *shape in self.diagram.shapes) {
-		if ([_selection containsObject:shape.elementId] && ![order containsObject:shape.elementId]) {
+		if ([_picked containsObject:shape.elementId] && ![order containsObject:shape.elementId]) {
 			[added addObject:shape.elementId];
 		}
 	}
-	for (NSString *elementId in _selection) {
+	for (NSString *elementId in _picked) {
 		if (![order containsObject:elementId] && ![added containsObject:elementId]) {
 			[added addObject:elementId];
 		}
@@ -275,13 +256,13 @@ static const double WKDHandle = 7;
 /* The one pool or lane selected, if one is. */
 - (WKDLane *)selectedBand
 {
-	return [_selection count] == 1 ? [self.diagram laneWithId:[_selection anyObject]] : nil;
+	return [_picked count] == 1 ? [self.diagram laneWithId:[_picked anyObject]] : nil;
 }
 
 - (WKDConnection *)connectionAt:(NSPoint)point
 {
 	for (WKDConnection *connection in self.diagram.connections) {
-		if (WKDDistanceToPolyline(point, connection.waypoints) < 5 / _zoom) {
+		if (WKDDistanceToPolyline(point, connection.waypoints) < 5 / self.zoom) {
 			return connection;
 		}
 	}
@@ -291,13 +272,13 @@ static const double WKDHandle = 7;
 /* The one shape selected, if one is. */
 - (WKDShape *)selectedShape
 {
-	return [_selection count] == 1 ? [self.diagram shapeWithId:[_selection anyObject]] : nil;
+	return [_picked count] == 1 ? [self.diagram shapeWithId:[_picked anyObject]] : nil;
 }
 
 /* The one flow selected, if one is. */
 - (WKDConnection *)selectedConnection
 {
-	return [_selection count] == 1 ? [self.diagram connectionWithId:[_selection anyObject]] : nil;
+	return [_picked count] == 1 ? [self.diagram connectionWithId:[_picked anyObject]] : nil;
 }
 
 /* The handle a connection is dragged from, beside the selected shape. */
@@ -332,7 +313,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	if (grabbed == nil || !grabbed.hasBounds) {
 		return offset;
 	}
-	double snap = 6 / _zoom, bestX = snap, bestY = snap;
+	double snap = 6 / self.zoom, bestX = snap, bestY = snap;
 	NSPoint centre = NSMakePoint(NSMidX(grabbed.bounds) + offset.width, NSMidY(grabbed.bounds) + offset.height);
 	NSSize snapped = offset;
 	for (WKDShape *other in self.diagram.shapes) {
@@ -378,11 +359,11 @@ WKDPointHandle(NSPoint point, double zoom)
  * or on a selected activity. */
 - (BOOL)isMoving:(WKDShape *)shape
 {
-	if (self.diagram.pool != nil && [_selection containsObject:self.diagram.pool.elementId]) {
+	if (self.diagram.pool != nil && [_picked containsObject:self.diagram.pool.elementId]) {
 		return YES;
 	}
 	for (WKDShape *s = shape; s != nil; s = s.host ?: s.parent) {
-		if ([_selection containsObject:s.elementId]) {
+		if ([_picked containsObject:s.elementId]) {
 			return YES;
 		}
 	}
@@ -396,7 +377,7 @@ WKDPointHandle(NSPoint point, double zoom)
 {
 	NSRect bounds = lane.bounds;
 	WKDLane *pool = self.diagram.pool;
-	if (_gesture == WKDGestureMove && pool != nil && [_selection containsObject:pool.elementId]
+	if (_gesture == WKDGestureMove && pool != nil && [_picked containsObject:pool.elementId]
 	    && (lane == pool || !lane.isPool)) {
 		NSSize offset = [self moveOffset];
 		return NSOffsetRect(bounds, offset.width, offset.height);
@@ -432,7 +413,7 @@ WKDPointHandle(NSPoint point, double zoom)
  * that a segment straight across or up and down is easy to come back to. */
 - (NSPoint)bendAt:(NSPoint)point of:(WKDConnection *)connection index:(NSUInteger)index
 {
-	double snap = 8 / _zoom;
+	double snap = 8 / self.zoom;
 	NSArray *points = connection.waypoints;
 	for (NSInteger neighbour = (NSInteger)index - 1; neighbour <= (NSInteger)index + 1; neighbour += 2) {
 		if (neighbour < 0 || neighbour >= (NSInteger)[points count]) {
@@ -481,12 +462,66 @@ WKDPointHandle(NSPoint point, double zoom)
 	                         toActivity:connection.target.kind == WKDShapeActivity];
 }
 
-- (void)drawRect:(NSRect)dirty
+#pragma mark The canvas's data source
+
+- (id)canvas:(DKCanvasView *)canvas itemAtPoint:(NSPoint)point
 {
-	[WKDPaperColor() setFill];
-	/* Within the view: since macOS 14 views do not clip to their bounds,
-	 * and the rectangle to draw may reach past them -- over the tab bar. */
-	NSRectFill(NSIntersectionRect(dirty, [self bounds]));
+	return [self labelAt:point] ?: [self shapeAt:point].elementId ?: [self connectionAt:point].elementId
+		?: [self bandAt:point].elementId;
+}
+
+- (NSArray *)canvas:(DKCanvasView *)canvas itemsInRect:(NSRect)rect
+{
+	NSMutableArray *items = [NSMutableArray array];
+	for (WKDShape *shape in self.diagram.shapes) {
+		if (shape.hasBounds && NSContainsRect(rect, shape.bounds)) {
+			[items addObject:shape.elementId];
+		}
+	}
+	return items;
+}
+
+- (NSRect)canvas:(DKCanvasView *)canvas frameOfItem:(id)item
+{
+	WKDShape *shape = [self.diagram shapeWithId:item];
+	if (shape != nil) {
+		return shape.bounds;
+	}
+	WKDLane *band = [self.diagram laneWithId:item];
+	if (band != nil) {
+		return band.bounds;
+	}
+	WKDConnection *flow = [self.diagram connectionWithId:item];
+	NSRect frame = NSZeroRect;
+	for (NSValue *point in flow.waypoints) {
+		NSRect at = NSMakeRect([point pointValue].x, [point pointValue].y, 1, 1);
+		frame = NSIsEmptyRect(frame) ? at : NSUnionRect(frame, at);
+	}
+	return frame;
+}
+
+/* Its own gestures move things (the canvas's mouse hooks, below), not
+ * DiagramKit's. */
+- (BOOL)canvas:(DKCanvasView *)canvas canMoveItem:(id)item
+{
+	return NO;
+}
+
+/* Drawn with the renderer (WKDRenderer) into the canvas's graphics context:
+ * the view, a print, an export. What is selected and the gesture under way
+ * are the view's, not a print's. */
+- (void)canvas:(DKCanvasView *)canvas
+    drawInRect:(NSRect)dirty
+       surface:(id<DKSurface>)surface
+         state:(DKDrawingState *)state
+{
+	WKDBeginDrawing(state.dark);
+	[self drawDiagramInRect:dirty interactive:!state.forPrinting];
+	WKDEndDrawing();
+}
+
+- (void)drawDiagramInRect:(NSRect)dirty interactive:(BOOL)interactive
+{
 	NSSize labelMoved = _gesture == WKDGestureLabel ? NSMakeSize(_at.x - _down.x, _at.y - _down.y) : NSZeroSize;
 	/* Pools and lanes, under what they hold. */
 	NSMutableArray<WKDLane *> *bands = [NSMutableArray arrayWithArray:self.diagram.otherPools];
@@ -529,7 +564,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	[WKDInkColor() setStroke];
 	for (WKDConnection *connection in self.diagram.connections) {
 		NSArray *points = [self pointsOf:connection];
-		if ([_selection containsObject:connection.elementId]) {
+		if (interactive && [_picked containsObject:connection.elementId]) {
 			[WKDSelectionColor() setStroke];
 		}
 		if (connection.isAssociation) {
@@ -550,7 +585,10 @@ WKDPointHandle(NSPoint point, double zoom)
 			WKDDrawLabel(connection.name, label);
 		}
 	}
-	for (NSString *elementId in _selection) {
+	if (!interactive) {
+		return;
+	}
+	for (NSString *elementId in _picked) {
 		WKDShape *shape = [self.diagram shapeWithId:elementId];
 		WKDLane *band = [self.diagram laneWithId:elementId];
 		if (shape.hasBounds) {
@@ -564,7 +602,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	if (anchor.hasBounds) {
 		NSRect bounds = [self movedBounds:anchor];
 		[WKDSelectionColor() setFill];
-		NSRectFill(NSMakeRect(NSMinX(bounds) - 8, NSMinY(bounds) - 8, 6 / _zoom + 2, 6 / _zoom + 2));
+		NSRectFill(NSMakeRect(NSMinX(bounds) - 8, NSMinY(bounds) - 8, 6 / self.zoom + 2, 6 / self.zoom + 2));
 	}
 	if (_gesture == WKDGestureMove) {
 		[self moveOffset];
@@ -615,14 +653,14 @@ WKDPointHandle(NSPoint point, double zoom)
 	if (flow != nil && !flow.isAssociation) {
 		NSArray *points = flow.waypoints;
 		for (NSUInteger i = 0; i < [points count]; i++) {
-			NSRect handle = WKDPointHandle([[points objectAtIndex:i] pointValue], _zoom);
+			NSRect handle = WKDPointHandle([[points objectAtIndex:i] pointValue], self.zoom);
 			BOOL end = i == 0 || i + 1 == [points count];
 			NSBezierPath *path = end ? [NSBezierPath bezierPathWithRect:handle]
 			                         : [NSBezierPath bezierPathWithOvalInRect:handle];
 			[(end ? WKDSelectionColor() : WKDPaperColor()) setFill];
 			[path fill];
 			[WKDSelectionColor() setStroke];
-			[path setLineWidth:1 / _zoom];
+			[path setLineWidth:1 / self.zoom];
 			[path stroke];
 		}
 	}
@@ -670,7 +708,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	}
 	CGFloat pattern[2] = { 4, 4 };
 	[guides setLineDash:pattern count:2 phase:0];
-	[guides setLineWidth:1 / _zoom];
+	[guides setLineWidth:1 / self.zoom];
 	[[WKDSelectionColor() colorWithAlphaComponent:0.7] setStroke];
 	[guides stroke];
 }
@@ -697,7 +735,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	}
 	NSArray *points = flow.waypoints;
 	for (NSUInteger i = 0; i < [points count]; i++) {
-		NSRect handle = NSInsetRect(WKDPointHandle([[points objectAtIndex:i] pointValue], _zoom), -3 / _zoom, -3 / _zoom);
+		NSRect handle = NSInsetRect(WKDPointHandle([[points objectAtIndex:i] pointValue], self.zoom), -3 / self.zoom, -3 / self.zoom);
 		if (NSPointInRect(point, handle)) {
 			*outFlow = flow;
 			*outIndex = i;
@@ -707,18 +745,27 @@ WKDPointHandle(NSPoint point, double zoom)
 	return NO;
 }
 
-- (void)mouseDown:(NSEvent *)event
+#pragma mark The canvas's delegate: the mouse
+
+/* Every press is this view's gesture, but a pan (Space-drag, the middle
+ * button), which the DiagramKit canvas takes before asking. */
+- (BOOL)canvas:(DKCanvasView *)canvas mouseDown:(NSEvent *)event atPoint:(NSPoint)point
+{
+	[self beginGestureWith:event at:point];
+	return YES;
+}
+
+- (void)beginGestureWith:(NSEvent *)event at:(NSPoint)point
 {
 	[self endRenaming:YES];
 	[[self window] makeFirstResponder:self];
-	NSPoint point = [self pointOf:event];
 	_down = _at = point;
 	_gesture = WKDGestureNone;
 	if (self.tool != nil) {
-		[self.delegate canvas:self insert:self.tool at:point];
+		[self.canvasDelegate canvas:self insert:self.tool at:point];
 		if (([event modifierFlags] & NSEventModifierFlagOption) == 0) {
 			self.tool = nil;
-			[self.delegate canvasToolWasUsed:self];
+			[self.canvasDelegate canvasToolWasUsed:self];
 		}
 		return;
 	}
@@ -778,11 +825,11 @@ WKDPointHandle(NSPoint point, double zoom)
 			_from = shape.elementId;
 			return;
 		}
-		NSMutableSet *selection = [NSMutableSet setWithSet:extend ? _selection : [NSSet set]];
-		if (extend && [_selection containsObject:shape.elementId]) {
+		NSMutableSet *selection = [NSMutableSet setWithSet:extend ? _picked : [NSSet set]];
+		if (extend && [_picked containsObject:shape.elementId]) {
 			[selection removeObject:shape.elementId];
-		} else if (!extend && [_selection containsObject:shape.elementId]) {
-			selection = [_selection mutableCopy];
+		} else if (!extend && [_picked containsObject:shape.elementId]) {
+			selection = [_picked mutableCopy];
 		} else {
 			[selection addObject:shape.elementId];
 		}
@@ -793,7 +840,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	}
 	WKDConnection *connection = [self connectionAt:point];
 	if (connection != nil) {
-		self.selection = extend ? [_selection setByAddingObject:connection.elementId] : [NSSet setWithObject:connection.elementId];
+		self.selection = extend ? [_picked setByAddingObject:connection.elementId] : [NSSet setWithObject:connection.elementId];
 		if ([event clickCount] >= 2 && !extend && !connection.isAssociation) {
 			[self beginRenaming:connection.elementId];
 		}
@@ -802,7 +849,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	/* A pool or a lane by its band: a pool is dragged with what it holds. */
 	WKDLane *band = [self bandAt:point];
 	if (band != nil) {
-		self.selection = extend ? [_selection setByAddingObject:band.elementId] : [NSSet setWithObject:band.elementId];
+		self.selection = extend ? [_picked setByAddingObject:band.elementId] : [NSSet setWithObject:band.elementId];
 		if ([event clickCount] >= 2 && !extend) {
 			[self beginRenaming:band.elementId];
 			return;
@@ -817,21 +864,21 @@ WKDPointHandle(NSPoint point, double zoom)
 	_gesture = WKDGestureBand;
 }
 
-- (void)mouseDragged:(NSEvent *)event
+- (void)canvas:(DKCanvasView *)canvas mouseDragged:(NSEvent *)event atPoint:(NSPoint)point
 {
 	if (_gesture == WKDGestureNone) {
 		return;
 	}
-	_at = [self pointOf:event];
+	_at = point;
 	[self autoscroll:event];
 	[self setNeedsDisplay:YES];
 }
 
-- (void)mouseUp:(NSEvent *)event
+- (void)canvas:(DKCanvasView *)canvas mouseUp:(NSEvent *)event atPoint:(NSPoint)point
 {
 	WKDGesture gesture = _gesture;
 	_gesture = WKDGestureNone;
-	_at = [self pointOf:event];
+	_at = point;
 	NSSize offset = NSMakeSize(round(_at.x - _down.x), round(_at.y - _down.y));
 	BOOL dragged = fabs(offset.width) >= 2 || fabs(offset.height) >= 2;
 	if (gesture == WKDGestureMove) {
@@ -842,54 +889,54 @@ WKDPointHandle(NSPoint point, double zoom)
 	case WKDGestureMove:
 		if (dragged) {
 			NSMutableArray *shapes = [NSMutableArray array];
-			for (NSString *elementId in _selection) {
+			for (NSString *elementId in _picked) {
 				if ([self.diagram shapeWithId:elementId] != nil
 				    || [elementId isEqualToString:self.diagram.pool.elementId]) {
 					[shapes addObject:elementId];
 				}
 			}
-			[self.delegate canvas:self move:shapes by:offset];
+			[self.canvasDelegate canvas:self move:shapes by:offset];
 		}
 		break;
 	case WKDGestureConnect: {
 		WKDShape *target = [self shapeAt:_at];
 		if (target != nil && ![target.elementId isEqualToString:_from]) {
-			[self.delegate canvas:self connect:_from to:target.elementId];
+			[self.canvasDelegate canvas:self connect:_from to:target.elementId];
 		}
 		break;
 	}
 	case WKDGestureReconnect: {
 		WKDShape *target = [self shapeAt:_at];
 		if (target != nil && dragged) {
-			[self.delegate canvas:self reconnect:_from atSource:_atSource to:target.elementId];
+			[self.canvasDelegate canvas:self reconnect:_from atSource:_atSource to:target.elementId];
 		}
 		break;
 	}
 	case WKDGestureBend:
 		if (dragged) {
-			[self.delegate canvas:self moveBend:_bend of:_from
+			[self.canvasDelegate canvas:self moveBend:_bend of:_from
 			                     to:[self bendAt:_at of:[self.diagram connectionWithId:_from] index:_bend]];
 		}
 		break;
 	case WKDGestureLabel:
 		if (dragged) {
-			[self.delegate canvas:self moveLabelOf:_from by:offset];
+			[self.canvasDelegate canvas:self moveLabelOf:_from by:offset];
 		}
 		break;
 	case WKDGestureResize: {
 		WKDShape *shape = [self.diagram shapeWithId:_from];
 		WKDLane *band = [self.diagram laneWithId:_from];
 		if (shape != nil) {
-			[self.delegate canvas:self resize:_from to:[self movedBounds:shape]];
+			[self.canvasDelegate canvas:self resize:_from to:[self movedBounds:shape]];
 		} else if (band != nil && dragged) {
-			[self.delegate canvas:self resize:_from to:[self movedBand:band]];
+			[self.canvasDelegate canvas:self resize:_from to:[self movedBand:band]];
 		}
 		break;
 	}
 	case WKDGestureBand: {
 		NSRect band = [self band];
 		if (NSWidth(band) > 2 || NSHeight(band) > 2) {
-			NSMutableSet *selection = [NSMutableSet setWithSet:_selection];
+			NSMutableSet *selection = [NSMutableSet setWithSet:_picked];
 			for (WKDShape *shape in self.diagram.shapes) {
 				if (shape.hasBounds && NSContainsRect(band, shape.bounds)) {
 					[selection addObject:shape.elementId];
@@ -912,10 +959,10 @@ WKDPointHandle(NSPoint point, double zoom)
 	NSPoint point = [self pointOf:event];
 	NSString *hit = [self labelAt:point] ?: [self shapeAt:point].elementId ?: [self connectionAt:point].elementId
 		?: [self bandAt:point].elementId;
-	if (hit != nil && ![_selection containsObject:hit]) {
+	if (hit != nil && ![_picked containsObject:hit]) {
 		self.selection = [NSSet setWithObject:hit];
 	}
-	return [_selection count] > 0 ? [self.delegate canvasMenu:self] : nil;
+	return [_picked count] > 0 ? [self.canvasDelegate canvasMenu:self] : nil;
 }
 
 - (void)keyDown:(NSEvent *)event
@@ -926,20 +973,20 @@ WKDPointHandle(NSPoint point, double zoom)
 		[self delete:self];
 		return;
 	}
-	if (key >= NSUpArrowFunctionKey && key <= NSRightArrowFunctionKey && [_selection count] > 0) {
+	if (key >= NSUpArrowFunctionKey && key <= NSRightArrowFunctionKey && [_picked count] > 0) {
 		double step = ([event modifierFlags] & NSEventModifierFlagShift) != 0 ? 10 : 1;
 		NSSize by = NSMakeSize(key == NSLeftArrowFunctionKey ? -step : key == NSRightArrowFunctionKey ? step : 0,
 		                       key == NSUpArrowFunctionKey ? -step : key == NSDownArrowFunctionKey ? step : 0);
-		[self.delegate canvas:self nudge:[self orderedSelection] by:by];
+		[self.canvasDelegate canvas:self nudge:[self orderedSelection] by:by];
 		return;
 	}
-	if ((key == NSCarriageReturnCharacter || key == NSEnterCharacter) && [_selection count] == 1) {
-		[self beginRenaming:[_selection anyObject]];
+	if ((key == NSCarriageReturnCharacter || key == NSEnterCharacter) && [_picked count] == 1) {
+		[self beginRenaming:[_picked anyObject]];
 		return;
 	}
 	if (key == 27) {
 		self.tool = nil;
-		[self.delegate canvasToolWasUsed:self];
+		[self.canvasDelegate canvasToolWasUsed:self];
 		self.selection = [NSSet set];
 		return;
 	}
@@ -948,15 +995,15 @@ WKDPointHandle(NSPoint point, double zoom)
 
 - (IBAction)delete:(id)sender
 {
-	if ([_selection count] > 0) {
-		[self.delegate canvas:self delete:[_selection allObjects]];
+	if ([_picked count] > 0) {
+		[self.canvasDelegate canvas:self delete:[_picked allObjects]];
 	}
 }
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
 	if ([item action] == @selector(delete:)) {
-		return [_selection count] > 0;
+		return [_picked count] > 0;
 	}
 	return YES;
 }
@@ -1036,7 +1083,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	[[self window] makeFirstResponder:self];
 	[self setNeedsDisplay:YES];
 	if (keep && !_cancelRenaming) {
-		[self.delegate canvas:self rename:elementId to:name];
+		[self.canvasDelegate canvas:self rename:elementId to:name];
 	}
 }
 

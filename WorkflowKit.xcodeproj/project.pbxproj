@@ -89,6 +89,7 @@
 		4A72646D21422D01AF92F329 /* WKDCanvasEditsTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 6213E2B6E58E9D99E004C3DC /* WKDCanvasEditsTests.m */; };
 		4C7C746DF0BE717FB6E843BE /* Foundation.framework in WorkflowKit */ = { isa = PBXBuildFile; fileRef = B29454D488C4F49E273C15A0 /* Foundation.framework */; };
 		4E60903669DE0C94EC3DA0A5 /* ODataIncrementalStore.framework in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = B9FFDB8C59135A98D2CE7D30 /* ODataIncrementalStore.framework */; };
+		4F796A9E5BE90B65291A708C /* DiagramKitUI.framework in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 8D6B561B67E4725D27B04160 /* DiagramKitUI.framework */; };
 		524F85614CC8CEF60DAB0C8C /* WFBpmn.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 18B33CC23E27771E363F73AA /* WFBpmn.m */; };
 		561A3C7BB1DA6F88E987CFFD /* WFFeelTemporal.m in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 005AA8ED835C0C66AD59D791 /* WFFeelTemporal.m */; };
 		5BC7EC669EDB8710CE001C88 /* WKDInspectorView.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 256FA4DDB1A34C8F6D7C7766 /* WKDInspectorView.m */; };
@@ -215,6 +216,7 @@
 		E541394DA073CBB8065F89A7 /* DesignerWindow.xib in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 6F5AD69F87BAA681C05B9A2A /* DesignerWindow.xib */; };
 		E77379C7BD48B07C681174BB /* WKDEditor+Types.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 566A3393AB2C2FDD5A9F2289 /* WKDEditor+Types.m */; };
 		E7AD0FF5EA227F288119CE60 /* WFTaskService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = A9B0C42046EF49A1107A930C /* WFTaskService.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		E9062504B9E8A2AD9C07D207 /* DiagramKitUI.framework in WorkflowDesigner.embed */ = { isa = PBXBuildFile; fileRef = 8D6B561B67E4725D27B04160 /* DiagramKitUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		EA96DAAB66388477C035F829 /* WKDEditor.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 08C32B435BCEC2F67BFB8754 /* WKDEditor.m */; };
 		EBE92553C8694E514DF4B351 /* WKDEditor+Lanes.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 8106FE300C5479A2FB0A9A8C /* WKDEditor+Lanes.m */; };
 		F416088620E26E1CFEFB72F3 /* WorkflowKit.xcdatamodeld in WorkflowKit */ = { isa = PBXBuildFile; fileRef = EBA0AA6EBDB0FF2CB12DC371 /* WorkflowKit.xcdatamodeld */; };
@@ -309,6 +311,7 @@
 				A7A656CB123999A94E7634BA /* XFormsKit.framework in WorkflowDesigner.embed */,
 				CD20CB74B916A1D7A571B258 /* XFormsDesignKit.framework in WorkflowDesigner.embed */,
 				969816CBCBEA0376D00F16BA /* DiagramKit.framework in WorkflowDesigner.embed */,
+				E9062504B9E8A2AD9C07D207 /* DiagramKitUI.framework in WorkflowDesigner.embed */,
 				268DB735FF3D2FC4FF94A5DF /* Sparkle.xcframework in WorkflowDesigner.embed */,
 			);
 			name = "Embed Frameworks";
@@ -673,6 +676,7 @@
 				DCBDF2E7EDB7B8AC96402B5B /* XFormsKit.framework in WorkflowDesigner */,
 				92AB92C1413F4B86BA0BAAC7 /* XFormsDesignKit.framework in WorkflowDesigner */,
 				6480A9FDAD426AB90F5D7B49 /* DiagramKit.framework in WorkflowDesigner */,
+				4F796A9E5BE90B65291A708C /* DiagramKitUI.framework in WorkflowDesigner */,
 				DB3D444B75A4EB3723B5CD0A /* Sparkle.xcframework in WorkflowDesigner */,
 				6FA1F526878980190D54CF26 /* AppKit.framework in WorkflowDesigner */,
 				6A951FEE2E90418DA5944299 /* CoreData.framework in WorkflowDesigner */,

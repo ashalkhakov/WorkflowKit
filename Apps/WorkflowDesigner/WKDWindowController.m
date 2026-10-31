@@ -178,7 +178,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 - (void)windowDidLoad
 {
 	[super windowDidLoad];
-	self.canvas.delegate = self;
+	self.canvas.canvasDelegate = self;
 	self.palette.delegate = self;
 	[self buildPanes];
 	__weak WKDWindowController *weakSelf = self;

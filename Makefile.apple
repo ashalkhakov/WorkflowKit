@@ -64,13 +64,13 @@ install: all
 
 installcheck:
 	@for app in $(APPS); do \
-	  for fw in ODataKit ODataIncrementalStore OTelKit XFormsKit DiagramKit Sparkle; do \
+	  for fw in ODataKit ODataIncrementalStore OTelKit XFormsKit DiagramKit DiagramKitUI Sparkle; do \
 	    test -d $(DESTDIR)/$$app.app/Contents/Frameworks/$$fw.framework \
 	      || { echo "$$app.app does not embed $$fw.framework"; exit 1; }; \
 	  done; \
 	  codesign --verify --deep --strict $(DESTDIR)/$$app.app || exit 1; \
 	done
-	@for fw in WorkflowKit XFormsDesignKit; do \
+	@for fw in WorkflowKit XFormsDesignKit DiagramKitUI; do \
 	  test -d $(DESTDIR)/WorkflowDesigner.app/Contents/Frameworks/$$fw.framework \
 	    || { echo "WorkflowDesigner.app does not embed $$fw.framework"; exit 1; }; \
 	done

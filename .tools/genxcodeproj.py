@@ -384,7 +384,8 @@ wg_resources = phase("PBXResourcesBuildPhase", "WorkflowDesigner", "Resources", 
 DESIGNER_FRAMEWORKS = [(p_fw, "WorkflowKit.framework"), (odatakit, "ODataKit.framework"),
                        (odatastore, "ODataIncrementalStore.framework"), (otelkit, "OTelKit.framework"),
                        (xformskit, "XFormsKit.framework"), (xformsdesignkit, "XFormsDesignKit.framework"),
-                       (diagramkit, "DiagramKit.framework"), (sparkle, "Sparkle.xcframework")]
+                       (diagramkit, "DiagramKit.framework"), (diagramkitui, "DiagramKitUI.framework"),
+                       (sparkle, "Sparkle.xcframework")]
 wg_model = model_phase("WorkflowDesigner")
 wg_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesigner", "Frameworks", names(
     [buildfile("WorkflowDesigner", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
