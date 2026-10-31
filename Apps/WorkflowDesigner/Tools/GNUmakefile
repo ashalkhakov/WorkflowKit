@@ -20,7 +20,7 @@ wkd-arrange_TOOL_LIBS += -lDiagramKit -ldispatch
 wkd-render_OBJC_FILES = wkd-render.m $(WKD_MODEL) ../../Shared/WKDRenderer.m ../WKDCanvasView.m
 wkd-render_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include ../../Shared/WKDGNUstepCompat.h
 wkd-render_INCLUDE_DIRS = -I.. -I../../Shared
-wkd-render_TOOL_LIBS += -lDiagramKit -lgnustep-gui -ldispatch
+wkd-render_TOOL_LIBS += -lDiagramKitUI -lDiagramKit -lgnustep-gui -ldispatch
 
 include $(GNUSTEP_MAKEFILES)/tool.make
 
