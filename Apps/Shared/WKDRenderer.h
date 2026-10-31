@@ -41,6 +41,12 @@ void WKDDrawSelection(NSRect rect);
 /* The distance from the point to the polyline. */
 double WKDDistanceToPolyline(NSPoint point, NSArray<NSValue *> *points);
 
+/* A DiagramKit canvas's drawing, between these: dark as its DKDrawingState
+ * says, the appearance's colours; not (a light view, a print, an export),
+ * black on white. Outside them the renderer draws in the appearance's
+ * colours, as a view of its own does. */
+void WKDBeginDrawing(BOOL dark);
+void WKDEndDrawing(void);
 NSColor *WKDInkColor(void);
 NSColor *WKDPaperColor(void);
 NSColor *WKDSelectionColor(void);

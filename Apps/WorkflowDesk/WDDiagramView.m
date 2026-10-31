@@ -23,7 +23,6 @@ WDIncidentColor(void)
 
 @implementation WDDiagramView
 {
-	double _zoom;
 	/* The area the diagram was last fitted to, and whether it is being
 	 * fitted now: fitting resizes the view, which can show or hide the
 	 * scroll view's scrollers and so change the area again. */
@@ -31,35 +30,34 @@ WDIncidentColor(void)
 	BOOL _fitting;
 }
 
+- (void)setUpCanvas
+{
+	self.dataSource = self;
+	self.delegate = self;
+	self.margin = 30;
+}
+
 - (instancetype)initWithFrame:(NSRect)frame
 {
 	if ((self = [super initWithFrame:frame])) {
-		_zoom = 1;
+		[self setUpCanvas];
 	}
 	return self;
 }
 
-- (instancetype)initWithCoder:(NSCoder *)coder
+- (void)awakeFromNib
 {
-	if ((self = [super initWithCoder:coder])) {
-		_zoom = 1;
-	}
-	return self;
+	[self setUpCanvas];
+	[super awakeFromNib];
 }
 
-- (BOOL)isFlipped
-{
-	return YES;
-}
-
-/* Fitted again when the area it is shown in changes size. */
+/* Fitted again when the area it is shown in changes size; the canvas
+ * resizes itself to fill it as well. */
 - (void)viewDidMoveToSuperview
 {
 	[super viewDidMoveToSuperview];
-	[[NSNotificationCenter defaultCenter] removeObserver:self name:NSViewFrameDidChangeNotification object:nil];
-	NSView *clip = [self superview];
+	NSView *clip = [[self enclosingScrollView] contentView];
 	if (clip != nil) {
-		[clip setPostsFrameChangedNotifications:YES];
 		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(areaDidChange:)
 		                                             name:NSViewFrameDidChangeNotification object:clip];
 	}
@@ -80,46 +78,24 @@ WDIncidentColor(void)
 	}
 }
 
-#pragma mark Size
-
-/* The diagram with a margin round it, from the origin at least, and no
- * smaller than what is visible. */
-- (void)resize
-{
-	NSRect content = self.diagram.contentBounds;
-	NSRect canvas = NSIsEmptyRect(content) ? NSMakeRect(0, 0, 1, 1) : NSInsetRect(content, -30, -30);
-	NSSize visible = [[self enclosingScrollView] contentSize];
-	canvas.size.width = MAX(NSWidth(canvas), visible.width / _zoom);
-	canvas.size.height = MAX(NSHeight(canvas), visible.height / _zoom);
-	[self setFrameSize:NSMakeSize(NSWidth(canvas) * _zoom, NSHeight(canvas) * _zoom)];
-	[self setBoundsOrigin:canvas.origin];
-	[self setBoundsSize:canvas.size];
-	[self setNeedsDisplay:YES];
-}
-
 - (void)setDiagram:(WKDDiagram *)diagram
 {
 	_diagram = diagram;
+	[self reloadData];
 	[self zoomToFit];
 }
 
+/* The whole diagram in view, at actual size at most. */
 - (void)zoomToFit
 {
 	if (_fitting) {
 		return;
 	}
 	_fitting = YES;
-	NSRect content = self.diagram.contentBounds;
-	NSSize visible = [[self enclosingScrollView] contentSize];
-	_fittedTo = visible;
-	_zoom = 1;
-	if (!NSIsEmptyRect(content) && visible.width > 0 && visible.height > 0) {
-		content = NSInsetRect(content, -30, -30);
-		_zoom = MAX(0.25, MIN(1, MIN(visible.width / NSWidth(content), visible.height / NSHeight(content))));
-	}
-	[self resize];
-	if (!NSIsEmptyRect(content)) {
-		[self scrollPoint:content.origin];
+	_fittedTo = [[self enclosingScrollView] contentSize];
+	[self zoomToFit:nil];
+	if (self.zoom > 1) {
+		self.zoom = 1;
 	}
 	_fitting = NO;
 }
@@ -134,7 +110,49 @@ WDIncidentColor(void)
 	[self setNeedsDisplay:YES];
 }
 
-#pragma mark Drawing
+#pragma mark The canvas's data source
+
+- (NSRect)diagramBoundsForCanvas:(DKCanvasView *)canvas
+{
+	NSRect content = self.diagram.contentBounds;
+	return NSIsEmptyRect(content) ? NSZeroRect : NSInsetRect(content, -30, -30);
+}
+
+- (WKDShape *)shapeAt:(NSPoint)point
+{
+	for (WKDShape *shape in [self.diagram.shapes reverseObjectEnumerator]) {
+		if (shape.hasBounds && NSPointInRect(point, NSInsetRect(shape.bounds, -3, -3))) {
+			return shape;
+		}
+	}
+	return nil;
+}
+
+- (id)canvas:(DKCanvasView *)canvas itemAtPoint:(NSPoint)point
+{
+	return [self shapeAt:point].elementId;
+}
+
+- (NSArray *)canvas:(DKCanvasView *)canvas itemsInRect:(NSRect)rect
+{
+	NSMutableArray *items = [NSMutableArray array];
+	for (WKDShape *shape in self.diagram.shapes) {
+		if (shape.hasBounds && NSIntersectsRect(shape.bounds, rect)) {
+			[items addObject:shape.elementId];
+		}
+	}
+	return items;
+}
+
+- (NSRect)canvas:(DKCanvasView *)canvas frameOfItem:(id)item
+{
+	return [self.diagram shapeWithId:item].bounds;
+}
+
+- (BOOL)canvas:(DKCanvasView *)canvas canMoveItem:(id)item
+{
+	return NO;
+}
 
 - (WKDLook *)lookOf:(WKDShape *)shape
 {
@@ -162,10 +180,20 @@ WDBadge(NSPoint centre, NSUInteger count, NSColor *colour)
 	   withAttributes:attributes];
 }
 
-- (void)drawRect:(NSRect)dirty
+/* Drawn with the designer's renderer (WKDRenderer), into the canvas's
+ * graphics context: the view and its print. */
+- (void)canvas:(DKCanvasView *)canvas
+    drawInRect:(NSRect)dirty
+       surface:(id<DKSurface>)surface
+         state:(DKDrawingState *)state
 {
-	[WKDPaperColor() setFill];
-	NSRectFill(NSIntersectionRect(dirty, [self bounds]));
+	WKDBeginDrawing(state.dark);
+	[self drawDiagramInRect:dirty];
+	WKDEndDrawing();
+}
+
+- (void)drawDiagramInRect:(NSRect)dirty
+{
 	if (self.diagram == nil) {
 		NSDictionary *attributes = @{ NSFontAttributeName: [NSFont systemFontOfSize:12],
 		                              NSForegroundColorAttributeName: [NSColor grayColor] };
@@ -242,22 +270,16 @@ WDBadge(NSPoint centre, NSUInteger count, NSColor *colour)
 	}
 }
 
-#pragma mark Clicks
+#pragma mark The canvas's delegate
 
-- (void)mouseDown:(NSEvent *)event
+/* A click names what is under it, or nothing: read only, so nothing is
+ * selected or moved. */
+- (BOOL)canvas:(DKCanvasView *)canvas mouseDown:(NSEvent *)event atPoint:(NSPoint)point
 {
-	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
-	for (WKDShape *shape in [self.diagram.shapes reverseObjectEnumerator]) {
-		if (shape.hasBounds && NSPointInRect(point, NSInsetRect(shape.bounds, -3, -3))) {
-			if (self.clicked != nil) {
-				self.clicked(shape.elementId);
-			}
-			return;
-		}
-	}
 	if (self.clicked != nil) {
-		self.clicked(nil);
+		self.clicked([self shapeAt:point].elementId);
 	}
+	return YES;
 }
 
 @end

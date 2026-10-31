@@ -14,16 +14,33 @@
 
 @end
 
+/* Between WKDBeginDrawing(NO) and WKDEndDrawing(): black on white, as a
+ * DiagramKit canvas draws a light view, a print or an export. Otherwise the
+ * appearance's own colours. */
+static BOOL WKDLight;
+
+void
+WKDBeginDrawing(BOOL dark)
+{
+	WKDLight = !dark;
+}
+
+void
+WKDEndDrawing(void)
+{
+	WKDLight = NO;
+}
+
 NSColor *
 WKDInkColor(void)
 {
-	return [NSColor textColor];
+	return WKDLight ? [NSColor blackColor] : [NSColor textColor];
 }
 
 NSColor *
 WKDPaperColor(void)
 {
-	return [NSColor textBackgroundColor];
+	return WKDLight ? [NSColor whiteColor] : [NSColor textBackgroundColor];
 }
 
 NSColor *

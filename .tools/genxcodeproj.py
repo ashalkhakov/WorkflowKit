@@ -189,6 +189,7 @@ xformskit = built_framework("XFormsKit")
 xformsdesignkit = built_framework("XFormsDesignKit")
 # DiagramKit: the process diagrams' layout (and, in DiagramKitUI, their canvas).
 diagramkit = built_framework("DiagramKit")
+diagramkitui = built_framework("DiagramKitUI")
 # Sparkle, the apps' updates: its XCFramework in .deps/, by the version
 # .github/pins.env names (gnustep-release-actions' scripts/deps.sh apple).
 sparkle = add(oid("deps", "Sparkle"), "Sparkle.xcframework", [
@@ -326,7 +327,8 @@ d_frameworks = phase("PBXFrameworksBuildPhase", "PurchaseRequestDemo", "Framewor
 
 DESK_FRAMEWORKS = [(odatakit, "ODataKit.framework"), (odatastore, "ODataIncrementalStore.framework"),
                    (otelkit, "OTelKit.framework"), (xformskit, "XFormsKit.framework"),
-                   (diagramkit, "DiagramKit.framework"), (sparkle, "Sparkle.xcframework")]
+                   (diagramkit, "DiagramKit.framework"), (diagramkitui, "DiagramKitUI.framework"),
+                   (sparkle, "Sparkle.xcframework")]
 w_sources = phase("PBXSourcesBuildPhase", "WorkflowDesk", "Sources", names(
     [buildfile("WorkflowDesk", app_file(desk_refs, f), os.path.basename(f)) for f in DESK_SOURCES]))
 w_resources = phase("PBXResourcesBuildPhase", "WorkflowDesk", "Resources", names(
@@ -449,7 +451,7 @@ g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/C
 g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_plugin, p_desk,
                                             p_desk_tests, p_designer, p_designer_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
-                                                  httpserverkit, otelkit, xformskit, diagramkit, sparkle])
+                                                  httpserverkit, otelkit, xformskit, diagramkit, diagramkitui, sparkle])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
                [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_apps, g_configs,
                 g_frameworks, g_products])

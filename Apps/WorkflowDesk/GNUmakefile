@@ -54,8 +54,9 @@ WorkflowDesk_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 WorkflowDesk_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include WKDGNUstepCompat.h
 WorkflowDesk_INCLUDE_DIRS = -I../Shared
 # GSUpdater, the stack's: updates on Windows (../Shared/WKDUpdater.h).
-# DiagramKit: the process diagram's layout (../Shared/WKDEditor.m).
-WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lOTelKit -lXFormsKit -lDiagramKit -lGSUpdater -lCoreData -ldispatch -lgnutls
+# DiagramKit: the process diagram's layout (../Shared/WKDEditor.m); and
+# DiagramKitUI's canvas, which WDDiagramView is.
+WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lOTelKit -lXFormsKit -lDiagramKitUI -lDiagramKit -lGSUpdater -lCoreData -ldispatch -lgnutls
 ifneq ($(ODATAKIT),)
 WorkflowDesk_INCLUDE_DIRS += \
 	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \
