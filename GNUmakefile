@@ -134,6 +134,12 @@ include $(GNUSTEP_MAKEFILES)/coredata-model.make
 
 include $(GNUSTEP_MAKEFILES)/library.make
 
+# WorkflowKitOData links WorkflowKit: under make -j it waits for it, which
+# gnustep-make would otherwise build alongside.
+ifeq ($(odata),yes)
+WorkflowKitOData.all.library.variables: WorkflowKit.all.library.variables
+endif
+
 # wf-serve with FreeCoreData's PostgreSQL and MySQL stores, where they are
 # installed (FREECOREDATA_PARTS in .github/pins.env).
 ifneq ($(wildcard $(GNUSTEP_LOCAL_LIBRARIES)/libCDPostgreSQLStore*),)
