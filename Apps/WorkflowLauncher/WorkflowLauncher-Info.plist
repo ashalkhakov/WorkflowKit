@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleName</key>
+	<string>WorkflowLauncher</string>
+	<key>CFBundleDisplayName</key>
+	<string>WorkflowKit</string>
+	<key>CFBundleExecutable</key>
+	<string>WorkflowLauncher</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.workflowkit.WorkflowLauncher</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.0.0</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+
+	<!-- GNUstep reads this same file: gnustep-make looks for <App>-Info.plist
+	     (Instance/rules.make) and merges it into the Info-gnustep.plist it
+	     generates inside the built bundle. Nothing here may use an Xcode
+	     build setting like $(PRODUCT_NAME): gnustep-make does not expand
+	     them. -->
+	<key>ApplicationName</key>
+	<string>WorkflowKit</string>
+	<key>ApplicationDescription</key>
+	<string>Chooses between WorkflowDesk and the process designer</string>
+	<key>ApplicationRelease</key>
+	<string>0.0.0-dev</string>
+	<key>FullVersionID</key>
+	<string>0.0.0-dev</string>
+	<key>Authors</key>
+	<array>
+		<string>Artyom Shalkhakov</string>
+	</array>
+	<key>URL</key>
+	<string>https://github.com/ashalkhakov/WorkflowKit</string>
+	<key>Copyright</key>
+	<string>Copyright (C) 2026 the WorkflowKit contributors</string>
+	<key>CopyrightDescription</key>
+	<string>GNU LGPL 2.1</string>
+	<key>NSExecutable</key>
+	<string>WorkflowLauncher</string>
+</dict>
+</plist>

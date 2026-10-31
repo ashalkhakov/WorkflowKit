@@ -155,8 +155,9 @@ export postgresql mysql
 export WORKFLOWKIT_TEST_POSTGRES_URL ?= $(POSTGRES_URL)
 export WORKFLOWKIT_TEST_MYSQL_URL ?= $(MYSQL_URL)
 
-# wf-serve and the apps, over the OData API.
-WF_PARTS = $(if $(filter yes,$(odata)),Server Apps/WorkflowDesk Apps/WorkflowDesigner)
+# wf-serve and the apps, over the OData API, and the chooser between the
+# apps that the AppImage and the Windows installer open (Apps/WorkflowLauncher).
+WF_PARTS = $(if $(filter yes,$(odata)),Server Apps/WorkflowDesk Apps/WorkflowDesigner Apps/WorkflowLauncher)
 
 after-all::
 	@for part in $(WF_PARTS); do $(MAKE) -C $$part || exit 1; done
