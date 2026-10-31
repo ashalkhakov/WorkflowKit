@@ -1,10 +1,19 @@
 {
     ApplicationDescription = "A WorkflowKit server's tasks and operations";
+    ApplicationIcon = "WorkflowDesk.png";
     ApplicationName = WorkflowDesk;
     ApplicationRelease = "0.1";
+    Authors = ("Artyom Shalkhakov");
+    Copyright = "Copyright (C) 2026 the WorkflowKit contributors";
+    CopyrightDescription = "GNU LGPL 2.1";
     FullVersionID = "0.1";
     NSExecutable = WorkflowDesk;
+    NSIcon = "WorkflowDesk.png";
     NSMainNibFile = "MainMenu.xib";
     NSPrincipalClass = NSApplication;
     NSRole = Application;
+    /* Updates (../Shared/WKDUpdater.h): the public half of the key they are
+       signed with; the Windows installer's build adds SUWindowsFeedURL. */
+    SUPublicEDKey = "9cBO16YcwJZy7uzpT8tSbD/UnYF9HNTekubfnW8WlUE=";
+    URL = "https://github.com/ashalkhakov/WorkflowKit";
 }

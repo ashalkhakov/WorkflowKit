@@ -20,6 +20,9 @@ WorkflowLauncher_OBJC_FILES = \
 	main.m \
 	WKLauncherAppDelegate.m
 
+WorkflowLauncher_RESOURCE_FILES = \
+	WorkflowLauncher.png
+
 WorkflowLauncher_OBJCFLAGS += -fobjc-arc -Wall -Wextra
 WorkflowLauncher_MAIN_MODEL_FILE =
 

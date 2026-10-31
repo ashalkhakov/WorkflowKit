@@ -32,6 +32,8 @@
 	<string>WorkflowKit</string>
 	<key>ApplicationDescription</key>
 	<string>Chooses between WorkflowDesk and the process designer</string>
+	<key>ApplicationIcon</key>
+	<string>WorkflowLauncher.png</string>
 	<key>ApplicationRelease</key>
 	<string>0.0.0-dev</string>
 	<key>FullVersionID</key>
