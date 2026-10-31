@@ -32,7 +32,7 @@ APPS = WorkflowDesk WorkflowDesigner
 # The libraries an application builds on, as XCFrameworks: macOS, arm64 and
 # x86_64, made from the Release frameworks.
 FRAMEWORKS = WorkflowKit WorkflowKitOData
-DEPS = ODataKit ODataIncrementalStore ODataService HTTPServerKit OTelKit XFormsKit XFormsDesignKit Sparkle
+DEPS = ODataKit ODataIncrementalStore ODataService HTTPServerKit OTelKit XFormsKit XFormsDesignKit DiagramKit Sparkle
 
 all:
 	@for fw in $(DEPS); do test -d .deps/$$fw.xcframework \
@@ -64,7 +64,7 @@ install: all
 
 installcheck:
 	@for app in $(APPS); do \
-	  for fw in ODataKit ODataIncrementalStore OTelKit XFormsKit Sparkle; do \
+	  for fw in ODataKit ODataIncrementalStore OTelKit XFormsKit DiagramKit Sparkle; do \
 	    test -d $(DESTDIR)/$$app.app/Contents/Frameworks/$$fw.framework \
 	      || { echo "$$app.app does not embed $$fw.framework"; exit 1; }; \
 	  done; \

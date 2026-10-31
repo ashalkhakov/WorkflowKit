@@ -9,18 +9,18 @@
 include $(GNUSTEP_MAKEFILES)/common.make
 
 TOOL_NAME = wkd-arrange wkd-render
-WKD_MODEL = ../../Shared/WKDXML.m ../../Shared/WKDDiagram.m ../../Shared/WKDLayout.m ../../Shared/WKDEditor.m \
+WKD_MODEL = ../../Shared/WKDXML.m ../../Shared/WKDDiagram.m ../../Shared/WKDEditor.m \
 	../../Shared/WKDEditor+Canvas.m ../../Shared/WKDEditor+Clipboard.m ../../Shared/WKDEditor+Types.m ../../Shared/WKDEditor+Alignment.m ../../Shared/WKDEditor+Lanes.m
 
 wkd-arrange_OBJC_FILES = wkd-arrange.m $(WKD_MODEL)
 wkd-arrange_OBJCFLAGS += -fobjc-arc -fblocks -Wall
 wkd-arrange_INCLUDE_DIRS = -I.. -I../../Shared
-wkd-arrange_TOOL_LIBS += -ldispatch
+wkd-arrange_TOOL_LIBS += -lDiagramKit -ldispatch
 
 wkd-render_OBJC_FILES = wkd-render.m $(WKD_MODEL) ../../Shared/WKDRenderer.m ../WKDCanvasView.m
 wkd-render_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include ../../Shared/WKDGNUstepCompat.h
 wkd-render_INCLUDE_DIRS = -I.. -I../../Shared
-wkd-render_TOOL_LIBS += -lgnustep-gui -ldispatch
+wkd-render_TOOL_LIBS += -lDiagramKit -lgnustep-gui -ldispatch
 
 include $(GNUSTEP_MAKEFILES)/tool.make
 

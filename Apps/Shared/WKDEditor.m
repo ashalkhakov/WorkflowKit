@@ -1,5 +1,5 @@
 #import "WKDEditorPriv.h"
-#import "WKDLayout.h"
+#import <DiagramKit/DKLayeredLayout.h>
 #import "WKDXML.h"
 
 /* Inside a subprocess, around what it holds. */
@@ -457,7 +457,8 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 - (NSSize)layOut:(WKDShape *)container into:(NSMutableDictionary *)frames
 {
 	NSArray<WKDShape *> *shapes = [_diagram shapesIn:container];
-	WKDLayout *layout = [[WKDLayout alloc] init];
+	/* DiagramKit's layered layout, left to right, as a process reads. */
+	DKLayeredLayout *layout = [[DKLayeredLayout alloc] init];
 	/* Room for the names under events and gateways. */
 	layout.layerSpacing = 70;
 	layout.nodeSpacing = 60;
@@ -497,7 +498,7 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	}
 	NSDictionary *origins = [layout layout];
 	for (NSString *elementId in origins) {
-		NSPoint origin = [[origins objectForKey:elementId] pointValue];
+		NSPoint origin = [[origins objectForKey:elementId] rectValue].origin;
 		NSSize size = [[sizes objectForKey:elementId] sizeValue];
 		[frames setObject:[NSValue valueWithRect:NSMakeRect(origin.x, origin.y, size.width, size.height)]
 		           forKey:elementId];

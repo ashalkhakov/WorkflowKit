@@ -56,7 +56,6 @@ WorkflowDesigner_OBJC_FILES = \
 	../Shared/WKDEditor+Types.m \
 	../Shared/WKDEditor+Alignment.m \
 	../Shared/WKDEditor+Lanes.m \
-	../Shared/WKDLayout.m \
 	../Shared/WKDDiagram.m \
 	../Shared/WKDRenderer.m \
 	../Shared/WDConnectWindowController.m \
@@ -96,7 +95,8 @@ WorkflowDesigner_LIB_DIRS += \
 	-L$(XFORMSKIT)/XFormsKit.framework/Versions/Current
 XFORMSKIT_LIBRARY_PATH = $(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current:$(XFORMSKIT)/XFormsKit.framework/Versions/Current:
 endif
-WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lODataIncrementalStore -lODataKit -lOTelKit \
+# DiagramKit: the process diagram's layout (../Shared/WKDEditor.m).
+WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lDiagramKit -lODataIncrementalStore -lODataKit -lOTelKit \
 	-lXFormsDesignKit -lXFormsKit -lGSUpdater -lCoreData -ldispatch -lgnutls
 
 # Sockets for signing in (../Shared/WDSockets.h): Winsock's on Windows.
