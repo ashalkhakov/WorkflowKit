@@ -47,6 +47,7 @@ jobs:
     with:
       tag: ${{ inputs.tag }}
       library: true
-      extra-packages: sqlite3 postgresql libmariadbclient
+      # dlfcn: ODataKit's HTTPServerKit and ODataService import libdl.dll.
+      extra-packages: sqlite3 postgresql libmariadbclient dlfcn
       databases: postgres mysql
     secrets: inherit
