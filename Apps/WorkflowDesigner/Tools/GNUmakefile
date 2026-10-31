@@ -23,3 +23,7 @@ wkd-render_INCLUDE_DIRS = -I.. -I../../Shared
 wkd-render_TOOL_LIBS += -lgnustep-gui -ldispatch
 
 include $(GNUSTEP_MAKEFILES)/tool.make
+
+# Both compile ../../Shared, whose objects gnustep-make puts in one
+# directory for both: under make -j they would make it at once.
+wkd-render.all.tool.variables: wkd-arrange.all.tool.variables
