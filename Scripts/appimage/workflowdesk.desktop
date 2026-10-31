@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WorkflowDesk
+GenericName=Workflow Tasks
+Comment=A WorkflowKit server's tasks and their forms, its processes and instances
+Exec=AppRun desk
+Icon=workflowdesk
+Terminal=false
+Categories=Office;

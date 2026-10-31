@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=WorkflowKit
+GenericName=Workflow Tools
+Comment=Open WorkflowDesk or the process designer
+Exec=AppRun %f
+Icon=workflowkit
+Terminal=false
+Categories=Office;Development;
+MimeType=application/xml;
