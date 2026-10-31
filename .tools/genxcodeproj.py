@@ -59,7 +59,13 @@ def own(paths):
 # WorkflowDesk (Apps/WorkflowDesk), over ODataKit's client and XFormsKit's
 # form view, whose frameworks the workspace builds from their projects.
 DESK = "Apps/WorkflowDesk/"
-DESK_SOURCES = make_list(DESK + "GNUmakefile", "WorkflowDesk_OBJC_FILES")             # X.m
+# Where a GNUmakefile names a file's GNUstep half (X-GNUstep.m), the Xcode
+# target compiles its Apple half (X-Apple.m): the updater, Sparkle's here.
+def apple(paths):
+    return [p.replace("-GNUstep.m", "-Apple.m") for p in paths]
+
+
+DESK_SOURCES = apple(make_list(DESK + "GNUmakefile", "WorkflowDesk_OBJC_FILES"))      # X.m
 DESK_RESOURCES = make_list(DESK + "GNUmakefile", "WorkflowDesk_RESOURCE_FILES")       # Resources/X.xib
 DESK_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESK, "*.h")))
 DESK_TESTS = [t for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
@@ -69,7 +75,7 @@ DESK_TESTED = [t[3:] for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDes
 # WorkflowDesigner (Apps/WorkflowDesigner), over the engine's framework, whose
 # BPMN reader checks what it draws.
 DESIGNER = "Apps/WorkflowDesigner/"
-DESIGNER_SOURCES = make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_OBJC_FILES")
+DESIGNER_SOURCES = apple(make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_OBJC_FILES"))
 DESIGNER_RESOURCES = make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_RESOURCE_FILES")
 DESIGNER_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "*.h")))
 DESIGNER_TEST_FILES = make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_OBJC_FILES")
@@ -131,11 +137,15 @@ def app_file(refs, path):
 
 
 desk_refs = {f: fileref(DESK + f, f, ftype(f)) for f in own(DESK_SOURCES) + DESK_HEADERS + ["WorkflowDesk-Info.plist"]}
-desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), "file.xib") for r in own(DESK_RESOURCES)}
+def restype(name):
+    return {".xib": "file.xib", ".png": "image.png"}.get(os.path.splitext(name)[1], ftype(name))
+
+
+desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), restype(r)) for r in own(DESK_RESOURCES)}
 desk_test_refs = {t: fileref(DESK + "Tests/" + t, t, ftype(t)) for t in DESK_TESTS}
 designer_refs = {f: fileref(DESIGNER + f, f, ftype(f))
                  for f in own(DESIGNER_SOURCES) + DESIGNER_HEADERS + ["WorkflowDesigner-Info.plist"]}
-designer_res_refs = {r: fileref(DESIGNER + r, os.path.basename(r), "file.xib") for r in own(DESIGNER_RESOURCES)}
+designer_res_refs = {r: fileref(DESIGNER + r, os.path.basename(r), restype(r)) for r in own(DESIGNER_RESOURCES)}
 designer_test_refs = {t: fileref(DESIGNER + "Tests/" + t, t, ftype(t)) for t in DESIGNER_TESTS + DESIGNER_TEST_HEADERS}
 
 
@@ -175,6 +185,15 @@ httpserverkit = built_framework("HTTPServerKit")
 otelkit = built_framework("OTelKit")
 xformskit = built_framework("XFormsKit")
 xformsdesignkit = built_framework("XFormsDesignKit")
+# Sparkle, the apps' updates: its XCFramework in .deps/, by the version
+# .github/pins.env names (gnustep-release-actions' scripts/deps.sh apple).
+sparkle = add(oid("deps", "Sparkle"), "Sparkle.xcframework", [
+    ("isa", "PBXFileReference"),
+    ("lastKnownFileType", "wrapper.xcframework"),
+    ("name", "Sparkle.xcframework"),
+    ("path", ".deps/Sparkle.xcframework"),
+    ("sourceTree", "SOURCE_ROOT"),
+])
 appkit = sdk_framework("AppKit")
 
 
@@ -302,7 +321,8 @@ d_frameworks = phase("PBXFrameworksBuildPhase", "PurchaseRequestDemo", "Framewor
     [buildfile("PurchaseRequestDemo", p_fw, "WorkflowKit.framework")]))
 
 DESK_FRAMEWORKS = [(odatakit, "ODataKit.framework"), (odatastore, "ODataIncrementalStore.framework"),
-                   (otelkit, "OTelKit.framework"), (xformskit, "XFormsKit.framework")]
+                   (otelkit, "OTelKit.framework"), (xformskit, "XFormsKit.framework"),
+                   (sparkle, "Sparkle.xcframework")]
 w_sources = phase("PBXSourcesBuildPhase", "WorkflowDesk", "Sources", names(
     [buildfile("WorkflowDesk", app_file(desk_refs, f), os.path.basename(f)) for f in DESK_SOURCES]))
 w_resources = phase("PBXResourcesBuildPhase", "WorkflowDesk", "Resources", names(
@@ -357,7 +377,8 @@ wg_resources = phase("PBXResourcesBuildPhase", "WorkflowDesigner", "Resources", 
 # The server's API, as WorkflowDesk opens it; and XFormsKit's form editor.
 DESIGNER_FRAMEWORKS = [(p_fw, "WorkflowKit.framework"), (odatakit, "ODataKit.framework"),
                        (odatastore, "ODataIncrementalStore.framework"), (otelkit, "OTelKit.framework"),
-                       (xformskit, "XFormsKit.framework"), (xformsdesignkit, "XFormsDesignKit.framework")]
+                       (xformskit, "XFormsKit.framework"), (xformsdesignkit, "XFormsDesignKit.framework"),
+                       (sparkle, "Sparkle.xcframework")]
 wg_model = model_phase("WorkflowDesigner")
 wg_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesigner", "Frameworks", names(
     [buildfile("WorkflowDesigner", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
@@ -423,7 +444,7 @@ g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/C
 g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_plugin, p_desk,
                                             p_desk_tests, p_designer, p_designer_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
-                                                  httpserverkit, otelkit, xformskit])
+                                                  httpserverkit, otelkit, xformskit, sparkle])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
                [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_apps, g_configs,
                 g_frameworks, g_products])

@@ -126,6 +126,27 @@
 	<string>BPMN process designer for WorkflowKit</string>
 	<key>ApplicationRelease</key>
 	<string>0.1</string>
+	<key>FullVersionID</key>
+	<string>0.1</string>
+	<key>ApplicationIcon</key>
+	<string>WorkflowDesigner.png</string>
+	<key>Authors</key>
+	<array>
+		<string>Artyom Shalkhakov</string>
+	</array>
+	<key>Copyright</key>
+	<string>Copyright (C) 2026 the WorkflowKit contributors</string>
+	<key>CopyrightDescription</key>
+	<string>GNU LGPL 2.1</string>
+	<key>URL</key>
+	<string>https://github.com/ashalkhakov/WorkflowKit</string>
+	<!-- Sparkle (Apps/Shared/WKDUpdater.h): this app's appcast in the newest
+	     release, and the public half of the key its updates are signed
+	     with. -->
+	<key>SUFeedURL</key>
+	<string>https://github.com/ashalkhakov/WorkflowKit/releases/latest/download/appcast-WorkflowDesigner.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>9cBO16YcwJZy7uzpT8tSbD/UnYF9HNTekubfnW8WlUE=</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 </dict>

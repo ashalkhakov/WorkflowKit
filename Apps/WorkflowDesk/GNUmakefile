@@ -38,6 +38,7 @@ WorkflowDesk_OBJC_FILES = \
 	../Shared/WDSession.m \
 	../Shared/WDSignIn.m \
 	../Shared/WDTracing.m \
+	../Shared/WKDUpdater-GNUstep.m \
 	WDTasksWindowController.m
 
 WorkflowDesk_RESOURCE_FILES = \
@@ -45,13 +46,15 @@ WorkflowDesk_RESOURCE_FILES = \
 	../Shared/Resources/ConnectWindow.xib \
 	Resources/TasksWindow.xib \
 	Resources/FormWindow.xib \
-	Resources/OperationsWindow.xib
+	Resources/OperationsWindow.xib \
+	WorkflowDesk.png
 
 WorkflowDesk_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 
 WorkflowDesk_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include WKDGNUstepCompat.h
 WorkflowDesk_INCLUDE_DIRS = -I../Shared
-WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lOTelKit -lXFormsKit -lCoreData -ldispatch -lgnutls
+# GSUpdater, the stack's: updates on Windows (../Shared/WKDUpdater.h).
+WorkflowDesk_GUI_LIBS += -lODataIncrementalStore -lODataKit -lOTelKit -lXFormsKit -lGSUpdater -lCoreData -ldispatch -lgnutls
 ifneq ($(ODATAKIT),)
 WorkflowDesk_INCLUDE_DIRS += \
 	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \

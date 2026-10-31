@@ -5,17 +5,36 @@
 #import "WDSignIn.h"
 #import "WDTasksWindowController.h"
 #import "WDTracing.h"
+#import "WKDUpdater.h"
 
 @implementation WDAppDelegate
 {
 	WDConnectWindowController *_connect;
 	WDTasksWindowController *_tasks;
 	WDOperationsWindowController *_operations;
+	WKDUpdater *_updater;
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
 	WDStartTracing();
+	/* Updates (WKDUpdater.h), set up before the app finishes launching, as
+	 * Sparkle asks. */
+	_updater = [[WKDUpdater alloc] initStarting:YES];
+	[_updater addMenuItemWithTarget:self];
+}
+
+- (IBAction)checkForUpdates:(id)sender
+{
+	[_updater checkForUpdates:sender];
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+	if ([item action] == @selector(checkForUpdates:)) {
+		return [_updater canCheckForUpdates];
+	}
+	return YES;
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification

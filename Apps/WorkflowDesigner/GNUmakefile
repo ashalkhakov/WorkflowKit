@@ -63,13 +63,15 @@ WorkflowDesigner_OBJC_FILES = \
 	../Shared/WDEntities.m \
 	../Shared/WDSession.m \
 	../Shared/WDSignIn.m \
-	../Shared/WDTracing.m
+	../Shared/WDTracing.m \
+	../Shared/WKDUpdater-GNUstep.m
 
 WorkflowDesigner_RESOURCE_FILES = \
 	Resources/MainMenu.xib \
 	Resources/DesignerWindow.xib \
 	Resources/ServerProcesses.xib \
-	../Shared/Resources/ConnectWindow.xib
+	../Shared/Resources/ConnectWindow.xib \
+	WorkflowDesigner.png
 
 # The engine's model, which the server's API is read through.
 WorkflowDesigner_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
@@ -94,7 +96,7 @@ WorkflowDesigner_LIB_DIRS += \
 XFORMSKIT_LIBRARY_PATH = $(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current:$(XFORMSKIT)/XFormsKit.framework/Versions/Current:
 endif
 WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lODataIncrementalStore -lODataKit -lOTelKit \
-	-lXFormsDesignKit -lXFormsKit -lCoreData -ldispatch -lgnutls
+	-lXFormsDesignKit -lXFormsKit -lGSUpdater -lCoreData -ldispatch -lgnutls
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 include $(GNUSTEP_MAKEFILES)/application.make
