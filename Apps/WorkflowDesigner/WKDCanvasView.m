@@ -516,11 +516,11 @@ WKDPointHandle(NSPoint point, double zoom)
          state:(DKDrawingState *)state
 {
 	WKDBeginDrawing(state.dark);
-	[self drawDiagramInRect:dirty interactive:!state.forPrinting];
+	[self drawDiagramInRect:dirty surface:surface interactive:!state.forPrinting];
 	WKDEndDrawing();
 }
 
-- (void)drawDiagramInRect:(NSRect)dirty interactive:(BOOL)interactive
+- (void)drawDiagramInRect:(NSRect)dirty surface:(id<DKSurface>)surface interactive:(BOOL)interactive
 {
 	NSSize labelMoved = _gesture == WKDGestureLabel ? NSMakeSize(_at.x - _down.x, _at.y - _down.y) : NSZeroSize;
 	/* Pools and lanes, under what they hold. */
@@ -531,9 +531,9 @@ WKDPointHandle(NSPoint point, double zoom)
 	[bands addObjectsFromArray:self.diagram.lanes];
 	for (WKDLane *band in bands) {
 		if (band.hasBounds && ![band.elementId isEqualToString:_renaming]) {
-			WKDDrawLane([self movedBand:band], band.name, band.horizontal);
+			WKDDrawLane(surface, [self movedBand:band], band.name, band.horizontal);
 		} else if (band.hasBounds) {
-			WKDDrawLane([self movedBand:band], nil, band.horizontal);
+			WKDDrawLane(surface, [self movedBand:band], nil, band.horizontal);
 		}
 	}
 	for (WKDShape *shape in self.diagram.shapes) {
@@ -553,28 +553,24 @@ WKDPointHandle(NSPoint point, double zoom)
 		if ([shape.elementId isEqualToString:_renaming]) {
 			WKDLook *look = [self lookOf:shape];
 			look.name = nil;
-			WKDDrawNode(look, bounds, YES);
+			WKDDrawNode(surface, look, bounds, YES);
 		} else if (!NSIsEmptyRect(label)) {
-			WKDDrawNode([self lookOf:shape], bounds, NO);
-			WKDDrawLabel(shape.name, label);
+			WKDDrawNode(surface, [self lookOf:shape], bounds, NO);
+			WKDDrawLabel(surface, shape.name, label);
 		} else {
-			WKDDrawNode([self lookOf:shape], bounds, YES);
+			WKDDrawNode(surface, [self lookOf:shape], bounds, YES);
 		}
 	}
-	[WKDInkColor() setStroke];
 	for (WKDConnection *connection in self.diagram.connections) {
 		NSArray *points = [self pointsOf:connection];
-		if (interactive && [_picked containsObject:connection.elementId]) {
-			[WKDSelectionColor() setStroke];
-		}
+		DKColor colour = interactive && [_picked containsObject:connection.elementId] ? WKDSelection() : WKDInk();
 		if (connection.isAssociation) {
-			WKDDrawAssociation(points, ![WKDAttribute(connection.element, @"associationDirection") ?: @"None"
-			                              isEqualToString:@"None"]);
+			WKDDrawAssociation(surface, points, colour,
+			                   ![WKDAttribute(connection.element, @"associationDirection") ?: @"None" isEqualToString:@"None"]);
 		} else {
-			WKDDrawFlow(points, connection.isDefault,
+			WKDDrawFlow(surface, points, colour, connection.isDefault,
 			            connection.hasCondition && connection.source.kind == WKDShapeActivity, nil);
 		}
-		[WKDInkColor() setStroke];
 		NSRect label = [self labelOfConnection:connection];
 		if (!NSIsEmptyRect(label) && ![connection.elementId isEqualToString:_renaming]) {
 			if (NSIsEmptyRect(connection.labelBounds)) {
@@ -582,7 +578,7 @@ WKDPointHandle(NSPoint point, double zoom)
 			} else if (_gesture == WKDGestureLabel && [connection.elementId isEqualToString:_from]) {
 				label = NSOffsetRect(label, labelMoved.width, labelMoved.height);
 			}
-			WKDDrawLabel(connection.name, label);
+			WKDDrawLabel(surface, connection.name, label);
 		}
 	}
 	if (!interactive) {
@@ -592,9 +588,9 @@ WKDPointHandle(NSPoint point, double zoom)
 		WKDShape *shape = [self.diagram shapeWithId:elementId];
 		WKDLane *band = [self.diagram laneWithId:elementId];
 		if (shape.hasBounds) {
-			WKDDrawSelection([self movedBounds:shape]);
+			WKDDrawSelection(surface, [self movedBounds:shape]);
 		} else if (band.hasBounds) {
-			WKDDrawSelection([self movedBand:band]);
+			WKDDrawSelection(surface, [self movedBand:band]);
 		}
 	}
 	/* With several selected, the anchor the others line up with. */
@@ -689,7 +685,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	[line stroke];
 	WKDShape *target = [self shapeAt:_at];
 	if (target != nil && target != excluded) {
-		WKDDrawSelection(target.bounds);
+		WKDDrawSelection([DKAppKitSurface surface], target.bounds);
 	}
 }
 

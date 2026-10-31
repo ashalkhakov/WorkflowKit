@@ -3,22 +3,22 @@
 #import "WKDRenderer.h"
 #import "WKDXML.h"
 
-static NSColor *
+static DKColor
 WDActiveColor(void)
 {
-	return [NSColor colorWithCalibratedRed:0.15 green:0.45 blue:0.9 alpha:1];
+	return DKColorMake(0.15, 0.45, 0.9, 1);
 }
 
-static NSColor *
+static DKColor
 WDFinishedColor(void)
 {
-	return [NSColor colorWithCalibratedRed:0.2 green:0.65 blue:0.3 alpha:1];
+	return DKColorMake(0.2, 0.65, 0.3, 1);
 }
 
-static NSColor *
+static DKColor
 WDIncidentColor(void)
 {
-	return [NSColor colorWithCalibratedRed:0.85 green:0.15 blue:0.15 alpha:1];
+	return DKColorMake(0.85, 0.15, 0.15, 1);
 }
 
 @implementation WDDiagramView
@@ -166,42 +166,37 @@ WDIncidentColor(void)
 
 /* A count in a circle of the colour, centred on the point. */
 static void
-WDBadge(NSPoint centre, NSUInteger count, NSColor *colour)
+WDBadge(id<DKSurface> surface, NSPoint centre, NSUInteger count, DKColor colour)
 {
 	NSString *text = [NSString stringWithFormat:@"%lu", (unsigned long)count];
-	NSDictionary *attributes = @{ NSFontAttributeName: [NSFont boldSystemFontOfSize:10],
-	                              NSForegroundColorAttributeName: [NSColor whiteColor] };
-	NSSize size = [text sizeWithAttributes:attributes];
+	DKFont *font = [DKFont systemFontOfSize:10 bold:YES];
+	NSSize size = [surface sizeOfText:text font:font];
 	double diameter = MAX(16, size.width + 8);
 	NSRect circle = NSMakeRect(centre.x - diameter / 2, centre.y - 8, diameter, 16);
-	[colour setFill];
-	[[NSBezierPath bezierPathWithRoundedRect:circle xRadius:8 yRadius:8] fill];
-	[text drawAtPoint:NSMakePoint(NSMidX(circle) - size.width / 2, NSMidY(circle) - size.height / 2)
-	   withAttributes:attributes];
+	[surface fillPath:[DKPath pathWithRoundedRect:circle radius:8] color:colour];
+	[surface drawText:text centeredAt:NSMakePoint(NSMidX(circle), NSMidY(circle)) font:font color:DKColorWhite()
+	         rotation:DKTextRotationNone];
 }
 
-/* Drawn with the designer's renderer (WKDRenderer), into the canvas's
- * graphics context: the view and its print. */
+/* Drawn with the designer's renderer (WKDRenderer) through the canvas's
+ * surface: the view, a print, an export (PDF, PNG, SVG). */
 - (void)canvas:(DKCanvasView *)canvas
     drawInRect:(NSRect)dirty
        surface:(id<DKSurface>)surface
          state:(DKDrawingState *)state
 {
 	WKDBeginDrawing(state.dark);
-	[self drawDiagramInRect:dirty];
+	[self drawDiagramInRect:dirty surface:surface];
 	WKDEndDrawing();
 }
 
-- (void)drawDiagramInRect:(NSRect)dirty
+- (void)drawDiagramInRect:(NSRect)dirty surface:(id<DKSurface>)surface
 {
 	if (self.diagram == nil) {
-		NSDictionary *attributes = @{ NSFontAttributeName: [NSFont systemFontOfSize:12],
-		                              NSForegroundColorAttributeName: [NSColor grayColor] };
-		NSString *text = self.placeholder ?: @"";
-		NSSize size = [text sizeWithAttributes:attributes];
 		NSRect visible = [self visibleRect];
-		[text drawAtPoint:NSMakePoint(NSMidX(visible) - size.width / 2, NSMidY(visible) - size.height / 2)
-		   withAttributes:attributes];
+		[surface drawText:self.placeholder ?: @"" centeredAt:NSMakePoint(NSMidX(visible), NSMidY(visible))
+		             font:[DKFont systemFontOfSize:12 bold:NO] color:DKColorMake(0.5, 0.5, 0.5, 1)
+		         rotation:DKTextRotationNone];
 		return;
 	}
 	/* Pools and lanes under everything. */
@@ -212,7 +207,7 @@ WDBadge(NSPoint centre, NSUInteger count, NSColor *colour)
 	[bands addObjectsFromArray:self.diagram.lanes];
 	for (WKDLane *band in bands) {
 		if (band.hasBounds) {
-			WKDDrawLane(band.bounds, band.name, band.horizontal);
+			WKDDrawLane(surface, band.bounds, band.name, band.horizontal);
 		}
 	}
 	/* The way taken first, under the shapes. */
@@ -220,52 +215,46 @@ WDBadge(NSPoint centre, NSUInteger count, NSColor *colour)
 		BOOL taken = [self.finished containsObject:connection.source.elementId]
 			&& ([self.finished containsObject:connection.target.elementId]
 			    || [self.active containsObject:connection.target.elementId]);
-		[(taken ? WDFinishedColor() : WKDInkColor()) setStroke];
+		DKColor colour = taken ? WDFinishedColor() : WKDInk();
 		if (connection.isAssociation) {
-			WKDDrawAssociation(connection.waypoints, ![WKDAttribute(connection.element, @"associationDirection") ?: @"None"
-			                                           isEqualToString:@"None"]);
+			WKDDrawAssociation(surface, connection.waypoints, colour,
+			                   ![WKDAttribute(connection.element, @"associationDirection") ?: @"None" isEqualToString:@"None"]);
 		} else {
-			WKDDrawFlow(connection.waypoints, connection.isDefault,
+			WKDDrawFlow(surface, connection.waypoints, colour, connection.isDefault,
 			            connection.hasCondition && connection.source.kind == WKDShapeActivity, nil);
 		}
 		if ([connection.name length] > 0) {
-			WKDDrawLabel(connection.name, NSIsEmptyRect(connection.labelBounds)
+			WKDDrawLabel(surface, connection.name, NSIsEmptyRect(connection.labelBounds)
 			                                  ? WKDFlowLabelRect(connection.waypoints) : connection.labelBounds);
 		}
 	}
-	[WKDInkColor() setStroke];
 	for (WKDShape *shape in self.diagram.shapes) {
 		if (!shape.hasBounds || !NSIntersectsRect(NSInsetRect(shape.bounds, -60, -40), dirty)) {
 			continue;
 		}
 		NSRect label = WKDNodeLabelRect(shape.type, shape.bounds);
 		if (!NSIsEmptyRect(label) && [shape.name length] > 0) {
-			WKDDrawNode([self lookOf:shape], shape.bounds, NO);
-			WKDDrawLabel(shape.name, NSIsEmptyRect(shape.labelBounds) ? label : shape.labelBounds);
+			WKDDrawNode(surface, [self lookOf:shape], shape.bounds, NO);
+			WKDDrawLabel(surface, shape.name, NSIsEmptyRect(shape.labelBounds) ? label : shape.labelBounds);
 		} else {
-			WKDDrawNode([self lookOf:shape], shape.bounds, YES);
+			WKDDrawNode(surface, [self lookOf:shape], shape.bounds, YES);
 		}
 		BOOL container = WKDIsContainerType(shape.type);
 		NSRect outline = NSInsetRect(shape.bounds, -3, -3);
 		if ([self.finished containsObject:shape.elementId] && ![self.active containsObject:shape.elementId]
 		    && !container) {
-			[[WDFinishedColor() colorWithAlphaComponent:0.18] setFill];
-			[WKDNodeOutline(shape.type, shape.bounds) fill];
+			[surface fillPath:WKDNodeOutline(shape.type, shape.bounds) color:DKColorWithAlpha(WDFinishedColor(), 0.18)];
 		}
 		NSUInteger tokens = [self.active countForObject:shape.elementId];
 		if (tokens > 0) {
-			NSBezierPath *ring = WKDNodeOutline(shape.type, outline);
-			[ring setLineWidth:3];
-			[WDActiveColor() setStroke];
-			[ring stroke];
-			[WKDInkColor() setStroke];
+			[surface strokePath:WKDNodeOutline(shape.type, outline) color:WDActiveColor() width:3 style:DKStrokeSolid];
 			if (tokens > 1) {
-				WDBadge(NSMakePoint(NSMinX(outline), NSMaxY(outline)), tokens, WDActiveColor());
+				WDBadge(surface, NSMakePoint(NSMinX(outline), NSMaxY(outline)), tokens, WDActiveColor());
 			}
 		}
 		NSUInteger incidents = [self.incidents countForObject:shape.elementId];
 		if (incidents > 0) {
-			WDBadge(NSMakePoint(NSMaxX(outline), NSMinY(outline)), incidents, WDIncidentColor());
+			WDBadge(surface, NSMakePoint(NSMaxX(outline), NSMinY(outline)), incidents, WDIncidentColor());
 		}
 	}
 }

@@ -14,9 +14,11 @@
 
 @end
 
+#pragma mark Colours
+
 /* Between WKDBeginDrawing(NO) and WKDEndDrawing(): black on white, as a
  * DiagramKit canvas draws a light view, a print or an export. Otherwise the
- * appearance's own colours. */
+ * appearance's own colours, taken as they are now. */
 static BOOL WKDLight;
 
 void
@@ -29,6 +31,16 @@ void
 WKDEndDrawing(void)
 {
 	WKDLight = NO;
+}
+
+static DKColor
+WKDColorOf(NSColor *color)
+{
+	NSColor *rgb = [color colorUsingColorSpace:[NSColorSpace genericRGBColorSpace]];
+	if (rgb == nil) {
+		return DKColorBlack();
+	}
+	return DKColorMake([rgb redComponent], [rgb greenComponent], [rgb blueComponent], [rgb alphaComponent]);
 }
 
 NSColor *
@@ -49,94 +61,171 @@ WKDSelectionColor(void)
 	return [NSColor colorWithCalibratedRed:0.15 green:0.45 blue:0.95 alpha:1.0];
 }
 
-static void
-WKDStroke(NSBezierPath *path, double width, BOOL dashed)
+DKColor
+WKDInk(void)
 {
-	[path setLineWidth:width];
-	if (dashed) {
-		CGFloat pattern[2] = { 4, 3 };
-		[path setLineDash:pattern count:2 phase:0];
-	}
-	[path stroke];
+	return WKDLight ? DKColorBlack() : WKDColorOf([NSColor textColor]);
 }
 
+DKColor
+WKDPaper(void)
+{
+	return WKDLight ? DKColorWhite() : WKDColorOf([NSColor textBackgroundColor]);
+}
+
+DKColor
+WKDSelection(void)
+{
+	return DKColorMake(0.15, 0.45, 0.95, 1.0);
+}
+
+#pragma mark Paths and text
+
 static void
-WKDDrawText(NSString *text, NSRect rect, double size)
+WKDStroke(id<DKSurface> surface, DKPath *path, DKColor color, double width, DKStrokeStyle style)
+{
+	[surface strokePath:path color:color width:width style:style];
+}
+
+static DKPath *
+WKDPolyline(NSArray<NSValue *> *points)
+{
+	DKPath *path = [DKPath path];
+	for (NSUInteger i = 0; i < [points count]; i++) {
+		NSPoint point = [[points objectAtIndex:i] pointValue];
+		if (i == 0) {
+			[path moveTo:point];
+		} else {
+			[path lineTo:point];
+		}
+	}
+	return path;
+}
+
+static DKPath *
+WKDLine(NSPoint from, NSPoint to)
+{
+	return [DKPath pathWithLineFrom:from to:to];
+}
+
+/* An arc of the circle from one angle to the other, in degrees, the way
+ * the angles grow (clockwise on the page, y growing downwards), as cubic
+ * curves of a quarter turn at most. */
+static void
+WKDAppendArc(DKPath *path, NSPoint centre, double radius, double from, double to)
+{
+	double a0 = from * M_PI / 180, a1 = to * M_PI / 180;
+	NSInteger pieces = MAX(1, (NSInteger)ceil(fabs(a1 - a0) / (M_PI / 2)));
+	double step = (a1 - a0) / pieces;
+	double k = 4.0 / 3.0 * tan(step / 4);
+	[path moveTo:NSMakePoint(centre.x + radius * cos(a0), centre.y + radius * sin(a0))];
+	for (NSInteger i = 0; i < pieces; i++) {
+		double s = a0 + i * step, e = s + step;
+		NSPoint p0 = NSMakePoint(centre.x + radius * cos(s), centre.y + radius * sin(s));
+		NSPoint p3 = NSMakePoint(centre.x + radius * cos(e), centre.y + radius * sin(e));
+		NSPoint c1 = NSMakePoint(p0.x - k * radius * sin(s), p0.y + k * radius * cos(s));
+		NSPoint c2 = NSMakePoint(p3.x + k * radius * sin(e), p3.y - k * radius * cos(e));
+		[path curveTo:p3 control1:c1 control2:c2];
+	}
+}
+
+/* The text broken at words into lines no wider than the width, as the
+ * surface measures them; a word wider than it on a line of its own. */
+static NSArray<NSString *> *
+WKDLines(id<DKSurface> surface, NSString *text, DKFont *font, double width)
+{
+	NSMutableArray *lines = [NSMutableArray array];
+	for (NSString *paragraph in [text componentsSeparatedByString:@"\n"]) {
+		NSString *line = @"";
+		for (NSString *word in [paragraph componentsSeparatedByString:@" "]) {
+			if ([word length] == 0) {
+				continue;
+			}
+			NSString *longer = [line length] == 0 ? word : [line stringByAppendingFormat:@" %@", word];
+			if ([line length] > 0 && [surface sizeOfText:longer font:font].width > width) {
+				[lines addObject:line];
+				line = word;
+			} else {
+				line = longer;
+			}
+		}
+		[lines addObject:line];
+	}
+	return lines;
+}
+
+/* The lines centred across the rectangle, from its top; with a limit,
+ * what does not fit that height is left out. */
+static void
+WKDDrawLines(id<DKSurface> surface, NSArray<NSString *> *lines, NSRect rect, DKFont *font, double limit)
+{
+	double height = [surface sizeOfText:@"Xg" font:font].height;
+	double y = NSMinY(rect);
+	for (NSString *line in lines) {
+		if (limit > 0 && y + height > NSMinY(rect) + limit + 0.5) {
+			break;
+		}
+		[surface drawText:line at:NSMakePoint(NSMidX(rect), y) font:font color:WKDInk() centered:YES];
+		y += height;
+	}
+}
+
+/* A name in the rectangle, centred both ways, wrapped to its width. */
+static void
+WKDDrawText(id<DKSurface> surface, NSString *text, NSRect rect, double size)
 {
 	if ([text length] == 0) {
 		return;
 	}
-	NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
-	[style setAlignment:NSTextAlignmentCenter];
-	[style setLineBreakMode:NSLineBreakByWordWrapping];
-	NSDictionary *attributes = @{ NSFontAttributeName: [NSFont systemFontOfSize:size],
-	                              NSForegroundColorAttributeName: WKDInkColor(),
-	                              NSParagraphStyleAttributeName: style };
-	NSRect needed = [text boundingRectWithSize:NSMakeSize(NSWidth(rect), 1000)
-	                                   options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes];
-	double height = MIN(NSHeight(needed), NSHeight(rect));
+	DKFont *font = [DKFont systemFontOfSize:size bold:NO];
+	NSArray *lines = WKDLines(surface, text, font, NSWidth(rect));
+	double lineHeight = [surface sizeOfText:@"Xg" font:font].height;
+	double height = MIN([lines count] * lineHeight, NSHeight(rect));
 	NSRect centred = NSMakeRect(NSMinX(rect), NSMidY(rect) - height / 2, NSWidth(rect), height + 2);
-	[text drawWithRect:centred options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes];
+	WKDDrawLines(surface, lines, centred, font, NSHeight(centred));
 }
 
 void
-WKDDrawLabel(NSString *name, NSRect rect)
+WKDDrawLabel(id<DKSurface> surface, NSString *name, NSRect rect)
 {
 	if ([name length] == 0) {
 		return;
 	}
-	NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
-	[style setAlignment:NSTextAlignmentCenter];
-	[style setLineBreakMode:NSLineBreakByWordWrapping];
-	NSDictionary *attributes = @{ NSFontAttributeName: [NSFont systemFontOfSize:10],
-	                              NSForegroundColorAttributeName: WKDInkColor(),
-	                              NSParagraphStyleAttributeName: style };
-	NSRect needed = [name boundingRectWithSize:NSMakeSize(MAX(NSWidth(rect), 20), 1000)
-	                                   options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes];
-	NSRect drawn = NSMakeRect(NSMinX(rect), NSMinY(rect), MAX(NSWidth(rect), 20),
-	                          MAX(NSHeight(rect), NSHeight(needed) + 2));
-	[name drawWithRect:drawn options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes];
+	DKFont *font = [DKFont systemFontOfSize:10 bold:NO];
+	NSRect drawn = NSMakeRect(NSMinX(rect), NSMinY(rect), MAX(NSWidth(rect), 20), NSHeight(rect));
+	WKDDrawLines(surface, WKDLines(surface, name, font, NSWidth(drawn)), drawn, font, 0);
 }
 
 #pragma mark Markers
 
 static void
-WKDEnvelope(NSRect box, BOOL filled)
+WKDEnvelope(id<DKSurface> surface, NSRect box, BOOL filled)
 {
-	NSBezierPath *path = [NSBezierPath bezierPathWithRect:box];
+	DKPath *path = [DKPath pathWithRect:box];
+	DKColor flapColor = WKDInk();
 	if (filled) {
-		[WKDInkColor() setFill];
-		[path fill];
-		[WKDPaperColor() setStroke];
+		[surface fillPath:path color:WKDInk()];
+		flapColor = WKDPaper();
 	}
-	NSBezierPath *flap = [NSBezierPath bezierPath];
-	[flap moveToPoint:NSMakePoint(NSMinX(box), NSMinY(box))];
-	[flap lineToPoint:NSMakePoint(NSMidX(box), NSMidY(box))];
-	[flap lineToPoint:NSMakePoint(NSMaxX(box), NSMinY(box))];
-	WKDStroke(flap, 1, NO);
-	[WKDInkColor() setStroke];
+	DKPath *flap = [DKPath path];
+	[flap moveTo:NSMakePoint(NSMinX(box), NSMinY(box))];
+	[flap lineTo:NSMakePoint(NSMidX(box), NSMidY(box))];
+	[flap lineTo:NSMakePoint(NSMaxX(box), NSMinY(box))];
+	WKDStroke(surface, flap, flapColor, 1, DKStrokeSolid);
 	if (!filled) {
-		WKDStroke(path, 1, NO);
+		WKDStroke(surface, path, WKDInk(), 1, DKStrokeSolid);
 	}
 }
 
 static void
-WKDPolygon(NSArray *points, BOOL filled)
+WKDPolygon(id<DKSurface> surface, NSArray *points, BOOL filled)
 {
-	NSBezierPath *path = [NSBezierPath bezierPath];
-	for (NSUInteger i = 0; i < [points count]; i++) {
-		NSPoint point = [[points objectAtIndex:i] pointValue];
-		if (i == 0) {
-			[path moveToPoint:point];
-		} else {
-			[path lineToPoint:point];
-		}
-	}
-	[path closePath];
+	DKPath *path = WKDPolyline(points);
+	[path close];
 	if (filled) {
-		[path fill];
+		[surface fillPath:path color:WKDInk()];
 	}
-	WKDStroke(path, 1, NO);
+	WKDStroke(surface, path, WKDInk(), 1, DKStrokeSolid);
 }
 
 static NSValue *
@@ -147,242 +236,235 @@ WKDP(double x, double y)
 
 /* An event's definition, in the middle of its circle. */
 static void
-WKDEventMarker(NSString *definition, NSRect circle, BOOL throwing)
+WKDEventMarker(id<DKSurface> surface, NSString *definition, NSRect circle, BOOL throwing)
 {
 	double r = NSWidth(circle) / 2, cx = NSMidX(circle), cy = NSMidY(circle);
-	[WKDInkColor() setStroke];
-	[WKDInkColor() setFill];
 	if ([definition isEqualToString:@"timerEventDefinition"]) {
 		NSRect face = NSInsetRect(circle, r * 0.35, r * 0.35);
-		WKDStroke([NSBezierPath bezierPathWithOvalInRect:face], 1, NO);
-		NSBezierPath *hands = [NSBezierPath bezierPath];
-		[hands moveToPoint:NSMakePoint(cx, cy - r * 0.45)];
-		[hands lineToPoint:NSMakePoint(cx, cy)];
-		[hands lineToPoint:NSMakePoint(cx + r * 0.35, cy)];
-		WKDStroke(hands, 1, NO);
+		WKDStroke(surface, [DKPath pathWithOvalInRect:face], WKDInk(), 1, DKStrokeSolid);
+		DKPath *hands = [DKPath path];
+		[hands moveTo:NSMakePoint(cx, cy - r * 0.45)];
+		[hands lineTo:NSMakePoint(cx, cy)];
+		[hands lineTo:NSMakePoint(cx + r * 0.35, cy)];
+		WKDStroke(surface, hands, WKDInk(), 1, DKStrokeSolid);
 	} else if ([definition isEqualToString:@"messageEventDefinition"]) {
-		WKDEnvelope(NSMakeRect(cx - r * 0.5, cy - r * 0.33, r, r * 0.66), throwing);
+		WKDEnvelope(surface, NSMakeRect(cx - r * 0.5, cy - r * 0.33, r, r * 0.66), throwing);
 	} else if ([definition isEqualToString:@"signalEventDefinition"]) {
-		WKDPolygon(@[ WKDP(cx, cy - r * 0.5), WKDP(cx + r * 0.5, cy + r * 0.35), WKDP(cx - r * 0.5, cy + r * 0.35) ],
+		WKDPolygon(surface, @[ WKDP(cx, cy - r * 0.5), WKDP(cx + r * 0.5, cy + r * 0.35), WKDP(cx - r * 0.5, cy + r * 0.35) ],
 		           throwing);
 	} else if ([definition isEqualToString:@"errorEventDefinition"]) {
-		WKDPolygon(@[ WKDP(cx - r * 0.45, cy + r * 0.45), WKDP(cx - r * 0.2, cy - r * 0.4), WKDP(cx + r * 0.1, cy + r * 0.1),
-		              WKDP(cx + r * 0.45, cy - r * 0.45), WKDP(cx + r * 0.2, cy + r * 0.4), WKDP(cx - r * 0.1, cy - r * 0.1) ],
+		WKDPolygon(surface, @[ WKDP(cx - r * 0.45, cy + r * 0.45), WKDP(cx - r * 0.2, cy - r * 0.4), WKDP(cx + r * 0.1, cy + r * 0.1),
+		                       WKDP(cx + r * 0.45, cy - r * 0.45), WKDP(cx + r * 0.2, cy + r * 0.4), WKDP(cx - r * 0.1, cy - r * 0.1) ],
 		           throwing);
 	} else if ([definition isEqualToString:@"escalationEventDefinition"]) {
-		WKDPolygon(@[ WKDP(cx, cy - r * 0.5), WKDP(cx + r * 0.35, cy + r * 0.45), WKDP(cx, cy + r * 0.1),
-		              WKDP(cx - r * 0.35, cy + r * 0.45) ], throwing);
+		WKDPolygon(surface, @[ WKDP(cx, cy - r * 0.5), WKDP(cx + r * 0.35, cy + r * 0.45), WKDP(cx, cy + r * 0.1),
+		                       WKDP(cx - r * 0.35, cy + r * 0.45) ], throwing);
 	} else if ([definition isEqualToString:@"compensateEventDefinition"]) {
-		WKDPolygon(@[ WKDP(cx - r * 0.5, cy), WKDP(cx, cy - r * 0.3), WKDP(cx, cy + r * 0.3) ], throwing);
-		WKDPolygon(@[ WKDP(cx, cy), WKDP(cx + r * 0.5, cy - r * 0.3), WKDP(cx + r * 0.5, cy + r * 0.3) ], throwing);
+		WKDPolygon(surface, @[ WKDP(cx - r * 0.5, cy), WKDP(cx, cy - r * 0.3), WKDP(cx, cy + r * 0.3) ], throwing);
+		WKDPolygon(surface, @[ WKDP(cx, cy), WKDP(cx + r * 0.5, cy - r * 0.3), WKDP(cx + r * 0.5, cy + r * 0.3) ], throwing);
 	} else if ([definition isEqualToString:@"conditionalEventDefinition"]) {
 		NSRect page = NSMakeRect(cx - r * 0.35, cy - r * 0.45, r * 0.7, r * 0.9);
-		WKDStroke([NSBezierPath bezierPathWithRect:page], 1, NO);
+		WKDStroke(surface, [DKPath pathWithRect:page], WKDInk(), 1, DKStrokeSolid);
 		for (int line = 1; line <= 4; line++) {
-			NSBezierPath *rule = [NSBezierPath bezierPath];
 			double y = NSMinY(page) + NSHeight(page) * line / 5;
-			[rule moveToPoint:NSMakePoint(NSMinX(page) + 2, y)];
-			[rule lineToPoint:NSMakePoint(NSMaxX(page) - 2, y)];
-			WKDStroke(rule, 1, NO);
+			WKDStroke(surface, WKDLine(NSMakePoint(NSMinX(page) + 2, y), NSMakePoint(NSMaxX(page) - 2, y)), WKDInk(), 1,
+			          DKStrokeSolid);
 		}
 	} else if ([definition isEqualToString:@"linkEventDefinition"]) {
-		WKDPolygon(@[ WKDP(cx - r * 0.45, cy - r * 0.15), WKDP(cx + r * 0.05, cy - r * 0.15), WKDP(cx + r * 0.05, cy - r * 0.4),
-		              WKDP(cx + r * 0.5, cy), WKDP(cx + r * 0.05, cy + r * 0.4), WKDP(cx + r * 0.05, cy + r * 0.15),
-		              WKDP(cx - r * 0.45, cy + r * 0.15) ], throwing);
+		WKDPolygon(surface, @[ WKDP(cx - r * 0.45, cy - r * 0.15), WKDP(cx + r * 0.05, cy - r * 0.15), WKDP(cx + r * 0.05, cy - r * 0.4),
+		                       WKDP(cx + r * 0.5, cy), WKDP(cx + r * 0.05, cy + r * 0.4), WKDP(cx + r * 0.05, cy + r * 0.15),
+		                       WKDP(cx - r * 0.45, cy + r * 0.15) ], throwing);
 	} else if ([definition isEqualToString:@"terminateEventDefinition"]) {
-		[[NSBezierPath bezierPathWithOvalInRect:NSInsetRect(circle, r * 0.4, r * 0.4)] fill];
+		[surface fillPath:[DKPath pathWithOvalInRect:NSInsetRect(circle, r * 0.4, r * 0.4)] color:WKDInk()];
 	}
 }
 
 /* A task's type, in its top left corner. */
 static void
-WKDTaskMarker(NSString *type, NSRect rect)
+WKDTaskMarker(id<DKSurface> surface, NSString *type, NSRect rect)
 {
 	NSRect box = NSMakeRect(NSMinX(rect) + 6, NSMinY(rect) + 6, 14, 14);
-	[WKDInkColor() setStroke];
-	[WKDInkColor() setFill];
 	if ([type isEqualToString:@"userTask"]) {
-		WKDStroke([NSBezierPath bezierPathWithOvalInRect:NSMakeRect(NSMidX(box) - 3, NSMinY(box), 6, 6)], 1, NO);
-		NSBezierPath *body = [NSBezierPath bezierPath];
-		[body appendBezierPathWithArcWithCenter:NSMakePoint(NSMidX(box), NSMaxY(box)) radius:7 startAngle:180 endAngle:360
-		                              clockwise:NO];
-		WKDStroke(body, 1, NO);
+		WKDStroke(surface, [DKPath pathWithOvalInRect:NSMakeRect(NSMidX(box) - 3, NSMinY(box), 6, 6)], WKDInk(), 1,
+		          DKStrokeSolid);
+		/* The shoulders: the upper half of a circle round the box's bottom
+		 * middle. */
+		DKPath *body = [DKPath path];
+		WKDAppendArc(body, NSMakePoint(NSMidX(box), NSMaxY(box)), 7, 180, 360);
+		WKDStroke(surface, body, WKDInk(), 1, DKStrokeSolid);
 	} else if ([type isEqualToString:@"serviceTask"]) {
 		NSPoint c = NSMakePoint(NSMidX(box), NSMidY(box));
 		for (int i = 0; i < 8; i++) {
 			double a = i * M_PI / 4;
-			NSBezierPath *tooth = [NSBezierPath bezierPath];
-			[tooth moveToPoint:NSMakePoint(c.x + 4 * cos(a), c.y + 4 * sin(a))];
-			[tooth lineToPoint:NSMakePoint(c.x + 7 * cos(a), c.y + 7 * sin(a))];
-			WKDStroke(tooth, 2, NO);
+			WKDStroke(surface, WKDLine(NSMakePoint(c.x + 4 * cos(a), c.y + 4 * sin(a)),
+			                           NSMakePoint(c.x + 7 * cos(a), c.y + 7 * sin(a))),
+			          WKDInk(), 2, DKStrokeSolid);
 		}
-		WKDStroke([NSBezierPath bezierPathWithOvalInRect:NSInsetRect(box, 3, 3)], 1, NO);
+		WKDStroke(surface, [DKPath pathWithOvalInRect:NSInsetRect(box, 3, 3)], WKDInk(), 1, DKStrokeSolid);
 	} else if ([type isEqualToString:@"scriptTask"]) {
-		WKDStroke([NSBezierPath bezierPathWithRect:NSInsetRect(box, 2, 0)], 1, NO);
+		WKDStroke(surface, [DKPath pathWithRect:NSInsetRect(box, 2, 0)], WKDInk(), 1, DKStrokeSolid);
 		for (int line = 1; line <= 3; line++) {
-			NSBezierPath *rule = [NSBezierPath bezierPath];
-			[rule moveToPoint:NSMakePoint(NSMinX(box) + 4, NSMinY(box) + line * 3.5)];
-			[rule lineToPoint:NSMakePoint(NSMaxX(box) - 4, NSMinY(box) + line * 3.5)];
-			WKDStroke(rule, 1, NO);
+			WKDStroke(surface, WKDLine(NSMakePoint(NSMinX(box) + 4, NSMinY(box) + line * 3.5),
+			                           NSMakePoint(NSMaxX(box) - 4, NSMinY(box) + line * 3.5)),
+			          WKDInk(), 1, DKStrokeSolid);
 		}
 	} else if ([type isEqualToString:@"sendTask"] || [type isEqualToString:@"receiveTask"]) {
-		WKDEnvelope(NSMakeRect(NSMinX(box), NSMinY(box) + 2, 14, 10), [type isEqualToString:@"sendTask"]);
+		WKDEnvelope(surface, NSMakeRect(NSMinX(box), NSMinY(box) + 2, 14, 10), [type isEqualToString:@"sendTask"]);
 	} else if ([type isEqualToString:@"businessRuleTask"]) {
 		NSRect table = NSMakeRect(NSMinX(box), NSMinY(box) + 2, 14, 10);
-		WKDStroke([NSBezierPath bezierPathWithRect:table], 1, NO);
-		NSBezierPath *grid = [NSBezierPath bezierPath];
-		[grid moveToPoint:NSMakePoint(NSMinX(table), NSMinY(table) + 3)];
-		[grid lineToPoint:NSMakePoint(NSMaxX(table), NSMinY(table) + 3)];
-		[grid moveToPoint:NSMakePoint(NSMinX(table) + 5, NSMinY(table))];
-		[grid lineToPoint:NSMakePoint(NSMinX(table) + 5, NSMaxY(table))];
-		WKDStroke(grid, 1, NO);
+		WKDStroke(surface, [DKPath pathWithRect:table], WKDInk(), 1, DKStrokeSolid);
+		DKPath *grid = [DKPath path];
+		[grid moveTo:NSMakePoint(NSMinX(table), NSMinY(table) + 3)];
+		[grid lineTo:NSMakePoint(NSMaxX(table), NSMinY(table) + 3)];
+		[grid moveTo:NSMakePoint(NSMinX(table) + 5, NSMinY(table))];
+		[grid lineTo:NSMakePoint(NSMinX(table) + 5, NSMaxY(table))];
+		WKDStroke(surface, grid, WKDInk(), 1, DKStrokeSolid);
 	} else if ([type isEqualToString:@"manualTask"]) {
-		NSBezierPath *hand = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(NSMinX(box), NSMinY(box) + 4, 14, 7)
-		                                                     xRadius:3 yRadius:3];
-		WKDStroke(hand, 1, NO);
+		WKDStroke(surface, [DKPath pathWithRoundedRect:NSMakeRect(NSMinX(box), NSMinY(box) + 4, 14, 7) radius:3], WKDInk(), 1,
+		          DKStrokeSolid);
 	}
 }
 
 /* Multi-instance and loop markers, bottom centre. */
 static void
-WKDLoopMarker(NSString *loop, NSRect rect)
+WKDLoopMarker(id<DKSurface> surface, NSString *loop, NSRect rect)
 {
 	if (loop == nil) {
 		return;
 	}
 	double cx = NSMidX(rect), bottom = NSMaxY(rect) - 6;
-	NSBezierPath *bars = [NSBezierPath bezierPath];
+	DKPath *bars = [DKPath path];
 	if ([loop isEqualToString:@"parallel"]) {
 		for (int i = -1; i <= 1; i++) {
-			[bars moveToPoint:NSMakePoint(cx + i * 4, bottom - 10)];
-			[bars lineToPoint:NSMakePoint(cx + i * 4, bottom)];
+			[bars moveTo:NSMakePoint(cx + i * 4, bottom - 10)];
+			[bars lineTo:NSMakePoint(cx + i * 4, bottom)];
 		}
 	} else if ([loop isEqualToString:@"sequential"]) {
 		for (int i = 0; i <= 2; i++) {
-			[bars moveToPoint:NSMakePoint(cx - 5, bottom - 10 + i * 4)];
-			[bars lineToPoint:NSMakePoint(cx + 5, bottom - 10 + i * 4)];
+			[bars moveTo:NSMakePoint(cx - 5, bottom - 10 + i * 4)];
+			[bars lineTo:NSMakePoint(cx + 5, bottom - 10 + i * 4)];
 		}
 	} else {
-		[bars appendBezierPathWithArcWithCenter:NSMakePoint(cx, bottom - 5) radius:5 startAngle:-60 endAngle:240];
+		/* A loop: the circle from -60 degrees round to 240, as AppKit drew it
+		 * in the flipped view, open at the bottom. */
+		WKDAppendArc(bars, NSMakePoint(cx, bottom - 5), 5, -60, 240);
 	}
-	WKDStroke(bars, 1.5, NO);
+	WKDStroke(surface, bars, WKDInk(), 1.5, DKStrokeSolid);
 }
 
 #pragma mark Nodes
 
+static DKPath *
+WKDDiamond(NSRect rect)
+{
+	DKPath *diamond = [DKPath path];
+	[diamond moveTo:NSMakePoint(NSMidX(rect), NSMinY(rect))];
+	[diamond lineTo:NSMakePoint(NSMaxX(rect), NSMidY(rect))];
+	[diamond lineTo:NSMakePoint(NSMidX(rect), NSMaxY(rect))];
+	[diamond lineTo:NSMakePoint(NSMinX(rect), NSMidY(rect))];
+	[diamond close];
+	return diamond;
+}
+
 void
-WKDDrawNode(WKDLook *look, NSRect rect, BOOL names)
+WKDDrawNode(id<DKSurface> surface, WKDLook *look, NSRect rect, BOOL names)
 {
 	NSString *type = look.type;
 	BOOL container = WKDIsContainerType(type);
 	WKDShapeKind kind = WKDKindOfType(type, NULL);
-	[WKDInkColor() setStroke];
 	if (kind == WKDShapeEvent) {
 		NSRect circle = NSInsetRect(rect, 1, 1);
-		NSBezierPath *outline = [NSBezierPath bezierPathWithOvalInRect:circle];
-		[WKDPaperColor() setFill];
-		[outline fill];
-		[WKDInkColor() setStroke];
-		BOOL dashed = !look.interrupting;
+		DKPath *outline = [DKPath pathWithOvalInRect:circle];
+		[surface fillPath:outline color:WKDPaper()];
+		DKStrokeStyle style = look.interrupting ? DKStrokeSolid : DKStrokeDashed;
 		if ([type isEqualToString:@"startEvent"]) {
-			WKDStroke(outline, 1.5, dashed);
+			WKDStroke(surface, outline, WKDInk(), 1.5, style);
 		} else if ([type isEqualToString:@"endEvent"]) {
-			WKDStroke(outline, 3.5, NO);
+			WKDStroke(surface, outline, WKDInk(), 3.5, DKStrokeSolid);
 		} else {
-			WKDStroke(outline, 1, dashed);
-			WKDStroke([NSBezierPath bezierPathWithOvalInRect:NSInsetRect(circle, 3, 3)], 1, dashed);
+			WKDStroke(surface, outline, WKDInk(), 1, style);
+			WKDStroke(surface, [DKPath pathWithOvalInRect:NSInsetRect(circle, 3, 3)], WKDInk(), 1, style);
 		}
-		WKDEventMarker(look.eventDefinition, circle,
+		WKDEventMarker(surface, look.eventDefinition, circle,
 		               [type isEqualToString:@"endEvent"] || [type isEqualToString:@"intermediateThrowEvent"]);
 		if (names) {
-			WKDDrawText(look.name, WKDNodeLabelRect(type, rect), 10);
+			WKDDrawText(surface, look.name, WKDNodeLabelRect(type, rect), 10);
 		}
 		return;
 	}
 	if (kind == WKDShapeGateway) {
-		NSBezierPath *diamond = [NSBezierPath bezierPath];
-		[diamond moveToPoint:NSMakePoint(NSMidX(rect), NSMinY(rect))];
-		[diamond lineToPoint:NSMakePoint(NSMaxX(rect), NSMidY(rect))];
-		[diamond lineToPoint:NSMakePoint(NSMidX(rect), NSMaxY(rect))];
-		[diamond lineToPoint:NSMakePoint(NSMinX(rect), NSMidY(rect))];
-		[diamond closePath];
-		[WKDPaperColor() setFill];
-		[diamond fill];
-		[WKDInkColor() setStroke];
-		WKDStroke(diamond, 1.5, NO);
+		DKPath *diamond = WKDDiamond(rect);
+		[surface fillPath:diamond color:WKDPaper()];
+		WKDStroke(surface, diamond, WKDInk(), 1.5, DKStrokeSolid);
 		double r = NSWidth(rect) / 2, cx = NSMidX(rect), cy = NSMidY(rect);
-		NSBezierPath *marker = [NSBezierPath bezierPath];
+		DKPath *marker = [DKPath path];
 		if ([type isEqualToString:@"exclusiveGateway"]) {
-			[marker moveToPoint:NSMakePoint(cx - r * 0.3, cy - r * 0.3)];
-			[marker lineToPoint:NSMakePoint(cx + r * 0.3, cy + r * 0.3)];
-			[marker moveToPoint:NSMakePoint(cx + r * 0.3, cy - r * 0.3)];
-			[marker lineToPoint:NSMakePoint(cx - r * 0.3, cy + r * 0.3)];
-			WKDStroke(marker, 3, NO);
+			[marker moveTo:NSMakePoint(cx - r * 0.3, cy - r * 0.3)];
+			[marker lineTo:NSMakePoint(cx + r * 0.3, cy + r * 0.3)];
+			[marker moveTo:NSMakePoint(cx + r * 0.3, cy - r * 0.3)];
+			[marker lineTo:NSMakePoint(cx - r * 0.3, cy + r * 0.3)];
+			WKDStroke(surface, marker, WKDInk(), 3, DKStrokeSolid);
 		} else if ([type isEqualToString:@"parallelGateway"] || [type isEqualToString:@"complexGateway"]) {
-			[marker moveToPoint:NSMakePoint(cx, cy - r * 0.45)];
-			[marker lineToPoint:NSMakePoint(cx, cy + r * 0.45)];
-			[marker moveToPoint:NSMakePoint(cx - r * 0.45, cy)];
-			[marker lineToPoint:NSMakePoint(cx + r * 0.45, cy)];
+			[marker moveTo:NSMakePoint(cx, cy - r * 0.45)];
+			[marker lineTo:NSMakePoint(cx, cy + r * 0.45)];
+			[marker moveTo:NSMakePoint(cx - r * 0.45, cy)];
+			[marker lineTo:NSMakePoint(cx + r * 0.45, cy)];
 			if ([type isEqualToString:@"complexGateway"]) {
-				[marker moveToPoint:NSMakePoint(cx - r * 0.3, cy - r * 0.3)];
-				[marker lineToPoint:NSMakePoint(cx + r * 0.3, cy + r * 0.3)];
-				[marker moveToPoint:NSMakePoint(cx + r * 0.3, cy - r * 0.3)];
-				[marker lineToPoint:NSMakePoint(cx - r * 0.3, cy + r * 0.3)];
+				[marker moveTo:NSMakePoint(cx - r * 0.3, cy - r * 0.3)];
+				[marker lineTo:NSMakePoint(cx + r * 0.3, cy + r * 0.3)];
+				[marker moveTo:NSMakePoint(cx + r * 0.3, cy - r * 0.3)];
+				[marker lineTo:NSMakePoint(cx - r * 0.3, cy + r * 0.3)];
 			}
-			WKDStroke(marker, 3, NO);
+			WKDStroke(surface, marker, WKDInk(), 3, DKStrokeSolid);
 		} else if ([type isEqualToString:@"inclusiveGateway"]) {
-			WKDStroke([NSBezierPath bezierPathWithOvalInRect:NSInsetRect(rect, r * 0.5, r * 0.5)], 2.5, NO);
+			WKDStroke(surface, [DKPath pathWithOvalInRect:NSInsetRect(rect, r * 0.5, r * 0.5)], WKDInk(), 2.5, DKStrokeSolid);
 		} else if ([type isEqualToString:@"eventBasedGateway"]) {
 			NSRect inner = NSInsetRect(rect, r * 0.45, r * 0.45);
-			WKDStroke([NSBezierPath bezierPathWithOvalInRect:inner], 1, NO);
+			WKDStroke(surface, [DKPath pathWithOvalInRect:inner], WKDInk(), 1, DKStrokeSolid);
 			double p = NSWidth(inner) / 2 * 0.6;
 			NSMutableArray *pentagon = [NSMutableArray array];
 			for (int i = 0; i < 5; i++) {
 				double a = -M_PI / 2 + i * 2 * M_PI / 5;
 				[pentagon addObject:WKDP(cx + p * cos(a), cy + p * sin(a))];
 			}
-			WKDPolygon(pentagon, NO);
+			WKDPolygon(surface, pentagon, NO);
 		}
 		if (names) {
-			WKDDrawText(look.name, WKDNodeLabelRect(type, rect), 10);
+			WKDDrawText(surface, look.name, WKDNodeLabelRect(type, rect), 10);
 		}
 		return;
 	}
 	if (kind == WKDShapeArtifact) {
-		NSBezierPath *bracket = [NSBezierPath bezierPath];
-		[bracket moveToPoint:NSMakePoint(NSMinX(rect) + 10, NSMinY(rect))];
-		[bracket lineToPoint:NSMakePoint(NSMinX(rect), NSMinY(rect))];
-		[bracket lineToPoint:NSMakePoint(NSMinX(rect), NSMaxY(rect))];
-		[bracket lineToPoint:NSMakePoint(NSMinX(rect) + 10, NSMaxY(rect))];
-		WKDStroke(bracket, 1, NO);
+		DKPath *bracket = [DKPath path];
+		[bracket moveTo:NSMakePoint(NSMinX(rect) + 10, NSMinY(rect))];
+		[bracket lineTo:NSMakePoint(NSMinX(rect), NSMinY(rect))];
+		[bracket lineTo:NSMakePoint(NSMinX(rect), NSMaxY(rect))];
+		[bracket lineTo:NSMakePoint(NSMinX(rect) + 10, NSMaxY(rect))];
+		WKDStroke(surface, bracket, WKDInk(), 1, DKStrokeSolid);
 		if (names) {
-			WKDDrawText(look.name, NSInsetRect(rect, 6, 2), 10);
+			WKDDrawText(surface, look.name, NSInsetRect(rect, 6, 2), 10);
 		}
 		return;
 	}
-	NSBezierPath *box = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(rect, 0.5, 0.5) xRadius:10 yRadius:10];
-	[WKDPaperColor() setFill];
-	[box fill];
-	[WKDInkColor() setStroke];
+	DKPath *box = [DKPath pathWithRoundedRect:NSInsetRect(rect, 0.5, 0.5) radius:10];
+	[surface fillPath:box color:WKDPaper()];
 	if ([type isEqualToString:@"callActivity"]) {
-		WKDStroke(box, 3.5, NO);
+		WKDStroke(surface, box, WKDInk(), 3.5, DKStrokeSolid);
 	} else if (look.eventSubProcess) {
-		CGFloat pattern[2] = { 1.5, 3 };
-		[box setLineDash:pattern count:2 phase:0];
-		WKDStroke(box, 1.5, NO);
+		WKDStroke(surface, box, WKDInk(), 1.5, DKStrokeDotted);
 	} else if ([type isEqualToString:@"transaction"]) {
-		WKDStroke(box, 1, NO);
-		WKDStroke([NSBezierPath bezierPathWithRoundedRect:NSInsetRect(rect, 3.5, 3.5) xRadius:8 yRadius:8], 1, NO);
+		WKDStroke(surface, box, WKDInk(), 1, DKStrokeSolid);
+		WKDStroke(surface, [DKPath pathWithRoundedRect:NSInsetRect(rect, 3.5, 3.5) radius:8], WKDInk(), 1, DKStrokeSolid);
 	} else {
-		WKDStroke(box, 1.5, NO);
+		WKDStroke(surface, box, WKDInk(), 1.5, DKStrokeSolid);
 	}
-	WKDTaskMarker(type, rect);
-	WKDLoopMarker(look.loop, rect);
+	WKDTaskMarker(surface, type, rect);
+	WKDLoopMarker(surface, look.loop, rect);
 	if (names) {
 		if (container) {
-			WKDDrawText(look.name, NSMakeRect(NSMinX(rect) + 8, NSMinY(rect) + 4, NSWidth(rect) - 16, 16), 11);
+			WKDDrawText(surface, look.name, NSMakeRect(NSMinX(rect) + 8, NSMinY(rect) + 4, NSWidth(rect) - 16, 16), 11);
 		} else {
-			WKDDrawText(look.name, NSInsetRect(rect, 8, 14), 11);
+			WKDDrawText(surface, look.name, NSInsetRect(rect, 8, 14), 11);
 		}
 	}
 }
@@ -390,157 +472,108 @@ WKDDrawNode(WKDLook *look, NSRect rect, BOOL names)
 #pragma mark Flows
 
 void
-WKDDrawAssociation(NSArray<NSValue *> *points, BOOL directed)
+WKDDrawAssociation(id<DKSurface> surface, NSArray<NSValue *> *points, DKColor color, BOOL directed)
 {
 	if ([points count] < 2) {
 		return;
 	}
-	NSBezierPath *line = [NSBezierPath bezierPath];
-	[line moveToPoint:[[points objectAtIndex:0] pointValue]];
-	for (NSUInteger i = 1; i < [points count]; i++) {
-		[line lineToPoint:[[points objectAtIndex:i] pointValue]];
-	}
-	CGFloat dots[2] = { 1.5, 3 };
-	[line setLineDash:dots count:2 phase:0];
-	[line setLineWidth:1.5];
-	[line stroke];
+	WKDStroke(surface, WKDPolyline(points), color, 1.5, DKStrokeDotted);
 	if (directed) {
 		NSPoint end = [[points lastObject] pointValue];
 		NSPoint before = [[points objectAtIndex:[points count] - 2] pointValue];
 		double angle = atan2(end.y - before.y, end.x - before.x);
-		NSBezierPath *head = [NSBezierPath bezierPath];
-		[head moveToPoint:NSMakePoint(end.x - 9 * cos(angle - 0.45), end.y - 9 * sin(angle - 0.45))];
-		[head lineToPoint:end];
-		[head lineToPoint:NSMakePoint(end.x - 9 * cos(angle + 0.45), end.y - 9 * sin(angle + 0.45))];
-		WKDStroke(head, 1.2, NO);
+		DKPath *head = [DKPath path];
+		[head moveTo:NSMakePoint(end.x - 9 * cos(angle - 0.45), end.y - 9 * sin(angle - 0.45))];
+		[head lineTo:end];
+		[head lineTo:NSMakePoint(end.x - 9 * cos(angle + 0.45), end.y - 9 * sin(angle + 0.45))];
+		WKDStroke(surface, head, color, 1.2, DKStrokeSolid);
 	}
 }
 
 void
-WKDDrawFlow(NSArray<NSValue *> *points, BOOL isDefault, BOOL conditionalFromActivity, NSString *name)
+WKDDrawFlow(id<DKSurface> surface, NSArray<NSValue *> *points, DKColor color, BOOL isDefault,
+            BOOL conditionalFromActivity, NSString *name)
 {
 	if ([points count] < 2) {
 		return;
 	}
-	NSBezierPath *line = [NSBezierPath bezierPath];
-	[line moveToPoint:[[points objectAtIndex:0] pointValue]];
-	for (NSUInteger i = 1; i < [points count]; i++) {
-		[line lineToPoint:[[points objectAtIndex:i] pointValue]];
-	}
-	[line setLineJoinStyle:NSRoundLineJoinStyle];
-	WKDStroke(line, 1.5, NO);
+	WKDStroke(surface, WKDPolyline(points), color, 1.5, DKStrokeSolid);
 	NSPoint end = [[points lastObject] pointValue];
 	NSPoint before = [[points objectAtIndex:[points count] - 2] pointValue];
 	double angle = atan2(end.y - before.y, end.x - before.x);
-	NSBezierPath *head = [NSBezierPath bezierPath];
-	[head moveToPoint:end];
-	[head lineToPoint:NSMakePoint(end.x - 10 * cos(angle - 0.4), end.y - 10 * sin(angle - 0.4))];
-	[head lineToPoint:NSMakePoint(end.x - 10 * cos(angle + 0.4), end.y - 10 * sin(angle + 0.4))];
-	[head closePath];
-	[WKDInkColor() setFill];
-	[head fill];
+	DKPath *head = [DKPath path];
+	[head moveTo:end];
+	[head lineTo:NSMakePoint(end.x - 10 * cos(angle - 0.4), end.y - 10 * sin(angle - 0.4))];
+	[head lineTo:NSMakePoint(end.x - 10 * cos(angle + 0.4), end.y - 10 * sin(angle + 0.4))];
+	[head close];
+	[surface fillPath:head color:color];
 
 	NSPoint start = [[points objectAtIndex:0] pointValue];
 	NSPoint next = [[points objectAtIndex:1] pointValue];
 	double out = atan2(next.y - start.y, next.x - start.x);
 	if (isDefault) {
 		NSPoint mark = NSMakePoint(start.x + 10 * cos(out), start.y + 10 * sin(out));
-		NSBezierPath *slash = [NSBezierPath bezierPath];
-		[slash moveToPoint:NSMakePoint(mark.x - 5 * cos(out + 0.8), mark.y - 5 * sin(out + 0.8))];
-		[slash lineToPoint:NSMakePoint(mark.x + 5 * cos(out + 0.8), mark.y + 5 * sin(out + 0.8))];
-		WKDStroke(slash, 1.5, NO);
+		WKDStroke(surface, WKDLine(NSMakePoint(mark.x - 5 * cos(out + 0.8), mark.y - 5 * sin(out + 0.8)),
+		                           NSMakePoint(mark.x + 5 * cos(out + 0.8), mark.y + 5 * sin(out + 0.8))),
+		          color, 1.5, DKStrokeSolid);
 	} else if (conditionalFromActivity) {
 		NSPoint tip = NSMakePoint(start.x + 16 * cos(out), start.y + 16 * sin(out));
 		NSPoint mid = NSMakePoint(start.x + 8 * cos(out), start.y + 8 * sin(out));
-		NSBezierPath *diamond = [NSBezierPath bezierPath];
-		[diamond moveToPoint:start];
-		[diamond lineToPoint:NSMakePoint(mid.x - 5 * sin(out), mid.y + 5 * cos(out))];
-		[diamond lineToPoint:tip];
-		[diamond lineToPoint:NSMakePoint(mid.x + 5 * sin(out), mid.y - 5 * cos(out))];
-		[diamond closePath];
-		[WKDPaperColor() setFill];
-		[diamond fill];
-		WKDStroke(diamond, 1, NO);
+		DKPath *diamond = [DKPath path];
+		[diamond moveTo:start];
+		[diamond lineTo:NSMakePoint(mid.x - 5 * sin(out), mid.y + 5 * cos(out))];
+		[diamond lineTo:tip];
+		[diamond lineTo:NSMakePoint(mid.x + 5 * sin(out), mid.y - 5 * cos(out))];
+		[diamond close];
+		[surface fillPath:diamond color:WKDPaper()];
+		WKDStroke(surface, diamond, color, 1, DKStrokeSolid);
 	}
 	if ([name length] > 0) {
-		WKDDrawText(name, WKDFlowLabelRect(points), 10);
+		WKDDrawText(surface, name, WKDFlowLabelRect(points), 10);
 	}
 }
 
-NSBezierPath *
+DKPath *
 WKDNodeOutline(NSString *type, NSRect rect)
 {
 	switch (WKDKindOfType(type, NULL)) {
 	case WKDShapeEvent:
-		return [NSBezierPath bezierPathWithOvalInRect:rect];
-	case WKDShapeGateway: {
-		NSBezierPath *diamond = [NSBezierPath bezierPath];
-		[diamond moveToPoint:NSMakePoint(NSMidX(rect), NSMinY(rect))];
-		[diamond lineToPoint:NSMakePoint(NSMaxX(rect), NSMidY(rect))];
-		[diamond lineToPoint:NSMakePoint(NSMidX(rect), NSMaxY(rect))];
-		[diamond lineToPoint:NSMakePoint(NSMinX(rect), NSMidY(rect))];
-		[diamond closePath];
-		return diamond;
-	}
+		return [DKPath pathWithOvalInRect:rect];
+	case WKDShapeGateway:
+		return WKDDiamond(rect);
 	default:
-		return [NSBezierPath bezierPathWithRoundedRect:rect xRadius:10 yRadius:10];
+		return [DKPath pathWithRoundedRect:rect radius:10];
 	}
 }
 
 void
-WKDDrawLane(NSRect rect, NSString *name, BOOL horizontal)
+WKDDrawLane(id<DKSurface> surface, NSRect rect, NSString *name, BOOL horizontal)
 {
-	[WKDInkColor() setStroke];
-	NSBezierPath *outline = [NSBezierPath bezierPathWithRect:rect];
-	[outline setLineWidth:1.2];
-	[outline stroke];
+	WKDStroke(surface, [DKPath pathWithRect:rect], WKDInk(), 1.2, DKStrokeSolid);
 	NSRect band = WKDLaneBandRect(rect, horizontal);
-	NSBezierPath *edge = [NSBezierPath bezierPath];
-	if (horizontal) {
-		[edge moveToPoint:NSMakePoint(NSMaxX(band), NSMinY(band))];
-		[edge lineToPoint:NSMakePoint(NSMaxX(band), NSMaxY(band))];
-	} else {
-		[edge moveToPoint:NSMakePoint(NSMinX(band), NSMaxY(band))];
-		[edge lineToPoint:NSMakePoint(NSMaxX(band), NSMaxY(band))];
-	}
-	[edge setLineWidth:1.2];
-	[edge stroke];
+	DKPath *edge = horizontal ? WKDLine(NSMakePoint(NSMaxX(band), NSMinY(band)), NSMakePoint(NSMaxX(band), NSMaxY(band)))
+	                          : WKDLine(NSMakePoint(NSMinX(band), NSMaxY(band)), NSMakePoint(NSMaxX(band), NSMaxY(band)));
+	WKDStroke(surface, edge, WKDInk(), 1.2, DKStrokeSolid);
 	if ([name length] == 0) {
 		return;
 	}
-	NSDictionary *attributes = @{ NSFontAttributeName: [NSFont systemFontOfSize:11],
-	                              NSForegroundColorAttributeName: WKDInkColor() };
+	DKFont *font = [DKFont systemFontOfSize:11 bold:NO];
 	double room = (horizontal ? NSHeight(band) : NSWidth(band)) - 8;
 	NSString *text = name;
-	while ([text length] > 1 && [text sizeWithAttributes:attributes].width > room) {
+	while ([text length] > 1 && [surface sizeOfText:text font:font].width > room) {
 		text = [[text substringToIndex:[text length] - 2] stringByAppendingString:@"…"];
 	}
-	NSSize size = [text sizeWithAttributes:attributes];
-	if (!horizontal) {
-		[text drawAtPoint:NSMakePoint(NSMidX(band) - size.width / 2, NSMidY(band) - size.height / 2)
-		   withAttributes:attributes];
-		return;
-	}
-	/* Turned a quarter anticlockwise about the band's centre. */
-	[NSGraphicsContext saveGraphicsState];
-	NSAffineTransform *turn = [NSAffineTransform transform];
-	[turn translateXBy:NSMidX(band) yBy:NSMidY(band)];
-	[turn rotateByDegrees:-90];
-	[turn concat];
-	[text drawAtPoint:NSMakePoint(-size.width / 2, -size.height / 2) withAttributes:attributes];
-	[NSGraphicsContext restoreGraphicsState];
+	/* A horizontal pool's or lane's name turned a quarter anticlockwise,
+	 * read from the bottom up; a vertical one's level. */
+	[surface drawText:text centeredAt:NSMakePoint(NSMidX(band), NSMidY(band)) font:font color:WKDInk()
+	         rotation:horizontal ? DKTextRotationQuarterAnticlockwise : DKTextRotationNone];
 }
 
 void
-WKDDrawSelection(NSRect rect)
+WKDDrawSelection(id<DKSurface> surface, NSRect rect)
 {
-	[WKDSelectionColor() setStroke];
-	NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(rect, -4, -4) xRadius:4 yRadius:4];
-	CGFloat pattern[2] = { 3, 2 };
-	[outline setLineDash:pattern count:2 phase:0];
-	[outline setLineWidth:1.5];
-	[outline stroke];
-	[WKDInkColor() setStroke];
+	WKDStroke(surface, [DKPath pathWithRoundedRect:NSInsetRect(rect, -4, -4) radius:4], WKDSelection(), 1.5,
+	          DKStrokeDashed);
 }
 
 double
