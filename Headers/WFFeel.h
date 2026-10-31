@@ -1,5 +1,11 @@
 #import "WFCondition.h"
 
+/* WorkflowKit's own: exported where it is built for Windows (the GNUmakefile),
+   imported everywhere else, as FOUNDATION_EXPORT. */
+#ifndef WORKFLOWKIT_EXPORT
+#define WORKFLOWKIT_EXPORT FOUNDATION_EXPORT
+#endif
+
 /*
  * An expression in FEEL, the expression language of DMN, parsed once and
  * evaluated over variables.
@@ -36,17 +42,17 @@ typedef NS_ENUM(NSInteger, WFExpressionPlace) {
 };
 
 /* What a token of an expression's text is, for an editor to colour. */
-extern NSString * const WFExpressionTokenName;      /* amount, order.total */
-extern NSString * const WFExpressionTokenKeyword;   /* if, and, true, null, eq */
-extern NSString * const WFExpressionTokenFunction;  /* a name called: sum(, string length( */
-extern NSString * const WFExpressionTokenNumber;
-extern NSString * const WFExpressionTokenString;
-extern NSString * const WFExpressionTokenTemporal;  /* @"2020-01-01" */
-extern NSString * const WFExpressionTokenOperator;  /* + <= && .. */
-extern NSString * const WFExpressionTokenPunctuation; /* ( ) [ ] { } , . : */
-extern NSString * const WFExpressionTokenDelimiter; /* ${ and }, a leading = */
-extern NSString * const WFExpressionTokenComment;
-extern NSString * const WFExpressionTokenInvalid;   /* a character that begins no token */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenName;      /* amount, order.total */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenKeyword;   /* if, and, true, null, eq */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenFunction;  /* a name called: sum(, string length( */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenNumber;
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenString;
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenTemporal;  /* @"2020-01-01" */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenOperator;  /* + <= && .. */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenPunctuation; /* ( ) [ ] { } , . : */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenDelimiter; /* ${ and }, a leading = */
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenComment;
+WORKFLOWKIT_EXPORT NSString * const WFExpressionTokenInvalid;   /* a character that begins no token */
 
 @interface WFFeelExpression : NSObject <WFCondition>
 

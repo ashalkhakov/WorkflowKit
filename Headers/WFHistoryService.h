@@ -1,5 +1,11 @@
 #import "WFTypes.h"
 
+/* WorkflowKit's own: exported where it is built for Windows (the GNUmakefile),
+   imported everywhere else, as FOUNDATION_EXPORT. */
+#ifndef WORKFLOWKIT_EXPORT
+#define WORKFLOWKIT_EXPORT FOUNDATION_EXPORT
+#endif
+
 /* How much history the engine writes, as the reference's levels. */
 typedef NS_ENUM(NSInteger, WFHistoryLevel) {
 	/* Nothing. */
@@ -12,12 +18,12 @@ typedef NS_ENUM(NSInteger, WFHistoryLevel) {
 	WFHistoryLevelFull
 };
 
-extern NSString * const WFProcessInstanceStateActive;
-extern NSString * const WFProcessInstanceStateCompleted;
+WORKFLOWKIT_EXPORT NSString * const WFProcessInstanceStateActive;
+WORKFLOWKIT_EXPORT NSString * const WFProcessInstanceStateCompleted;
 /* Canceled with the call activity that started it. */
-extern NSString * const WFProcessInstanceStateInternallyTerminated;
+WORKFLOWKIT_EXPORT NSString * const WFProcessInstanceStateInternallyTerminated;
 /* Deleted through the runtime service. */
-extern NSString * const WFProcessInstanceStateExternallyTerminated;
+WORKFLOWKIT_EXPORT NSString * const WFProcessInstanceStateExternallyTerminated;
 
 @interface WFHistoricProcessInstance : NSObject
 @property (nonatomic, readonly, copy) NSString *processInstanceId;
@@ -51,8 +57,8 @@ extern NSString * const WFProcessInstanceStateExternallyTerminated;
 @property (nonatomic, readonly, getter=isCanceled) BOOL canceled;
 @end
 
-extern NSString * const WFTaskDeleteReasonCompleted;
-extern NSString * const WFTaskDeleteReasonDeleted;
+WORKFLOWKIT_EXPORT NSString * const WFTaskDeleteReasonCompleted;
+WORKFLOWKIT_EXPORT NSString * const WFTaskDeleteReasonDeleted;
 
 @interface WFHistoricTaskInstance : NSObject
 @property (nonatomic, readonly, copy) NSString *taskId;
@@ -73,9 +79,9 @@ extern NSString * const WFTaskDeleteReasonDeleted;
 @property (nonatomic, readonly, copy) NSDate *time;
 @end
 
-extern NSString * const WFIncidentStateOpen;
-extern NSString * const WFIncidentStateResolved;
-extern NSString * const WFIncidentStateDeleted;
+WORKFLOWKIT_EXPORT NSString * const WFIncidentStateOpen;
+WORKFLOWKIT_EXPORT NSString * const WFIncidentStateResolved;
+WORKFLOWKIT_EXPORT NSString * const WFIncidentStateDeleted;
 
 @interface WFHistoricIncident : NSObject
 @property (nonatomic, readonly, copy) NSString *incidentId;
@@ -89,10 +95,10 @@ extern NSString * const WFIncidentStateDeleted;
 @property (nonatomic, readonly, copy) NSString *state;
 @end
 
-extern NSString * const WFJobLogStateCreated;
-extern NSString * const WFJobLogStateSuccessful;
-extern NSString * const WFJobLogStateFailed;
-extern NSString * const WFJobLogStateDeleted;
+WORKFLOWKIT_EXPORT NSString * const WFJobLogStateCreated;
+WORKFLOWKIT_EXPORT NSString * const WFJobLogStateSuccessful;
+WORKFLOWKIT_EXPORT NSString * const WFJobLogStateFailed;
+WORKFLOWKIT_EXPORT NSString * const WFJobLogStateDeleted;
 
 @interface WFHistoricJobLog : NSObject
 @property (nonatomic, readonly, copy) NSString *jobId;

@@ -78,6 +78,14 @@ WorkflowKit_HEADER_FILES = \
 WorkflowKit_INCLUDE_DIRS = -IHeaders -ISource
 WorkflowKit_OBJCFLAGS += -fobjc-arc -fblocks -Wall -Werror=objc-method-access
 WorkflowKit_LIBRARIES_DEPEND_UPON += -lCoreData -ldispatch $(FND_LIBS) $(OBJC_LIBS)
+# Windows: a DLL exports what it marks, and once the runtime marks its
+# classes, its C constants and functions must be marked too: WORKFLOWKIT_EXPORT
+# and WORKFLOWKITODATA_EXPORT (in the headers) are "export" while each library
+# is built, an import elsewhere.
+ifneq ($(filter mingw% windows%,$(GNUSTEP_TARGET_OS)),)
+WorkflowKit_CPPFLAGS += "-DWORKFLOWKIT_EXPORT=__declspec(dllexport) extern"
+WorkflowKitOData_CPPFLAGS += "-DWORKFLOWKITODATA_EXPORT=__declspec(dllexport) extern"
+endif
 
 # The store's Core Data model, compiled by FreeCoreData's momc into
 # WorkflowKit.momd and installed in the library's resource bundle, where

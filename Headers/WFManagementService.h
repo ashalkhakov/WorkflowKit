@@ -1,9 +1,15 @@
 #import "WFTypes.h"
 
-extern NSString * const WFJobTypeTimerName;
-extern NSString * const WFJobTypeTimerStartName;
-extern NSString * const WFJobTypeAsyncBeforeName;
-extern NSString * const WFJobTypeAsyncAfterName;
+/* WorkflowKit's own: exported where it is built for Windows (the GNUmakefile),
+   imported everywhere else, as FOUNDATION_EXPORT. */
+#ifndef WORKFLOWKIT_EXPORT
+#define WORKFLOWKIT_EXPORT FOUNDATION_EXPORT
+#endif
+
+WORKFLOWKIT_EXPORT NSString * const WFJobTypeTimerName;
+WORKFLOWKIT_EXPORT NSString * const WFJobTypeTimerStartName;
+WORKFLOWKIT_EXPORT NSString * const WFJobTypeAsyncBeforeName;
+WORKFLOWKIT_EXPORT NSString * const WFJobTypeAsyncAfterName;
 
 /* Work the engine does by itself: a timer, a timer start event, or an
  * async continuation before or after an activity. */
@@ -23,8 +29,8 @@ extern NSString * const WFJobTypeAsyncAfterName;
 @property (nonatomic, readonly, getter=isSuspended) BOOL suspended;
 @end
 
-extern NSString * const WFIncidentTypeFailedJobName;
-extern NSString * const WFIncidentTypeFailedExternalTaskName;
+WORKFLOWKIT_EXPORT NSString * const WFIncidentTypeFailedJobName;
+WORKFLOWKIT_EXPORT NSString * const WFIncidentTypeFailedExternalTaskName;
 
 /* A job or external task that ran out of retries and waits for someone to
  * look at it. */
