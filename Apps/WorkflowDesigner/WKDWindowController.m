@@ -10,10 +10,18 @@
 #import "WKDRenderer.h"
 #import "WKDXML.h"
 #import "WDSession.h"
+/* XFormsDesignKit, and its tab bar, which this app's panes share: the
+ * framework's headers on macOS, its installed tree's on GNUstep (the
+ * GNUmakefile names the directories). */
+#if __has_include(<XFormsDesignKit/DMTabBar.h>)
+#import <XFormsDesignKit/XFormsDesignKit.h>
+#import <XFormsDesignKit/DMTabBar.h>
+#import <XFormsDesignKit/DMTabBarItem.h>
+#else
 #import "XFormsDesignKit.h"
-/* XFormsDesignKit's, which this app's panes share. */
 #import "DMTabBar.h"
 #import "DMTabBarItem.h"
+#endif
 
 /* What the designer puts on the pasteboard: a BPMN document of the
  * elements copied, beside the same XML as text. */

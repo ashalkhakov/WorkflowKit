@@ -1,0 +1,81 @@
+# WorkflowKit on macOS, the familiar way (gnustep-release-actions' macos.yml
+# runs the same), over ODataKit's and XFormsKit's frameworks and Sparkle: the
+# XCFrameworks gnustep-release-actions' scripts/deps.sh apple unpacks into
+# .deps, by the versions .github/pins.env names. The Xcode project is
+# .tools/genxcodeproj.py's.
+#
+#   make -f Makefile.apple            WorkflowKit.framework and
+#                                     WorkflowKitOData.framework (and as
+#                                     XCFrameworks), wf-serve, WorkflowDesk
+#                                     and WorkflowDesigner, universal (Release)
+#   make -f Makefile.apple check      the engine's tests (in memory and SQLite:
+#                                     Apple's Core Data), WorkflowDesk's and
+#                                     the designer's
+#   make -f Makefile.apple install DESTDIR=<dir>       both apps, and
+#                                     WorkflowKit.xcframework and
+#                                     WorkflowKitOData.xcframework (what an
+#                                     app pins: WORKFLOWKIT_VERSION)
+#   make -f Makefile.apple installcheck DESTDIR=<dir>  each app embeds the
+#                                     frameworks it links, and its signature
+#                                     holds
+#
+# GNUstep: GNUmakefile.
+
+BUILD = build
+DERIVED = $(BUILD)/DerivedData
+PRODUCTS = $(DERIVED)/Build/Products
+RELEASE = $(PRODUCTS)/Release
+# Where a failed test's result bundle is kept (CI uploads it from there).
+RESULTS ?= $(or $(RUNNER_TEMP),$(BUILD))
+XCODEBUILD = xcodebuild -project WorkflowKit.xcodeproj -derivedDataPath $(DERIVED)
+APPS = WorkflowDesk WorkflowDesigner
+# The libraries an application builds on, as XCFrameworks: macOS, arm64 and
+# x86_64, made from the Release frameworks.
+FRAMEWORKS = WorkflowKit WorkflowKitOData
+DEPS = ODataKit ODataIncrementalStore ODataService HTTPServerKit OTelKit XFormsKit XFormsDesignKit Sparkle
+
+all:
+	@for fw in $(DEPS); do test -d .deps/$$fw.xcframework \
+	  || { echo "no $$fw in .deps: gnustep-release-actions' scripts/deps.sh apple fetches what .github/pins.env names"; exit 1; }; \
+	done
+	@for scheme in WorkflowKit wf-serve $(APPS); do \
+	  $(XCODEBUILD) -scheme $$scheme -configuration Release -destination 'generic/platform=macOS' build || exit 1; \
+	done
+	@for fw in $(FRAMEWORKS); do \
+	  rm -rf $(BUILD)/$$fw.xcframework; \
+	  xcodebuild -create-xcframework -framework $(abspath $(RELEASE))/$$fw.framework \
+	    -output $(BUILD)/$$fw.xcframework || exit 1; \
+	done
+
+check:
+	@for scheme in WorkflowKit $(APPS); do \
+	  rm -rf $(RESULTS)/$$scheme.xcresult; \
+	  $(XCODEBUILD) -scheme $$scheme -configuration Debug -destination 'platform=macOS' \
+	    -resultBundlePath $(RESULTS)/$$scheme.xcresult test || exit 1; \
+	done
+
+install: all
+	@test -n "$(DESTDIR)" || { echo "install: give DESTDIR"; exit 1; }
+	mkdir -p $(DESTDIR)
+	@for app in $(APPS); do rm -rf $(DESTDIR)/$$app.app && ditto $(RELEASE)/$$app.app $(DESTDIR)/$$app.app || exit 1; done
+	@for fw in $(FRAMEWORKS); do \
+	  rm -rf $(DESTDIR)/$$fw.xcframework && ditto $(BUILD)/$$fw.xcframework $(DESTDIR)/$$fw.xcframework || exit 1; \
+	done
+
+installcheck:
+	@for app in $(APPS); do \
+	  for fw in ODataKit ODataIncrementalStore OTelKit XFormsKit Sparkle; do \
+	    test -d $(DESTDIR)/$$app.app/Contents/Frameworks/$$fw.framework \
+	      || { echo "$$app.app does not embed $$fw.framework"; exit 1; }; \
+	  done; \
+	  codesign --verify --deep --strict $(DESTDIR)/$$app.app || exit 1; \
+	done
+	@for fw in WorkflowKit XFormsDesignKit; do \
+	  test -d $(DESTDIR)/WorkflowDesigner.app/Contents/Frameworks/$$fw.framework \
+	    || { echo "WorkflowDesigner.app does not embed $$fw.framework"; exit 1; }; \
+	done
+
+clean:
+	rm -rf $(BUILD)
+
+.PHONY: all check install installcheck clean

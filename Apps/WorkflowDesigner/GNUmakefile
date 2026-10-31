@@ -72,7 +72,7 @@ WorkflowDesigner_RESOURCE_FILES = \
 	Resources/DesignerWindow.xib \
 	Resources/ServerProcesses.xib \
 	../Shared/Resources/ConnectWindow.xib \
-	WorkflowDesigner.png
+	Resources/WorkflowDesigner.png
 
 # The engine's model, which the server's API is read through.
 WorkflowDesigner_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld

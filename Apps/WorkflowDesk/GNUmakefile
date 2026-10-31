@@ -48,7 +48,7 @@ WorkflowDesk_RESOURCE_FILES = \
 	Resources/TasksWindow.xib \
 	Resources/FormWindow.xib \
 	Resources/OperationsWindow.xib \
-	WorkflowDesk.png
+	Resources/WorkflowDesk.png
 
 WorkflowDesk_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 

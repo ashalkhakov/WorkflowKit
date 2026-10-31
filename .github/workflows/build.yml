@@ -7,9 +7,12 @@ name: Build
 # (WorkflowLauncher). The tests run on every store the engine can use: in
 # memory, SQLite, and FreeCoreData's PostgreSQL and MySQL stores against the
 # servers the workflow starts (databases). Every push uploads what is
-# installed: the libraries, for what builds on WorkflowKit (library), and
-# for Windows an installer, WorkflowKit-<version>-win64.msi, wf-serve in its
-# runtime. A v* tag (or a run started by hand with one) also releases them,
+# installed: the libraries, for what builds on WorkflowKit (library); for
+# macOS WorkflowDesk and WorkflowDesigner, signed and notarized with their
+# Sparkle appcasts on a release (appcast-WorkflowDesk.xml,
+# appcast-WorkflowDesigner.xml), and the frameworks as XCFrameworks; for
+# Linux an AppImage; and for Windows an installer,
+# WorkflowKit-<version>-win64.msi, wf-serve in its runtime. A v* tag (or a run started by hand with one) also releases them,
 # attached to the tag's release (a pre-release when the tag has a '-').
 # What it builds on is in .github/pins.env.
 on:
@@ -41,6 +44,14 @@ jobs:
       library: true
       extra-packages: libsqlite3-dev libpq-dev libmariadb-dev
       databases: postgres mysql
+
+  macos:
+    uses: ashalkhakov/gnustep-release-actions/.github/workflows/macos.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      apps: WorkflowDesk=WorkflowDesk WorkflowDesigner=WorkflowDesigner
+      library: true
+    secrets: inherit
 
   windows:
     uses: ashalkhakov/gnustep-release-actions/.github/workflows/windows.yml@v1

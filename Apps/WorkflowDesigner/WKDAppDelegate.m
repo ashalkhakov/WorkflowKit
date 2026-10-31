@@ -7,7 +7,11 @@
 #import "WDTracing.h"
 #import "WKDMenuStyle.h"
 #import "WKDUpdater.h"
+#if __has_include(<XFormsDesignKit/XFormsDesignKit.h>)
+#import <XFormsDesignKit/XFormsDesignKit.h>
+#else
 #import "XFormsDesignKit.h"
+#endif
 
 @implementation WKDAppDelegate
 {

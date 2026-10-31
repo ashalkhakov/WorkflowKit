@@ -167,14 +167,16 @@ foundation = sdk_framework("Foundation")
 coredata = sdk_framework("CoreData")
 
 
-# A framework another project in the workspace builds: found by name in the
-# build directory, which is what makes Xcode build it first.
+# A framework of a release this builds on (ODataKit's, XFormsKit's): its
+# XCFramework in .deps/, by the version .github/pins.env names
+# (gnustep-release-actions' scripts/deps.sh apple), as Sparkle's.
 def built_framework(name):
-    return add(oid("built", name), name + ".framework", [
+    return add(oid("deps", name), name + ".xcframework", [
         ("isa", "PBXFileReference"),
-        ("explicitFileType", "wrapper.framework"),
-        ("path", name + ".framework"),
-        ("sourceTree", "BUILT_PRODUCTS_DIR"),
+        ("lastKnownFileType", "wrapper.xcframework"),
+        ("name", name + ".xcframework"),
+        ("path", ".deps/%s.xcframework" % name),
+        ("sourceTree", "SOURCE_ROOT"),
     ])
 
 
@@ -525,9 +527,6 @@ DESK_S = {
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
     # The model's compiling script writes into the app.
     "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
-    # XFormsKit's framework carries no headers: its apps, like this one on
-    # GNUstep, include them from its tree.
-    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/../XFormsKit/Sources", "$(SRCROOT)/../XFormsKit/Sources/XFormsKit")',
 }
 DESK_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDeskTests",
@@ -544,10 +543,6 @@ DESIGNER_S = {
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
     # The model's compiling script writes into the app.
     "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
-    # XFormsKit's frameworks carry no headers, the form editor's either.
-    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/../XFormsKit/Sources", "$(SRCROOT)/../XFormsKit/Sources/XFormsKit", '
-                           '"$(SRCROOT)/../XFormsKit/Sources/XFormsDesignKit", '
-                           '"$(SRCROOT)/../XFormsKit/Sources/XFormsDesignKit/ThirdParty/DMTabBar")',
 }
 DESIGNER_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesignerTests",
@@ -750,21 +745,8 @@ scheme("wf-serve", [plugin_ref, serve_ref], run=serve_ref, directory="$(PROJECT_
        arguments=["-Config Examples/server.plist", "-Plugins $(BUILT_PRODUCTS_DIR)"])
 desk_ref = ref(t_desk, "WorkflowDesk", "WorkflowDesk.app")
 desk_tests_ref = ref(t_desk_tests, "WorkflowDeskTests", "WorkflowDeskTests.xctest")
-# The frameworks of the projects beside this one that the app embeds, built
-# first by name: the IDE does not always find them as implicit dependencies,
-# and then compiles the app before their headers are there. Their targets'
-# ids are fixed in those projects.
-DESK_EXTERNAL = [
-    ref("AA0000000000000000000006", "ODataKit", "ODataKit.framework", ODATAKIT + "/ODataKit.xcodeproj"),
-    ref("AA0000000000000000000002", "ODataIncrementalStore", "ODataIncrementalStore.framework",
-        ODATAKIT + "/ODataKit.xcodeproj"),
-    ref("4CBB61F9CEEAF8A9C5A1F7CF", "OTelKit", "OTelKit.framework", ODATAKIT + "/ODataKit.xcodeproj"),
-    ref("EE0000010000000000000001", "XFormsKit", "XFormsKit.framework", "../XFormsKit/XFormsKit.xcodeproj"),
-]
-scheme("WorkflowDesk", DESK_EXTERNAL + [desk_ref], test=desk_tests_ref, run=desk_ref)
+scheme("WorkflowDesk", [desk_ref], test=desk_tests_ref, run=desk_ref)
 designer_ref = ref(t_designer, "WorkflowDesigner", "WorkflowDesigner.app")
 designer_tests_ref = ref(t_designer_tests, "WorkflowDesignerTests", "WorkflowDesignerTests.xctest")
-scheme("WorkflowDesigner", DESK_EXTERNAL + [
-    ref("DK0000000000000000000001", "XFormsDesignKit", "XFormsDesignKit.framework", "../XFormsKit/XFormsKit.xcodeproj"),
-    fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
+scheme("WorkflowDesigner", [fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
 print("wrote", proj)

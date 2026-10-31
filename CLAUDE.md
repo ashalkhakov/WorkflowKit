@@ -174,16 +174,23 @@ and libs-opal in the stack.
 framework, the `WorkflowKitOData` framework, the `WorkflowKitTests` bundle
 (the OData API's tests included), the `PurchaseRequestDemo` and `wf-serve`
 tools, and the `WorkflowDesk` and `WorkflowDesigner` apps with their tests, with shared settings in
-`Xcode/Configs` (the same as ODataKit's). It also holds
-`../ODataKit/ODataKit.xcodeproj` and `../XFormsKit/XFormsKit.xcodeproj`, the
-checkouts beside this one, whose frameworks the OData API and the app link
-and Xcode builds first. The project
+`Xcode/Configs` (the same as ODataKit's). What they build on -- ODataKit's
+and XFormsKit's frameworks, and Sparkle -- are the XCFrameworks of the
+releases `.github/pins.env` names, in `.deps/`, which
+gnustep-release-actions' `scripts/deps.sh apple` unpacks there (run it from
+the repository's root once, and again after moving a pin). The project
 is generated from the GNUmakefiles' source lists, so after adding a file run
-`python3 .tools/genxcodeproj.py` rather than editing `project.pbxproj`.
+`python3 .tools/genxcodeproj.py` rather than editing `project.pbxproj`;
+where a GNUmakefile names a file's GNUstep half (`X-GNUstep.m`), the project
+compiles its Apple half (`X-Apple.m`).
+
+`Makefile.apple` is what CI runs (gnustep-release-actions' macos.yml), the
+same as every repository's:
 
 ```sh
-xcodebuild -workspace WorkflowKit.xcworkspace -scheme WorkflowKit \
-    -destination 'platform=macOS' test
+make -f Makefile.apple                       # frameworks, wf-serve, the apps
+make -f Makefile.apple check                 # the three test suites
+make -f Makefile.apple install DESTDIR=out   # the apps and the XCFrameworks
 ```
 
 ## Portability rules the build has already caught
