@@ -3,10 +3,15 @@ name: Build
 # WorkflowKit, built, tested and installed the familiar way (make, make
 # check, make install) by gnustep-release-actions' workflows, the same as
 # every repository's: the engine library, its OData API, wf-serve and the
-# apps, WorkflowDesk and WorkflowDesigner. The tests run on every store the
-# engine can use: in memory, SQLite, and FreeCoreData's PostgreSQL and MySQL
-# stores against the servers the workflow starts (databases). What it builds
-# on is in .github/pins.env.
+# apps, WorkflowDesk and WorkflowDesigner, with the chooser between them
+# (WorkflowLauncher). The tests run on every store the engine can use: in
+# memory, SQLite, and FreeCoreData's PostgreSQL and MySQL stores against the
+# servers the workflow starts (databases). Every push uploads what is
+# installed: the libraries, for what builds on WorkflowKit (library), and
+# for Windows an installer, WorkflowKit-<version>-win64.msi, wf-serve in its
+# runtime. A v* tag (or a run started by hand with one) also releases them,
+# attached to the tag's release (a pre-release when the tag has a '-').
+# What it builds on is in .github/pins.env.
 on:
   push:
     branches: ['**']
@@ -33,5 +38,15 @@ jobs:
     uses: ashalkhakov/gnustep-release-actions/.github/workflows/linux.yml@v1
     with:
       tag: ${{ inputs.tag }}
+      library: true
       extra-packages: libsqlite3-dev libpq-dev libmariadb-dev
       databases: postgres mysql
+
+  windows:
+    uses: ashalkhakov/gnustep-release-actions/.github/workflows/windows.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      library: true
+      extra-packages: sqlite3 postgresql libmariadbclient
+      databases: postgres mysql
+    secrets: inherit
