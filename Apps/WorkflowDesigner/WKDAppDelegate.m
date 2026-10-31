@@ -5,6 +5,7 @@
 #import "WDConnectWindowController.h"
 #import "WDSession.h"
 #import "WDTracing.h"
+#import "WKDMenuStyle.h"
 #import "XFormsDesignKit.h"
 
 @implementation WKDAppDelegate
@@ -29,6 +30,13 @@
 	NSInteger after = diagram >= 0 ? diagram + 1 : [menu numberOfItems];
 	[menu insertItem:[XFDDocument formMenuItem] atIndex:after];
 	[menu insertItem:[WKDDecisionWindowController decisionMenuItem] atIndex:after + 1];
+}
+
+/* Where the menus are in the windows (WKDMenuStyle.h), a designer with no
+ * window left shows nothing of itself: it quits with its last one. */
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)application
+{
+	return WKDMenusInWindows();
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification
