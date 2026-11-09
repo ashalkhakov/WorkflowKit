@@ -85,7 +85,7 @@ DESIGNER_SOURCES = apple(make_list(DESIGNER + "designer.make", "WKD_OBJC_FILES")
 DESIGNER_RESOURCES = make_list(DESIGNER + "designer.make", "WKD_RESOURCE_FILES")              # Resources/X.xib
 DESIGNER_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "*.h")))
 DESIGNER_TESTS = [t for t in make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_OBJC_FILES")
-                  if not t.startswith("$(")]                                                  # Tests/X.m
+                  if "$(" not in t]                                                          # Tests/X.m
 DESIGNER_TEST_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "Tests", "*.h")))
 # UDCode's BPMN and DMN extension (UDCodeExtension), over UDCode's SDK: its
 # XCFrameworks in .deps/, by the version .github/pins.env names.
@@ -94,7 +94,7 @@ EXTENSION_SOURCES = make_list(EXTENSION + "GNUmakefile", "WKU_OBJC_FILES")      
 EXTENSION_RESOURCES = ["Resources/LanguageInfo.plist"] + make_list(EXTENSION + "GNUmakefile", "WKU_RESOURCE_FILES")
 EXTENSION_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, EXTENSION, "*.h")))
 EXTENSION_TESTS = [t for t in make_list(EXTENSION + "Tests/GNUmakefile", "WKUTests_OBJC_FILES")
-                   if not t.startswith("../") and not t.startswith("$(")]                     # Tests/X.m
+                   if not t.startswith("../") and "$(" not in t]                             # Tests/X.m
 ODATA_OTHERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "OData", "*.h"))
                       if os.path.basename(p) not in ODATA_HEADERS)
 DOCS = ["CLAUDE.md", "WorkflowKit-BPMN-Subset.md", "GNUmakefile"]
