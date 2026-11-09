@@ -30,11 +30,14 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDProcessCommands.m \
 	WKDPaletteView.m \
 	WKDProperties.m \
+	WKDElementModel.m \
+	WKDTableModel.m \
+	WKDInspectorRow.m \
+	WKDTableRowController.m \
+	WKDInspectorViewController.m \
 	WKDPane.m \
 	WKDOutline.m \
-	WKDInspectorView.m \
 	WKDExpressionField.m \
-	WKDTableEditor.m \
 	WKDDeployment.m \
 	WKDSelection.m \
 	WKDProcessEditor.m \
@@ -78,6 +81,15 @@ WorkflowDesigner_RESOURCE_FILES = \
 	Resources/WKDOutlineView.xib \
 	Resources/WKDPalette.xib \
 	Resources/WKDProblems.xib \
+	Resources/WKDInspector.xib \
+	Resources/WKDRowTitle.xib \
+	Resources/WKDRowText.xib \
+	Resources/WKDRowExpression.xib \
+	Resources/WKDRowLongText.xib \
+	Resources/WKDRowCheck.xib \
+	Resources/WKDRowChoice.xib \
+	Resources/WKDRowButton.xib \
+	Resources/WKDRowTable.xib \
 	Resources/ServerProcesses.xib \
 	../Shared/Resources/ConnectWindow.xib \
 	Resources/WorkflowDesigner.png

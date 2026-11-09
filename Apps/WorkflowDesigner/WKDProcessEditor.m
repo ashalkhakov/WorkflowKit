@@ -12,6 +12,10 @@ NSString * const WKDProcessEditorProblemsDidChangeNotification = @"WKDProcessEdi
 static const NSTimeInterval WKDCheckDelay = 0.3;
 
 @implementation WKDProcessEditor
+{
+	/* The rename the next change makes. */
+	NSDictionary *_renamed;
+}
 
 - (instancetype)initWithEditor:(WKDEditor *)editor
 {
@@ -21,6 +25,8 @@ static const NSTimeInterval WKDCheckDelay = 0.3;
 		_problems = @[];
 		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(editorDidChange:)
 		                                             name:WKDEditorDidChangeNotification object:editor];
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(editorWillRename:)
+		                                             name:WKDEditorWillRenameNotification object:editor];
 		[self checkNow];
 	}
 	return self;
@@ -81,8 +87,21 @@ static const NSTimeInterval WKDCheckDelay = 0.3;
 	return ids;
 }
 
+/* An element given another id: still selected, under it. */
+- (void)editorWillRename:(NSNotification *)notification
+{
+	_renamed = [notification userInfo];
+}
+
 - (void)editorDidChange:(NSNotification *)notification
 {
+	NSString *from = [_renamed objectForKey:@"from"], *to = [_renamed objectForKey:@"to"];
+	_renamed = nil;
+	if (from != nil && [_selection.selectedIds containsObject:from]) {
+		NSMutableArray *ids = [_selection.selectedIds mutableCopy];
+		[ids replaceObjectAtIndex:[ids indexOfObject:from] withObject:to];
+		_selection.selectedIds = ids;
+	}
 	[_selection keepOnly:[self elementIds]];
 	[[NSNotificationCenter defaultCenter] postNotificationName:WKDProcessEditorDidChangeNotification object:self];
 	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(checkNow) object:nil];

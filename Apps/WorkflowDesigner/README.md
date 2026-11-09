@@ -328,9 +328,13 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | `../Shared/WKDEditor` | Every change. It keeps elements, references and the BPMN diagram information consistent. Each change is one undo step that restores the document as it was. Its categories hold what the canvas changes directly (`+Canvas`: names, reconnections, bends, labels, kept routes), the clipboard (`+Clipboard`), type changes (`+Types`), arranging several shapes (`+Alignment`), and pools and lanes, kept round their nodes after every change (`+Lanes`). |
 | DiagramKit's `DKLayeredLayout` | The layered (Sugiyama) layout `WKDEditor` arranges a process with, taken out of this designer into DiagramKit: layers by longest path, ordered to cross as little as they can, then placed by sweeps that move each layer as near its neighbours as its order and spacing allow. Edges can leave a node's bottom. |
 | `WKDProperties` | The inspector's properties: where each value lives in the XML, how to read and write it, and which hold expressions. |
-| `WKDTableEditor` | A table property in the inspector, with its + and − and its detail table. |
+| `WKDElementModel`, `WKDTableModel` | A section's values, and a table property's rows, as what the inspector's rows bind to: set through the descriptors, refused with the reason (`-validateValue:forKey:error:`). |
+| `WKDInspectorViewController`, `WKDInspectorRow`, `WKDTableRowController` | The inspector: a section's rows, each from the XIB of its kind (`WKDRow*.xib`), a table's under an array controller of its rows. |
 | `WKDExpressionField` | The expression field and the text storage that colours it, ported from the XForms Designer's XPath field, over the engine's `+[WFFeelExpression tokensOfText:place:]` and `+problemInText:place:`. |
-| `WKDWindowController`, `WKDOutline`, `WKDInspectorView`, `WKDPane` | The three panes, ported from RDLKit's designer, with the DMTabBar XFormsDesignKit carries. |
+| `WKDWindowController`, `WKDPane` | The three panes, ported from RDLKit's designer, with the DMTabBar XFormsDesignKit carries: the parts put in their places. |
+| `WKDProcessEditor`, `WKDSelection` | One process being edited: its text, its selection, the engine's problems; what the parts share. |
+| `WKDCanvasViewController`, `WKDOutlineViewController`, `WKDPaletteViewController`, `WKDProblemsViewController` | The parts, each from its XIB, following the process editor. |
+| `WKDProcessCommands` | The Editor menu's actions, in the window's responder chain. |
 | `WKDDeployment` | What a deployment sends: the process, the forms it embeds and the DMN files defining its decisions, as their editors have those open. |
 | `WKDDecisions` | A DMN file's decisions, read after every change, and every change to them (`WKDDmnEditor`), one undo step each, as `WKDEditor`'s are to a process. |
 | `WKDDecisionDocument`, `WKDDecisionWindowController` | The DMN document and its window: the decisions, the table's grid and its column panel, and a literal expression's fields. The window is built in code, because the grid's columns are the table's. |

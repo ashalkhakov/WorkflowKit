@@ -59,6 +59,7 @@ static const double WKDMargin = 80;
 }
 
 NSString * const WKDEditorDidChangeNotification = @"WKDEditorDidChange";
+NSString * const WKDEditorWillRenameNotification = @"WKDEditorWillRename";
 
 static BOOL WKDChecksAgreement = NO;
 
@@ -1096,25 +1097,34 @@ WKDOnEdge(NSRect host, NSPoint point)
 }
 
 
+- (NSString *)refusalToRename:(NSString *)elementId to:(NSString *)newId
+{
+	if ([newId isEqualToString:elementId]) {
+		return nil;
+	}
+	if (!WKDIsName(newId)) {
+		return @"An id is a letter or _, then letters, digits, -, _ and dots.";
+	}
+	if ([self elementWithId:newId] != nil) {
+		return [NSString stringWithFormat:@"%@ is the id of another element.", newId];
+	}
+	return [self elementWithId:elementId] == nil ? @"There is no such element." : nil;
+}
+
 - (BOOL)renameElement:(NSString *)elementId to:(NSString *)newId error:(NSString **)reason
 {
-	NSString *refusal = nil;
 	if ([newId isEqualToString:elementId]) {
 		return YES;
 	}
-	if (!WKDIsName(newId)) {
-		refusal = @"An id is a letter or _, then letters, digits, -, _ and dots.";
-	} else if ([self elementWithId:newId] != nil) {
-		refusal = [NSString stringWithFormat:@"%@ is the id of another element.", newId];
-	} else if ([self elementWithId:elementId] == nil) {
-		refusal = @"There is no such element.";
-	}
+	NSString *refusal = [self refusalToRename:elementId to:newId];
 	if (refusal != nil) {
 		if (reason != NULL) {
 			*reason = refusal;
 		}
 		return NO;
 	}
+	[[NSNotificationCenter defaultCenter] postNotificationName:WKDEditorWillRenameNotification object:self
+	                                                  userInfo:@{ @"from": elementId, @"to": newId }];
 	[self change:@"Rename" with:^{
 		WKDModelElement *renamed = [self->_model nodeWithId:elementId] ?: [self->_model flowWithId:elementId]
 			?: (WKDModelElement *)[self->_model laneWithId:elementId];

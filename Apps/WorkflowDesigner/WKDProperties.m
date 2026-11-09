@@ -285,11 +285,16 @@ WKDNestedCamunda(NSString *label, NSString *outer, NSString *local)
 static WKDProperty *
 WKDIdProperty(void)
 {
-	return WKDMake(@"Id", WKDPropertyText, ^NSString *(NSXMLElement *element, NSXMLDocument *document) {
+	WKDProperty *property = WKDMake(@"Id", WKDPropertyText, ^NSString *(NSXMLElement *element, NSXMLDocument *document) {
 		return WKDAttribute(element, @"id");
 	}, ^BOOL(WKDEditor *editor, NSString *elementId, NSString *value, NSString **reason) {
 		return [editor renameElement:elementId to:value error:reason];
 	});
+	property.identifies = YES;
+	property.refusal = ^NSString *(WKDEditor *editor, NSString *elementId, NSString *value) {
+		return [editor refusalToRename:elementId to:value];
+	};
+	return property;
 }
 
 static WKDProperty *

@@ -6,7 +6,7 @@
 #import "WKDDeployment.h"
 #import "WKDDocument.h"
 #import "WKDEditor.h"
-#import "WKDInspectorView.h"
+#import "WKDInspectorViewController.h"
 #import "WKDPane.h"
 #import "WKDRenderer.h"
 #import "WKDXML.h"
@@ -31,8 +31,6 @@ static const double WKDCentreMinimum = 320;
 
 @implementation WKDWindowController
 {
-	WKDInspectorView *_inspector;
-	WKDInspectorView *_processInspector;
 	/* What the last change refused, shown until the next. */
 	NSString *_note;
 }
@@ -141,16 +139,14 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	void (^explained)(NSString *) = ^(NSString *problem) {
 		[weakSelf explain:problem];
 	};
-	_inspector = [[WKDInspectorView alloc] initWithFrame:[self.inspectorHost bounds]];
-	_inspector.editor = [self editor];
-	_inspector.refused = refused;
-	_inspector.explained = explained;
-	WKDFillHostScrolling(self.inspectorHost, _inspector);
-	_processInspector = [[WKDInspectorView alloc] initWithFrame:[self.processHost bounds]];
-	_processInspector.editor = [self editor];
-	_processInspector.refused = refused;
-	_processInspector.explained = explained;
-	WKDFillHostScrolling(self.processHost, _processInspector);
+	_inspectorController = [[WKDInspectorViewController alloc] initWithProcessEditor:processEditor showingProcess:NO];
+	_processInspectorController = [[WKDInspectorViewController alloc] initWithProcessEditor:processEditor showingProcess:YES];
+	for (WKDInspectorViewController *inspector in @[ _inspectorController, _processInspectorController ]) {
+		inspector.refused = refused;
+		inspector.explained = explained;
+	}
+	WKDFillHost(self.inspectorHost, _inspectorController.view);
+	WKDFillHost(self.processHost, _processInspectorController.view);
 
 	WKDFillTabBar(self.leftTabBar, self, @selector(leftTabChanged:), @[
 		@[ @"O", @"Outline", @0.40, @0.48, @0.58 ],
@@ -174,7 +170,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	[center addObserver:self selector:@selector(problemsDidChange:) name:WKDProcessEditorProblemsDidChangeNotification
 	             object:processEditor];
 	[self setDefaultPaneWidths];
-	[self showInspectors];
+	[self updateStatus];
 	[_canvasController scrollToContent];
 	[[self window] makeFirstResponder:_canvasController.canvas];
 }
@@ -202,23 +198,9 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	return [selected count] == 1 ? [selected firstObject] : nil;
 }
 
-- (void)showInspectors
-{
-	_inspector.elementId = [self selectedId];
-	_processInspector.elementId = [self processId];
-	[self updateStatus];
-}
-
 - (void)processDidChange:(NSNotification *)notification
 {
-	/* An element renamed in the inspector: selected under its new id. */
-	NSString *shown = _inspector.elementId;
-	WKDSelection *selection = [self processEditor].selection;
-	if (shown != nil && [selection.selectedIds count] == 0 && [[self editor] elementWithId:shown] != nil) {
-		selection.selectedIds = @[ shown ];
-	}
-	[_inspector reload];
-	[self showInspectors];
+	[self updateStatus];
 }
 
 - (void)selectionDidChange:(NSNotification *)notification
@@ -227,7 +209,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	if ([self selectedId] != nil) {
 		[self showElementInspector:self];
 	}
-	[self showInspectors];
+	[self updateStatus];
 }
 
 - (void)problemsDidChange:(NSNotification *)notification

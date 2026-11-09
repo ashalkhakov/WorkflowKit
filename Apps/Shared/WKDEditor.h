@@ -13,6 +13,9 @@
 
 /* Posted, by the editor, after every change, undo and redo included. */
 extern NSString * const WKDEditorDidChangeNotification;
+/* Posted, by the editor, as an element is given another id: its old id
+ * and its new one, under "from" and "to". The change follows. */
+extern NSString * const WKDEditorWillRenameNotification;
 
 /*
  * Every change to a BPMN document goes through here: elements and their
@@ -72,6 +75,8 @@ extern NSString * const WKDEditorDidChangeNotification;
  * boundary events' activities, defaults, incoming and outgoing, the
  * diagram. NO, with why, for an id that is taken or not an XML name. */
 - (BOOL)renameElement:(NSString *)elementId to:(NSString *)newId error:(NSString **)reason;
+/* Why the element cannot have the id; nil when it can. */
+- (NSString *)refusalToRename:(NSString *)elementId to:(NSString *)newId;
 /* An element of the document anywhere, by id. */
 - (NSXMLElement *)elementWithId:(NSString *)elementId;
 /* A top-level definition -- bpmn:message, signal, error, escalation --

@@ -3,7 +3,7 @@
 #import "WKDDecisionDocument.h"
 #import "WKDDecisions.h"
 #import "WKDExpressionField.h"
-#import "WKDTableEditor.h"
+#import "WKDTableRowController.h"
 #import "WKDXML.h"
 #import "WDSession.h"
 
