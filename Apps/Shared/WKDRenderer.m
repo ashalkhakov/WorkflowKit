@@ -74,7 +74,7 @@ WKDPaper(void)
 }
 
 DKColor
-WKDSelection(void)
+WKDSelectionInk(void)
 {
 	return DKColorMake(0.15, 0.45, 0.95, 1.0);
 }
@@ -572,7 +572,7 @@ WKDDrawLane(id<DKSurface> surface, NSRect rect, NSString *name, BOOL horizontal)
 void
 WKDDrawSelection(id<DKSurface> surface, NSRect rect)
 {
-	WKDStroke(surface, [DKPath pathWithRoundedRect:NSInsetRect(rect, -4, -4) radius:4], WKDSelection(), 1.5,
+	WKDStroke(surface, [DKPath pathWithRoundedRect:NSInsetRect(rect, -4, -4) radius:4], WKDSelectionInk(), 1.5,
 	          DKStrokeDashed);
 }
 

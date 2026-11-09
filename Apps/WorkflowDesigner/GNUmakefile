@@ -42,6 +42,8 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDExpressionField.m \
 	WKDTableEditor.m \
 	WKDDeployment.m \
+	WKDSelection.m \
+	WKDProcessEditor.m \
 	WKDDecisions.m \
 	WKDDmnModel.m \
 	WKDDmnReader.m \

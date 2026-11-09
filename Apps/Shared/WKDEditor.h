@@ -11,6 +11,9 @@
 + (instancetype)type:(NSString *)type eventDefinition:(NSString *)eventDefinition title:(NSString *)title;
 @end
 
+/* Posted, by the editor, after every change, undo and redo included. */
+extern NSString * const WKDEditorDidChangeNotification;
+
 /*
  * Every change to a BPMN document goes through here: elements and their
  * references -- a flow's ends, the nodes' incoming and outgoing, a
@@ -35,8 +38,6 @@
 /* After every change, undo and redo, the model is compared with one read
  * afresh from the document, and a disagreement raises: for tests. */
 @property (class, nonatomic) BOOL checksAgreement;
-/* Called after every change, undo and redo included. */
-@property (nonatomic, copy) void (^changed)(void);
 
 /* Shapes for the nodes that have none, laid out with the rest left as
  * they are; nothing when every node has one. Not undoable: for opening. */

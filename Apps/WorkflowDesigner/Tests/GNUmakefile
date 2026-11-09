@@ -21,6 +21,8 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../../Shared/WKDEditor+Lanes.m \
 	../WKDProperties.m \
 	../WKDDeployment.m \
+	../WKDSelection.m \
+	../WKDProcessEditor.m \
 	../WKDDecisions.m \
 	../WKDDmnModel.m \
 	../WKDDmnReader.m \
@@ -28,6 +30,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../WKDDmnModelCheck.m \
 	WKDDiagramTests.m \
 	WKDModelTests.m \
+	WKDProcessEditorTests.m \
 	WKDTimingTests.m \
 	WKDEditorTests.m \
 	WKDCanvasEditsTests.m \

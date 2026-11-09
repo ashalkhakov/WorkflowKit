@@ -58,6 +58,8 @@ static const double WKDMargin = 80;
 	return self;
 }
 
+NSString * const WKDEditorDidChangeNotification = @"WKDEditorDidChange";
+
 static BOOL WKDChecksAgreement = NO;
 
 + (BOOL)checksAgreement
@@ -82,9 +84,7 @@ static BOOL WKDChecksAgreement = NO;
 			[NSException raise:NSInternalInconsistencyException format:@"the model disagrees with its document: %@", disagreement];
 		}
 	}
-	if (self.changed != nil) {
-		self.changed();
-	}
+	[[NSNotificationCenter defaultCenter] postNotificationName:WKDEditorDidChangeNotification object:self];
 }
 
 /* One undoable step: what it changes is what undo takes back. */

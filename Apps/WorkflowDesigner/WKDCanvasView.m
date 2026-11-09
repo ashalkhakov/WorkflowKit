@@ -563,7 +563,7 @@ WKDPointHandle(NSPoint point, double zoom)
 	}
 	for (WKDFlow *connection in self.model.flows) {
 		NSArray *points = [self pointsOf:connection];
-		DKColor colour = interactive && [_picked containsObject:connection.elementId] ? WKDSelection() : WKDInk();
+		DKColor colour = interactive && [_picked containsObject:connection.elementId] ? WKDSelectionInk() : WKDInk();
 		if (connection.isAssociation) {
 			WKDDrawAssociation(surface, points, colour,
 			                   ![WKDAttribute(connection.element, @"associationDirection") ?: @"None" isEqualToString:@"None"]);

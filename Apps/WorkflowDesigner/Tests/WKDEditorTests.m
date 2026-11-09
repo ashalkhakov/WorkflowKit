@@ -230,9 +230,11 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	WKDEditor *editor = [[WKDEditor alloc] initWithDocument:WKDParse(WKDModellerFile) undoManager:_undo];
 	NSString *before = [editor.document XMLString];
 	__block NSUInteger changes = 0;
-	editor.changed = ^{
+	id observer = [[NSNotificationCenter defaultCenter] addObserverForName:WKDEditorDidChangeNotification
+	                                                                object:editor queue:nil
+	                                                            usingBlock:^(NSNotification *note) {
 		changes++;
-	};
+	}];
 	[self step:^{
 		[editor moveElements:@[ @"review" ] by:NSMakeSize(40, 0)];
 	}];
@@ -248,6 +250,7 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	[_undo redo];
 	XCTAssertEqualObjects([editor.document XMLString], moved);
 	XCTAssertEqual(changes, (NSUInteger)5, @"two changes, two undos, a redo");
+	[[NSNotificationCenter defaultCenter] removeObserver:observer];
 }
 
 - (void)testArrangeLaysOutEveryScope

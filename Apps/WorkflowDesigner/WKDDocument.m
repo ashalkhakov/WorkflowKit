@@ -1,6 +1,8 @@
 #import "WKDDocument.h"
 #import "WKDEditor.h"
 #import "WKDWindowController.h"
+#import "WKDProcessEditor.h"
+#import "WKDDeployment.h"
 #if __has_include(<WorkflowKit/WFBpmn.h>)
 #import <WorkflowKit/WFBpmn.h>
 #else
@@ -11,33 +13,64 @@
 
 - (void)makeWindowControllers
 {
-	if (_editor == nil) {
-		_editor = [[WKDEditor alloc] initWithDocument:[WKDEditor newProcessDocument] undoManager:[self undoManager]];
-		[self check];
+	if (_processEditor == nil) {
+		[self useProcessEditor:[[WKDProcessEditor alloc] initNewProcessWithUndoManager:[self undoManager]]];
 	}
 	[self addWindowController:[[WKDWindowController alloc] init]];
 }
 
+- (void)useProcessEditor:(WKDProcessEditor *)processEditor
+{
+	_processEditor = processEditor;
+	__weak WKDDocument *weakSelf = self;
+	processEditor.resourcesBeside = ^NSDictionary *{
+		return [weakSelf formsBeside];
+	};
+	processEditor.fileName = [[self fileURL] lastPathComponent];
+	[processEditor checkNow];
+}
+
+/* The forms the process names, from beside its file: what deploying it
+ * sends with it. */
+- (NSDictionary<NSString *, NSData *> *)formsBeside
+{
+	NSURL *directory = [[self fileURL] URLByDeletingLastPathComponent];
+	NSMutableDictionary *forms = [NSMutableDictionary dictionary];
+	for (NSString *name in directory != nil ? WKDEmbeddedForms(self.editor.document) : @[]) {
+		NSData *bytes = [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:name]];
+		if (bytes != nil) {
+			[forms setObject:bytes forKey:name];
+		}
+	}
+	return forms;
+}
+
+- (void)setFileURL:(NSURL *)url
+{
+	[super setFileURL:url];
+	_processEditor.fileName = [url lastPathComponent];
+}
+
+- (WKDEditor *)editor
+{
+	return _processEditor.editor;
+}
+
+- (NSString *)problem
+{
+	return _processEditor.problem;
+}
+
 - (BOOL)readFromData:(NSData *)data ofType:(NSString *)type error:(NSError **)error
 {
-	NSError *parseError = nil;
-	NSXMLDocument *document = [[NSXMLDocument alloc] initWithData:data options:0 error:&parseError];
-	WKDEditor *editor = document != nil ? [[WKDEditor alloc] initWithDocument:document undoManager:[self undoManager]] : nil;
-	if (editor.model.process == nil) {
-		if (error != NULL) {
-			*error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadCorruptFileError userInfo:@{
-				NSLocalizedDescriptionKey: @"The file is not a BPMN process.",
-				NSLocalizedRecoverySuggestionErrorKey: [parseError localizedDescription]
-					?: @"It has no process element in the BPMN 2.0 namespace." }];
-		}
+	WKDProcessEditor *processEditor = [[WKDProcessEditor alloc] initWithData:data undoManager:[self undoManager]
+	                                                                   error:error];
+	if (processEditor == nil) {
 		return NO;
 	}
+	[self useProcessEditor:processEditor];
 	/* A file without a diagram is laid out: a change, to save. */
-	BOOL drawn = !editor.model.needsLayout;
-	[editor completeDiagram];
-	_editor = editor;
-	[self check];
-	if (!drawn) {
+	if (processEditor.laidOut) {
 		dispatch_async(dispatch_get_main_queue(), ^{
 			[self updateChangeCount:NSChangeDone];
 		});
@@ -47,7 +80,7 @@
 
 - (NSData *)dataOfType:(NSString *)type error:(NSError **)error
 {
-	return [_editor.document XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement];
+	return [_processEditor data];
 }
 
 - (NSString *)displayName
@@ -58,13 +91,6 @@
 + (BOOL)autosavesInPlace
 {
 	return NO;
-}
-
-- (void)check
-{
-	NSError *error = nil;
-	WFProcessDefinition *definition = [WFBpmnReader definitionFromXMLString:[_editor.document XMLString] error:&error];
-	_problem = definition != nil ? nil : [[error localizedDescription] copy] ?: @"The engine cannot read the process.";
 }
 
 @end

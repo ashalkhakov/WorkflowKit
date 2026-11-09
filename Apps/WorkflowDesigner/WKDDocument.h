@@ -1,6 +1,6 @@
 #import <AppKit/AppKit.h>
 
-@class WKDEditor;
+@class WKDEditor, WKDProcessEditor;
 
 /*
  * A BPMN file. Its XML is the document, edited in place through a
@@ -10,11 +10,12 @@
  */
 @interface WKDDocument : NSDocument
 
+/* The process, its selection and what the engine finds wrong with it,
+ * checked with the forms beside the file. */
+@property (nonatomic, readonly, strong) WKDProcessEditor *processEditor;
 @property (nonatomic, readonly, strong) WKDEditor *editor;
 /* Why the engine would not deploy the process as it is; nil when it would. */
 @property (nonatomic, readonly, copy) NSString *problem;
-/* Asks the engine again: after every change. */
-- (void)check;
 /* Opened from a server, never saved: its name until it is -- the
  * definition's key and version. */
 @property (nonatomic, copy) NSString *serverTitle;

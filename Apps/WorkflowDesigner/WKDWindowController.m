@@ -1,4 +1,5 @@
 #import "WKDWindowController.h"
+#import "WKDProcessEditor.h"
 #import "WKDAppDelegate.h"
 #import "WKDDecisionDocument.h"
 #import "WKDDecisions.h"
@@ -181,10 +182,12 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	self.canvas.canvasDelegate = self;
 	self.palette.delegate = self;
 	[self buildPanes];
-	__weak WKDWindowController *weakSelf = self;
-	[self editor].changed = ^{
-		[weakSelf documentDidChange];
-	};
+	WKDProcessEditor *processEditor = [self designerDocument].processEditor;
+	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+	[center addObserver:self selector:@selector(documentDidChange) name:WKDProcessEditorDidChangeNotification
+	             object:processEditor];
+	[center addObserver:self selector:@selector(problemsDidChange) name:WKDProcessEditorProblemsDidChangeNotification
+	             object:processEditor];
 	[self setDefaultPaneWidths];
 	[self showDocument];
 	[self.canvas scrollToContent];
@@ -209,9 +212,20 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	[_problems setString:problem == nil ? @"The engine runs this process." : problem];
 }
 
+- (void)dealloc
+{
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)problemsDidChange
+{
+	NSString *problem = [self designerDocument].problem;
+	[_problems setString:problem == nil ? @"The engine runs this process." : problem];
+	[self updateStatus];
+}
+
 - (void)documentDidChange
 {
-	[[self designerDocument] check];
 	/* An element renamed in the inspector: selected under its new id. */
 	NSString *shown = _inspector.elementId;
 	if (shown != nil && [self.canvas.selection count] == 1 && ![self.canvas.selection containsObject:shown]
