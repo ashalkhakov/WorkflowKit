@@ -71,6 +71,9 @@ WKDTrimmed(NSString *text)
 	return self;
 }
 
+NSString * const WKDDmnEditorDidChangeNotification = @"WKDDmnEditorDidChange";
+NSString * const WKDDmnEditorWillRenameNotification = @"WKDDmnEditorWillRename";
+
 static BOOL WKDDmnChecksAgreement = NO;
 
 + (BOOL)checksAgreement
@@ -134,9 +137,7 @@ static BOOL WKDDmnChecksAgreement = NO;
 			                   disagreement];
 		}
 	}
-	if (self.changed != nil) {
-		self.changed();
-	}
+	[[NSNotificationCenter defaultCenter] postNotificationName:WKDDmnEditorDidChangeNotification object:self];
 }
 
 #pragma mark Decisions
@@ -180,6 +181,8 @@ static BOOL WKDDmnChecksAgreement = NO;
 		}
 		return NO;
 	}
+	[[NSNotificationCenter defaultCenter] postNotificationName:WKDDmnEditorWillRenameNotification object:self
+	                                                  userInfo:@{ @"from": decisionId, @"to": newId }];
 	return [self change:@"Rename" of:decisionId with:^(WKDDmnDecision *decision) {
 		WKDJournal *journal = self->_model.journal;
 		[self->_model renameDecision:decision to:newId];

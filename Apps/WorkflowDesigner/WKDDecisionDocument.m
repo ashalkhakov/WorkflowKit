@@ -1,11 +1,6 @@
 #import "WKDDecisionDocument.h"
-#import "WKDDecisions.h"
+#import "WKDDecisionEditor.h"
 #import "WKDDecisionWindowController.h"
-#if __has_include(<WorkflowKit/WFDecision.h>)
-#import <WorkflowKit/WFDecision.h>
-#else
-#import "WFDecision.h"
-#endif
 
 @implementation WKDDecisionDocument
 {
@@ -15,11 +10,10 @@
 
 - (void)makeWindowControllers
 {
-	if (_editor == nil) {
-		_editor = [[WKDDmnEditor alloc] initWithDocument:[WKDDmnEditor newDecisionsDocument]
-		                                     undoManager:[self undoManager]];
-		[self check];
+	if (_decisionEditor == nil) {
+		_decisionEditor = [[WKDDecisionEditor alloc] initNewWithUndoManager:[self undoManager]];
 	}
+	_decisionEditor.fileName = [[self fileURL] lastPathComponent];
 	WKDDecisionWindowController *controller = [[WKDDecisionWindowController alloc] init];
 	[self addWindowController:controller];
 	if (_shown != nil) {
@@ -29,39 +23,40 @@
 
 - (BOOL)readFromData:(NSData *)data ofType:(NSString *)type error:(NSError **)error
 {
-	NSError *parseError = nil;
-	NSXMLDocument *document = [[NSXMLDocument alloc] initWithData:data options:0 error:&parseError];
-	NSString *uri = [[document rootElement] URI];
-	if (![[[document rootElement] localName] isEqualToString:@"definitions"]
-	    || [uri rangeOfString:@"/spec/DMN/"].location == NSNotFound) {
-		if (error != NULL) {
-			*error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadCorruptFileError userInfo:@{
-				NSLocalizedDescriptionKey: @"The file is not a DMN document.",
-				NSLocalizedRecoverySuggestionErrorKey: [parseError localizedDescription]
-					?: @"Its root is not DMN's definitions." }];
-		}
+	WKDDecisionEditor *decisionEditor = [[WKDDecisionEditor alloc] initWithData:data undoManager:[self undoManager]
+	                                                                      error:error];
+	if (decisionEditor == nil) {
 		return NO;
 	}
-	_editor = [[WKDDmnEditor alloc] initWithDocument:document undoManager:[self undoManager]];
-	[self check];
+	_decisionEditor = decisionEditor;
+	_decisionEditor.fileName = [[self fileURL] lastPathComponent];
 	return YES;
+}
+
+- (void)setFileURL:(NSURL *)url
+{
+	[super setFileURL:url];
+	_decisionEditor.fileName = [url lastPathComponent];
 }
 
 - (NSData *)dataOfType:(NSString *)type error:(NSError **)error
 {
-	return [_editor.document XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement];
+	return [_decisionEditor data];
+}
+
+- (WKDDmnEditor *)editor
+{
+	return _decisionEditor.editor;
+}
+
+- (NSString *)problem
+{
+	return _decisionEditor.problem;
 }
 
 + (BOOL)autosavesInPlace
 {
 	return NO;
-}
-
-- (void)check
-{
-	NSError *error = nil;
-	NSArray *decisions = [WFDmnReader decisionsFromXMLString:[_editor.document XMLString] error:&error];
-	_problem = decisions != nil ? nil : [[error localizedDescription] copy] ?: @"The engine cannot read the decisions.";
 }
 
 - (void)showDecision:(NSString *)decisionId

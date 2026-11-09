@@ -336,8 +336,10 @@ repository, such as `Examples/Processes`. They build on GNUstep with
 | `WKDCanvasViewController`, `WKDOutlineViewController`, `WKDPaletteViewController`, `WKDProblemsViewController` | The parts, each from its XIB, following the process editor. |
 | `WKDProcessCommands` | The Editor menu's actions, in the window's responder chain. |
 | `WKDDeployment` | What a deployment sends: the process, the forms it embeds and the DMN files defining its decisions, as their editors have those open. |
-| `WKDDecisions` | A DMN file's decisions, read after every change, and every change to them (`WKDDmnEditor`), one undo step each, as `WKDEditor`'s are to a process. |
-| `WKDDecisionDocument`, `WKDDecisionWindowController` | The DMN document and its window: the decisions, the table's grid and its column panel, and a literal expression's fields. The window is built in code, because the grid's columns are the table's. |
+| `WKDDecisions`, `WKDDmnModel` | A DMN file's decisions as a model, read once, and every change to them (`WKDDmnEditor`), one undo step each, as `WKDEditor`'s are to a process. |
+| `WKDDecisionEditor` | One DMN file being edited: its text, the decision and column chosen, the engine's problems; what the decision editor's parts share. |
+| `WKDDecisionDocument`, `WKDDecisionWindowController` | The DMN document and its window (`DecisionWindow.xib`), which puts the parts in their places. |
+| `WKDDecisionListViewController`, `WKDDecisionDetailViewController`, `WKDRuleGridViewController`, `WKDColumnViewController`, `WKDLiteralViewController` | The decisions, the one chosen, its table's grid (its columns made from the table's), the column chosen, a literal expression: each from its XIB. |
 | `WKDAppDelegate`, `WKDServerProcessesController` | The server connection, shared by every window, and the Open from Server window. The connection itself is WorkflowDesk's (`../Shared`). |
 | `WKDCanvasView`, `WKDPaletteView`, `../Shared/WKDRenderer` | Drawing and editing, adapted from CoreWF's graph view. BPMN notation is drawn with `NSBezierPath`, with no images. |
 

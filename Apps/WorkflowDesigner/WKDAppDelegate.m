@@ -1,5 +1,4 @@
 #import "WKDAppDelegate.h"
-#import "WKDDecisionWindowController.h"
 #import "WKDDocument.h"
 #import "WKDServerProcessesController.h"
 #import "WDConnectWindowController.h"
@@ -29,13 +28,12 @@
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
 	WDStartTracing();
-	/* The form editor's menu and the decision editor's, after Diagram:
-	 * their items act on the form or decisions window that is key. */
+	/* The form editor's menu, which XFormsKit makes, after Diagram: its
+	 * items act on the form window that is key. The Decision menu is the
+	 * menu bar's own (MainMenu.xib). */
 	NSMenu *menu = [NSApp mainMenu];
 	NSInteger diagram = [menu indexOfItemWithTitle:@"Diagram"];
-	NSInteger after = diagram >= 0 ? diagram + 1 : [menu numberOfItems];
-	[menu insertItem:[XFDDocument formMenuItem] atIndex:after];
-	[menu insertItem:[WKDDecisionWindowController decisionMenuItem] atIndex:after + 1];
+	[menu insertItem:[XFDDocument formMenuItem] atIndex:diagram >= 0 ? diagram + 1 : [menu numberOfItems]];
 	/* Updates (WKDUpdater.h), set up before the app finishes launching, as
 	 * Sparkle asks. */
 	_updater = [[WKDUpdater alloc] initStarting:YES];

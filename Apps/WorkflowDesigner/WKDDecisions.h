@@ -7,6 +7,12 @@ NSArray<NSString *> *WKDDmnTypes(void);
  * each an array of policy and aggregation (or ""), with what to call it. */
 NSArray<NSArray<NSString *> *> *WKDDmnHitPolicies(void);
 
+/* Posted, by the editor, after every change, undo and redo included. */
+extern NSString * const WKDDmnEditorDidChangeNotification;
+/* Posted, by the editor, as a decision is given another id: its old id and
+ * its new one, under "from" and "to". The change follows. */
+extern NSString * const WKDDmnEditorWillRenameNotification;
+
 /*
  * Every change to a DMN document goes through here, as WKDEditor's do to
  * a process: made in the model, written where it differs, and one undo
@@ -30,8 +36,6 @@ NSArray<NSArray<NSString *> *> *WKDDmnHitPolicies(void);
 /* After every change, undo and redo, the model is compared with one read
  * afresh from the document, and a disagreement raises: for tests. */
 @property (class, nonatomic) BOOL checksAgreement;
-/* Called after every change, undo and redo included. */
-@property (nonatomic, copy) void (^changed)(void);
 
 - (WKDDmnDecision *)decisionWithId:(NSString *)decisionId;
 

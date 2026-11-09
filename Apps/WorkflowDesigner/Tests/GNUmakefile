@@ -33,6 +33,12 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../WKDDmnWriter.m \
 	../WKDDmnModelCheck.m \
 	../WKDDecisionDocument.m \
+	../WKDDecisionEditor.m \
+	../WKDDecisionListViewController.m \
+	../WKDDecisionDetailViewController.m \
+	../WKDRuleGridViewController.m \
+	../WKDColumnViewController.m \
+	../WKDLiteralViewController.m \
 	../WKDDecisionWindowController.m \
 	../WKDDocument.m \
 	../WKDWindowController.m \
@@ -65,6 +71,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	WKDPartsTests.m \
 	WKDElementModelTests.m \
 	WKDInspectorTests.m \
+	WKDDecisionPartsTests.m \
 	WKDTimingTests.m \
 	WKDEditorTests.m \
 	WKDCanvasEditsTests.m \
@@ -95,6 +102,12 @@ WorkflowDesignerTests_RESOURCE_FILES = \
 	../Resources/WKDRowChoice.xib \
 	../Resources/WKDRowButton.xib \
 	../Resources/WKDRowTable.xib \
+	../Resources/DecisionWindow.xib \
+	../Resources/WKDDecisionList.xib \
+	../Resources/WKDDecisionDetail.xib \
+	../Resources/WKDRuleGrid.xib \
+	../Resources/WKDColumn.xib \
+	../Resources/WKDLiteral.xib \
 	../Resources/ServerProcesses.xib \
 	../../Shared/Resources/ConnectWindow.xib
 

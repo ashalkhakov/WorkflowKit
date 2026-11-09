@@ -47,6 +47,12 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDDmnWriter.m \
 	WKDDmnModelCheck.m \
 	WKDDecisionDocument.m \
+	WKDDecisionEditor.m \
+	WKDDecisionListViewController.m \
+	WKDDecisionDetailViewController.m \
+	WKDRuleGridViewController.m \
+	WKDColumnViewController.m \
+	WKDLiteralViewController.m \
 	WKDDecisionWindowController.m \
 	WKDDocument.m \
 	WKDWindowController.m \
@@ -90,6 +96,12 @@ WorkflowDesigner_RESOURCE_FILES = \
 	Resources/WKDRowChoice.xib \
 	Resources/WKDRowButton.xib \
 	Resources/WKDRowTable.xib \
+	Resources/DecisionWindow.xib \
+	Resources/WKDDecisionList.xib \
+	Resources/WKDDecisionDetail.xib \
+	Resources/WKDRuleGrid.xib \
+	Resources/WKDColumn.xib \
+	Resources/WKDLiteral.xib \
 	Resources/ServerProcesses.xib \
 	../Shared/Resources/ConnectWindow.xib \
 	Resources/WorkflowDesigner.png

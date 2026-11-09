@@ -299,6 +299,70 @@
                         </items>
                     </menu>
                 </menuItem>
+                <menuItem title="Decision" id="WKm-mt-dmn">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="Decision" id="WKm-mn-dmn">
+                        <items>
+                            <menuItem title="Add Decision Table" id="WKm-mi-dmn1">
+                                <connections>
+                                    <action selector="addDecisionTable:" target="-1" id="WKm-ac-dmn1"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Add Literal Expression" id="WKm-mi-dmn2">
+                                <connections>
+                                    <action selector="addLiteralDecision:" target="-1" id="WKm-ac-dmn2"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Delete Decision" id="WKm-mi-dmn3">
+                                <connections>
+                                    <action selector="deleteDecision:" target="-1" id="WKm-ac-dmn3"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-mi-dmn4"/>
+                            <menuItem title="Add Rule" id="WKm-mi-dmn5">
+                                <connections>
+                                    <action selector="addRule:" target="-1" id="WKm-ac-dmn5"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Move Rule Up" id="WKm-mi-dmn6">
+                                <connections>
+                                    <action selector="moveRuleUp:" target="-1" id="WKm-ac-dmn6"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Move Rule Down" id="WKm-mi-dmn7">
+                                <connections>
+                                    <action selector="moveRuleDown:" target="-1" id="WKm-ac-dmn7"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WKm-mi-dmn8"/>
+                            <menuItem title="Add Input" id="WKm-mi-dmn9">
+                                <connections>
+                                    <action selector="addInput:" target="-1" id="WKm-ac-dmn9"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Add Output" id="WKm-mi-dmn10">
+                                <connections>
+                                    <action selector="addOutput:" target="-1" id="WKm-ac-dmn10"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Delete Column" id="WKm-mi-dmn11">
+                                <connections>
+                                    <action selector="deleteColumn:" target="-1" id="WKm-ac-dmn11"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Move Column Left" id="WKm-mi-dmn12">
+                                <connections>
+                                    <action selector="moveColumnLeft:" target="-1" id="WKm-ac-dmn12"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Move Column Right" id="WKm-mi-dmn13">
+                                <connections>
+                                    <action selector="moveColumnRight:" target="-1" id="WKm-ac-dmn13"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
                 <menuItem title="Server" id="WKm-mt-102">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="Server" id="WKm-mn-102">
