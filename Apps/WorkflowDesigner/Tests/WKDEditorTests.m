@@ -147,7 +147,8 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	              @"its boundary event goes with it");
 	NSArray *f2 = [diagram flowWithId:@"f2"].waypoints;
 	XCTAssertTrue(NSEqualPoints([[f2 firstObject] pointValue], NSMakePoint(300, 218)), @"%@", f2);
-	XCTAssertTrue(NSEqualPoints([[f2 lastObject] pointValue], NSMakePoint(385, 143)), @"%@", f2);
+	XCTAssertTrue(NSEqualPoints([[f2 lastObject] pointValue], NSMakePoint(360, 118)),
+	              @"into the split's side, its bottom f4's: %@", f2);
 	XCTAssertTrue(NSEqualPoints([[[diagram flowWithId:@"f6"].waypoints firstObject] pointValue], NSMakePoint(820, 118)),
 	              @"a flow between shapes that did not move keeps its route");
 }
@@ -266,6 +267,40 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	NSRect review = [diagram nodeWithId:@"review"].bounds;
 	XCTAssertEqual(NSMidY([diagram nodeWithId:@"late"].bounds), NSMaxY(review), @"on its activity's edge");
 	[self engineRead:editor];
+}
+
+/* A split's branches leave by corners of their own: one level with it by
+ * its side corner, not back through it; what comes into it by its other
+ * side corner, not where a branch leaves (the expense review's "Any line
+ * over 500?"). */
+- (void)testABranchLeavesByACornerOfItsOwn
+{
+	NSRect split = NSMakeRect(186, 296, 50, 50), above = NSMakeRect(306, 228, 100, 80);
+	NSRect level = NSMakeRect(476, 303, 50, 50), start = NSMakeRect(80, 80, 36, 36);
+	NSArray *no = [WKDEditor routeFrom:split to:level fromBoundary:NO fromGateway:YES toActivity:NO];
+	XCTAssertTrue(NSEqualPoints([no[0] pointValue], NSMakePoint(236, 321)), @"by the side corner: %@", no);
+	XCTAssertTrue(NSEqualPoints([[no lastObject] pointValue], NSMakePoint(476, 328)), @"%@", no);
+	NSArray *yes = [WKDEditor routeFrom:split to:above fromBoundary:NO fromGateway:YES toActivity:YES];
+	XCTAssertTrue(NSEqualPoints([yes[0] pointValue], NSMakePoint(211, 296)), @"by the top corner: %@", yes);
+	NSArray *in = [WKDEditor routeFrom:start to:split fromBoundary:NO fromGateway:NO toActivity:NO intoSide:YES];
+	XCTAssertTrue(NSEqualPoints([[in lastObject] pointValue], NSMakePoint(186, 321)), @"into the side: %@", in);
+	NSArray *back = [WKDEditor routeFrom:NSMakeRect(582, 360, 100, 80) to:split fromBoundary:NO fromGateway:NO
+	                          toActivity:NO intoSide:YES];
+	XCTAssertTrue(NSEqualPoints([[back lastObject] pointValue], NSMakePoint(186, 321)), @"back round: %@", back);
+
+	WKDEditor *editor = [self editorOf:WKDModellerFile];
+	[editor arrange];
+	for (WKDNode *node in editor.model.nodes) {
+		if (node.kind != WKDShapeGateway || [node.outgoing count] < 2) {
+			continue;
+		}
+		for (WKDFlow *into in node.incoming) {
+			for (WKDFlow *out in node.outgoing) {
+				XCTAssertFalse(NSEqualPoints([[into.waypoints lastObject] pointValue], [out.waypoints[0] pointValue]),
+				               @"%@ and %@ share a corner of %@", into.elementId, out.elementId, node.elementId);
+			}
+		}
+	}
 }
 
 @end

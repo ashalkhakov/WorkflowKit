@@ -352,11 +352,20 @@ WKDPoint(double x, double y)
 	return [self routeFrom:source to:target fromBoundary:fromBoundary fromGateway:fromGateway toActivity:NO];
 }
 
-+ (NSArray<NSValue *> *)routeFrom:(NSRect)s to:(NSRect)t fromBoundary:(BOOL)fromBoundary
++ (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary
                       fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity
 {
-	if (fromGateway && NSMinX(t) >= NSMaxX(s) && fabs(NSMidY(t) - NSMidY(s)) >= 1) {
-		/* Up or down out of the corner, then across into the target. */
+	return [self routeFrom:source to:target fromBoundary:fromBoundary fromGateway:fromGateway toActivity:toActivity
+	              intoSide:NO];
+}
+
++ (NSArray<NSValue *> *)routeFrom:(NSRect)s to:(NSRect)t fromBoundary:(BOOL)fromBoundary
+                      fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity intoSide:(BOOL)intoSide
+{
+	if (fromGateway && NSMinX(t) >= NSMaxX(s) && (NSMidY(t) < NSMinY(s) || NSMidY(t) > NSMaxY(s))) {
+		/* Up or down out of the corner, then across into the target; one
+		 * level with the gateway leaves by the side corner, not back
+		 * through it. */
 		BOOL below = NSMidY(t) > NSMidY(s);
 		return @[ WKDPoint(NSMidX(s), below ? NSMaxY(s) : NSMinY(s)), WKDPoint(NSMidX(s), NSMidY(t)),
 			WKDPoint(NSMinX(t), NSMidY(t)) ];
@@ -388,8 +397,9 @@ WKDPoint(double x, double y)
 		if (fabs(start.y - end.y) < 1) {
 			return @[ [NSValue valueWithPoint:start], [NSValue valueWithPoint:end] ];
 		}
-		if (NSMidX(t) - NSMaxX(s) > 30) {
-			/* Across, then up or down into the target's top or bottom. */
+		if (NSMidX(t) - NSMaxX(s) > 30 && !intoSide && (start.y < NSMinY(t) || start.y > NSMaxY(t))) {
+			/* Across, then up or down into the target's top or bottom,
+			 * when it is clear above or below. */
 			BOOL below = NSMidY(t) > NSMidY(s);
 			if (NSMaxX(s) + 20 < NSMidX(t)) {
 				return @[ [NSValue valueWithPoint:start], WKDPoint(NSMidX(t), start.y),
@@ -403,6 +413,12 @@ WKDPoint(double x, double y)
 	if (NSMaxX(t) <= NSMinX(s)) {
 		/* Backwards: out of the bottom, under both, into the bottom. */
 		double under = MAX(NSMaxY(s), NSMaxY(t)) + 30;
+		if (intoSide) {
+			/* Back round into the side corner, leaving the bottom to the branches. */
+			double before = NSMinX(t) - 20;
+			return @[ WKDPoint(NSMidX(s), NSMaxY(s)), WKDPoint(NSMidX(s), under), WKDPoint(before, under),
+				WKDPoint(before, NSMidY(t)), WKDPoint(NSMinX(t), NSMidY(t)) ];
+		}
 		return @[ WKDPoint(NSMidX(s), NSMaxY(s)), WKDPoint(NSMidX(s), under), WKDPoint(NSMidX(t), under),
 			WKDPoint(NSMidX(t), NSMaxY(t)) ];
 	}
@@ -468,6 +484,21 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	return obstacles;
 }
 
+/* A gateway with branches: what comes into it takes its side corner,
+ * the branches its top and bottom. */
+static BOOL
+WKDIsSplit(WKDNode *node)
+{
+	if (node.kind != WKDShapeGateway) {
+		return NO;
+	}
+	NSUInteger branches = 0;
+	for (WKDFlow *flow in node.outgoing) {
+		branches += !flow.isAssociation;
+	}
+	return branches > 1;
+}
+
 /* The route the router would take, unless it passes through other
  * shapes: then the first of the other ways round that does not, or that
  * passes through fewest. */
@@ -476,7 +507,8 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	NSRect s = connection.source.bounds, t = connection.target.bounds;
 	BOOL fromBoundary = connection.source.host != nil, fromGateway = connection.source.kind == WKDShapeGateway;
 	NSArray *primary = [WKDEditor routeFrom:s to:t fromBoundary:fromBoundary fromGateway:fromGateway
-	                             toActivity:connection.target.kind == WKDShapeActivity];
+	                             toActivity:connection.target.kind == WKDShapeActivity
+	                               intoSide:WKDIsSplit(connection.target)];
 	NSArray *obstacles = [self obstaclesFor:connection];
 	if (WKDCrossings(primary, obstacles) == 0) {
 		return primary;
@@ -840,9 +872,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 		WKDModel *model = self->_model;
 		WKDFlow *flow = [model makeFlowFrom:[model nodeWithId:sourceId] to:[model nodeWithId:targetId] elementId:flowId
 		                        association:NO];
-		flow.waypoints = [WKDEditor routeFrom:source.bounds to:target.bounds fromBoundary:source.host != nil
-		                          fromGateway:source.kind == WKDShapeGateway
-		                           toActivity:target.kind == WKDShapeActivity];
+		flow.waypoints = [self routeFor:flow];
 		[model write];
 	}];
 	return flowId;

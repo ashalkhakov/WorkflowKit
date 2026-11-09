@@ -94,6 +94,10 @@ extern NSString * const WKDEditorWillRenameNotification;
  * face each other; a gateway or an event it enters at its corner. */
 + (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary
                       fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity;
+/* Into a gateway's side corner, its top and bottom corners left to the
+ * branches of a split. */
++ (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary
+                      fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity intoSide:(BOOL)intoSide;
 /* The default size of a node of the type. */
 + (NSSize)sizeOfType:(NSString *)type;
 

@@ -134,8 +134,9 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="toReceipts_Edge" bpmnElement="toReceipts">
         <di:waypoint x="116" y="98"/>
-        <di:waypoint x="211" y="98"/>
-        <di:waypoint x="211" y="296"/>
+        <di:waypoint x="151" y="98"/>
+        <di:waypoint x="151" y="321"/>
+        <di:waypoint x="186" y="321"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="receiptsFlow_Edge" bpmnElement="receiptsFlow">
         <di:waypoint x="211" y="296"/>
@@ -143,8 +144,9 @@
         <di:waypoint x="306" y="268"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="noReceiptsFlow_Edge" bpmnElement="noReceiptsFlow">
-        <di:waypoint x="211" y="346"/>
-        <di:waypoint x="211" y="328"/>
+        <di:waypoint x="236" y="321"/>
+        <di:waypoint x="356" y="321"/>
+        <di:waypoint x="356" y="328"/>
         <di:waypoint x="476" y="328"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="receiptsChecked_Edge" bpmnElement="receiptsChecked">
