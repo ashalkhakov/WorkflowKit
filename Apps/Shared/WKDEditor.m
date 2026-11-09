@@ -1,6 +1,7 @@
 #import "WKDEditorPriv.h"
 #import <DiagramKit/DKLayeredLayout.h>
 #import "WKDXML.h"
+#import "WKDModelPriv.h"
 
 /* Inside a subprocess, around what it holds. */
 static const double WKDPadding = 40;
@@ -50,13 +51,37 @@ static const double WKDMargin = 80;
 		_document = document;
 		_undoManager = undoManager;
 		_diagram = [WKDDiagram diagramOfDocument:document];
+		_model = [WKDModel modelOfDocument:document];
 	}
 	return self;
+}
+
+static BOOL WKDChecksAgreement = NO;
+
++ (BOOL)checksAgreement
+{
+	return WKDChecksAgreement;
+}
+
++ (void)setChecksAgreement:(BOOL)checks
+{
+	WKDChecksAgreement = checks;
 }
 
 - (void)reread
 {
 	_diagram = [WKDDiagram diagramOfDocument:_document];
+	if (_model != nil) {
+		[_model readDocumentAgain:_document];
+	} else {
+		_model = [WKDModel modelOfDocument:_document];
+	}
+	if (WKDChecksAgreement && _model != nil) {
+		NSString *disagreement = [_model disagreementWith:[WKDModel modelOfDocument:_document]];
+		if (disagreement != nil) {
+			[NSException raise:NSInternalInconsistencyException format:@"the model disagrees with its document: %@", disagreement];
+		}
+	}
 	if (self.changed != nil) {
 		self.changed();
 	}

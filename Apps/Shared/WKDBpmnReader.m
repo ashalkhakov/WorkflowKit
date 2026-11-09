@@ -267,3 +267,123 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 }
 
 @end
+
+@implementation WKDModel (WKDReadingAgain)
+
+/* The document read again into these objects: an element whose id is still
+ * there is the same object, its values and links those read now; one no
+ * longer there leaves the model; one new comes in. For an operation that
+ * still edits the XML, and for undo, until they change the model itself. */
+- (void)readDocumentAgain:(NSXMLDocument *)document
+{
+	WKDModel *fresh = [WKDModel modelOfDocument:document];
+	NSMutableDictionary *nodes = [NSMutableDictionary dictionary];
+	NSMutableDictionary *flows = [NSMutableDictionary dictionary];
+	NSMutableDictionary *lanes = [NSMutableDictionary dictionary];
+	/* Each fresh element's lasting object: the one of its id, else itself. */
+	NSMapTable *lasting = [NSMapTable strongToStrongObjectsMapTable];
+	for (WKDNode *node in fresh.nodeList) {
+		WKDNode *kept = [self.nodesById objectForKey:node.elementId] ?: node;
+		[lasting setObject:kept forKey:node];
+		[nodes setObject:kept forKey:node.elementId];
+	}
+	for (WKDFlow *flow in fresh.flowList) {
+		WKDFlow *kept = [self.flowsById objectForKey:flow.elementId] ?: flow;
+		[lasting setObject:kept forKey:flow];
+		[flows setObject:kept forKey:flow.elementId];
+	}
+	NSMutableArray *freshLanes = [NSMutableArray arrayWithArray:fresh.lanes];
+	[freshLanes addObjectsFromArray:fresh.otherPools];
+	if (fresh.pool != nil) {
+		[freshLanes addObject:fresh.pool];
+	}
+	for (WKDSwimlane *lane in freshLanes) {
+		WKDSwimlane *kept = ([lane.elementId length] > 0 ? [self.lanesById objectForKey:lane.elementId] : nil) ?: lane;
+		if (kept.isPool != lane.isPool) {
+			kept = lane;
+		}
+		[lasting setObject:kept forKey:lane];
+		if ([lane.elementId length] > 0) {
+			[lanes setObject:kept forKey:lane.elementId];
+		}
+	}
+	id (^map)(id) = ^id (id object) {
+		return object != nil ? [lasting objectForKey:object] : nil;
+	};
+	NSArray *(^mapAll)(NSArray *) = ^NSArray *(NSArray *objects) {
+		NSMutableArray *mapped = [NSMutableArray arrayWithCapacity:[objects count]];
+		for (id object in objects) {
+			[mapped addObject:map(object)];
+		}
+		return mapped;
+	};
+	for (WKDNode *node in fresh.nodeList) {
+		WKDNode *kept = map(node);
+		kept.model = self;
+		kept.element = node.element;
+		kept.diagramElement = node.diagramElement;
+		kept.name = node.name;
+		kept.type = node.type;
+		kept.kind = node.kind;
+		kept.bounds = node.bounds;
+		kept.hasBounds = node.hasBounds;
+		kept.labelBounds = node.labelBounds;
+		kept.eventDefinition = node.eventDefinition;
+		kept.interrupting = node.interrupting;
+		kept.eventSubProcess = node.eventSubProcess;
+		kept.loop = node.loop;
+		kept.parent = map(node.parent);
+		kept.host = map(node.host);
+		kept.defaultFlow = map(node.defaultFlow);
+		kept.lane = map(node.lane);
+		kept.childList = [mapAll(node.childList) mutableCopy];
+		kept.attachedList = [mapAll(node.attachedList) mutableCopy];
+		kept.incomingList = [mapAll(node.incomingList) mutableCopy];
+		kept.outgoingList = [mapAll(node.outgoingList) mutableCopy];
+	}
+	for (WKDFlow *flow in fresh.flowList) {
+		WKDFlow *kept = map(flow);
+		kept.model = self;
+		kept.element = flow.element;
+		kept.diagramElement = flow.diagramElement;
+		kept.name = flow.name;
+		kept.isAssociation = flow.isAssociation;
+		kept.hasCondition = flow.hasCondition;
+		kept.waypoints = flow.waypoints;
+		kept.labelBounds = flow.labelBounds;
+		kept.source = map(flow.source);
+		kept.target = map(flow.target);
+	}
+	for (WKDSwimlane *lane in freshLanes) {
+		WKDSwimlane *kept = map(lane);
+		kept.model = self;
+		kept.element = lane.element;
+		kept.diagramElement = lane.diagramElement;
+		kept.elementId = lane.elementId;
+		kept.name = lane.name;
+		kept.bounds = lane.bounds;
+		kept.hasBounds = lane.hasBounds;
+		kept.isPool = lane.isPool;
+		kept.horizontal = lane.horizontal;
+		kept.depth = lane.depth;
+		kept.parent = map(lane.parent);
+		kept.children = mapAll(lane.children);
+		kept.nodeList = [mapAll(lane.nodeList) mutableCopy];
+		kept.otherIds = lane.otherIds;
+	}
+	self.document = document;
+	self.process = fresh.process;
+	self.plane = fresh.plane;
+	self.nodeList = [mapAll(fresh.nodeList) mutableCopy];
+	self.flowList = [mapAll(fresh.flowList) mutableCopy];
+	self.nodesById = nodes;
+	self.flowsById = flows;
+	self.lanesById = lanes;
+	self.pool = map(fresh.pool);
+	self.lanes = mapAll(fresh.lanes);
+	self.otherPools = mapAll(fresh.otherPools);
+	[self.changedElements removeAllObjects];
+	[self.deletedElements removeAllObjects];
+}
+
+@end

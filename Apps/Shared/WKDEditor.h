@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import "WKDDiagram.h"
+#import "WKDModel.h"
 
 /* A type a node can have: its BPMN name, its event's definition (nil for
  * none), and what to call it. */
@@ -29,6 +30,12 @@
 @property (nonatomic, readonly, strong) NSXMLDocument *document;
 /* Read again after every change. */
 @property (nonatomic, readonly, strong) WKDDiagram *diagram;
+/* The process as objects: one model for the editor's life, its elements
+ * the same objects from one change to the next. */
+@property (nonatomic, readonly, strong) WKDModel *model;
+/* After every change, undo and redo, the model is compared with one read
+ * afresh from the document, and a disagreement raises: for tests. */
+@property (class, nonatomic) BOOL checksAgreement;
 /* Called after every change, undo and redo included. */
 @property (nonatomic, copy) void (^changed)(void);
 

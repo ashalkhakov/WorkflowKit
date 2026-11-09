@@ -3,6 +3,15 @@
 #import "WKDDiagram.h"
 #import "WKDXML.h"
 #import "WKDFixtures.h"
+#import "WKDEditor.h"
+
+/* Every editor in the test bundle checks its model against its document
+ * after each change, undo and redo. */
+__attribute__((constructor)) static void
+WKDCheckAgreementInTests(void)
+{
+	WKDEditor.checksAgreement = YES;
+}
 
 /*
  * The model read from every fixture and example process: it agrees with
@@ -190,6 +199,40 @@
 	/* What the model does not hold is where it was. */
 	XCTAssertNotNil(WKDChild(reviewAgain.element, WKDBpmnNamespace, @"extensionElements"));
 	XCTAssertEqualObjects([[again nodeWithId:@"late"].host elementId], @"review");
+}
+
+/* The editor's model lasts: an element is the same object after a change,
+ * an undo and a redo, its values and links those of the document. */
+- (void)testTheEditorsModelLasts
+{
+	NSUndoManager *undo = [[NSUndoManager alloc] init];
+	[undo setGroupsByEvent:NO];
+	WKDEditor *editor = [[WKDEditor alloc] initWithDocument:[self parse:WKDModellerFile] undoManager:undo];
+	WKDModel *model = editor.model;
+	WKDNode *review = [model nodeWithId:@"review"];
+	NSRect before = review.bounds;
+	[undo beginUndoGrouping];
+	[editor moveElements:@[ @"review" ] by:NSMakeSize(30, 0)];
+	[undo endUndoGrouping];
+	XCTAssertEqual(editor.model, model);
+	XCTAssertEqual([model nodeWithId:@"review"], review);
+	XCTAssertEqual(NSMinX(review.bounds), NSMinX(before) + 30);
+	XCTAssertEqual([model nodeWithId:@"late"].host, review);
+	[undo undo];
+	XCTAssertEqual([model nodeWithId:@"review"], review);
+	XCTAssertTrue(NSEqualRects(review.bounds, before));
+	[undo redo];
+	XCTAssertEqual([model nodeWithId:@"review"], review);
+	XCTAssertEqual(NSMinX(review.bounds), NSMinX(before) + 30);
+	[undo beginUndoGrouping];
+	NSString *taskId = [editor insertNodeOfType:@"userTask" eventDefinition:nil at:NSMakePoint(600, 400) error:NULL];
+	[undo endUndoGrouping];
+	XCTAssertNotNil([model nodeWithId:taskId]);
+	[undo beginUndoGrouping];
+	[editor deleteElements:@[ @"review" ]];
+	[undo endUndoGrouping];
+	XCTAssertNil([model nodeWithId:@"review"]);
+	XCTAssertNil([model nodeWithId:@"late"].host);
 }
 
 @end

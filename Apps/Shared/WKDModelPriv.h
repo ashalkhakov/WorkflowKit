@@ -92,6 +92,16 @@
 - (BOOL)readDocument:(NSXMLDocument *)document;
 @end
 
+@interface WKDModel (WKDReadingAgain)
+- (void)readDocumentAgain:(NSXMLDocument *)document;
+@end
+
+/* WKDModelCheck.m: how the model differs from another, read afresh: nil
+ * when they agree element for element -- ids, values and links. */
+@interface WKDModel (WKDChecking)
+- (NSString *)disagreementWith:(WKDModel *)other;
+@end
+
 /* WKDBpmnWriter.m: the model's changes written into the carrier. */
 @interface WKDModel (WKDWriting)
 - (void)writeChanges;

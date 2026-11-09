@@ -25,6 +25,10 @@ WorkflowDesk_OBJC_FILES = \
 	WDDiagramView.m \
 	../Shared/WKDXML.m \
 	../Shared/WKDDiagram.m \
+	../Shared/WKDModel.m \
+	../Shared/WKDBpmnReader.m \
+	../Shared/WKDBpmnWriter.m \
+	../Shared/WKDModelCheck.m \
 	../Shared/WKDRenderer.m \
 	../Shared/WKDEditor.m \
 	../Shared/WKDEditor+Canvas.m \
