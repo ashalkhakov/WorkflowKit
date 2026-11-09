@@ -18,4 +18,5 @@ build/
 # gnustep-make's objects of the designer's sources, which the extension's
 # tests compile from ../../Apps; and what they print
 /UDCodeExtension/Tests/Apps/
+/Apps/WorkflowDesigner/Tests/Shared/
 /UDCodeExtension/Tests/*.log
