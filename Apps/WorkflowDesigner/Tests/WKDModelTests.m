@@ -4,6 +4,7 @@
 #import "WKDXML.h"
 #import "WKDFixtures.h"
 #import "WKDEditor.h"
+#import "WKDDecisions.h"
 #import "WKDJournal.h"
 
 /* Every editor in the test bundle checks its model against its document
@@ -12,6 +13,7 @@ __attribute__((constructor)) static void
 WKDCheckAgreementInTests(void)
 {
 	WKDEditor.checksAgreement = YES;
+	WKDDmnEditor.checksAgreement = YES;
 }
 
 /*

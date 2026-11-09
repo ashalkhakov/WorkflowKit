@@ -22,6 +22,10 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../WKDProperties.m \
 	../WKDDeployment.m \
 	../WKDDecisions.m \
+	../WKDDmnModel.m \
+	../WKDDmnReader.m \
+	../WKDDmnWriter.m \
+	../WKDDmnModelCheck.m \
 	WKDDiagramTests.m \
 	WKDModelTests.m \
 	WKDTimingTests.m \

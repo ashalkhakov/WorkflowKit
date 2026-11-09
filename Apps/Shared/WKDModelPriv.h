@@ -7,7 +7,7 @@
  * both ways by the setters that make them.
  */
 
-@interface WKDModelElement ()
+@interface WKDModelElement () <WKDJournalElement>
 @property (nonatomic, readwrite, weak) WKDModel *model;
 @property (nonatomic, readwrite, copy) NSString *elementId;
 @property (nonatomic, readwrite, strong) NSXMLElement *element;
@@ -76,7 +76,7 @@
 @property (nonatomic, copy) NSArray<NSString *> *otherIds;
 @end
 
-@interface WKDModel ()
+@interface WKDModel () <WKDJournalModel>
 @property (nonatomic, readwrite, strong) NSXMLDocument *document;
 @property (nonatomic, readwrite, strong) NSXMLElement *process;
 @property (nonatomic, readwrite, strong) NSXMLElement *plane;

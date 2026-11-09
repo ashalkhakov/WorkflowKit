@@ -283,6 +283,12 @@
 	};
 }
 
+- (void)journalDidRestore
+{
+	[self.changedElements removeAllObjects];
+	[self.deletedElements removeAllObjects];
+}
+
 - (void)restoreJournalState:(NSDictionary *)state
 {
 	self.nodeList = [[state objectForKey:@"nodeList"] mutableCopy];

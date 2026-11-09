@@ -1,5 +1,4 @@
 #import "WKDJournal.h"
-#import "WKDModelPriv.h"
 #import "WKDXML.h"
 
 typedef NS_ENUM(NSInteger, WKDEditKind) {
@@ -136,9 +135,9 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 @end
 
 @interface WKDJournalStep ()
-@property (nonatomic, strong) NSMapTable<WKDModelElement *, NSDictionary *> *before;
-@property (nonatomic, strong) NSMapTable<WKDModelElement *, NSDictionary *> *after;
-@property (nonatomic, strong) NSMutableArray<WKDModelElement *> *order;
+@property (nonatomic, strong) NSMapTable<id<WKDJournalElement>, NSDictionary *> *before;
+@property (nonatomic, strong) NSMapTable<id<WKDJournalElement>, NSDictionary *> *after;
+@property (nonatomic, strong) NSMutableArray<id<WKDJournalElement>> *order;
 @property (nonatomic, strong) NSDictionary *modelBefore;
 @property (nonatomic, strong) NSDictionary *modelAfter;
 @property (nonatomic, strong) NSMutableArray<WKDXMLEdit *> *edits;
@@ -178,14 +177,14 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 
 @implementation WKDJournal
 {
-	__weak WKDModel *_model;
+	__weak id<WKDJournalModel> _model;
 	WKDJournalStep *_step;
 	NSMapTable<NSXMLElement *, WKDXMLEdit *> *_pending;
 	/* Built when first asked, then kept. */
 	NSMutableDictionary<NSString *, NSXMLElement *> *_ids;
 }
 
-- (instancetype)initWithModel:(WKDModel *)model
+- (instancetype)initWithModel:(id<WKDJournalModel>)model
 {
 	if ((self = [super init])) {
 		_model = model;
@@ -214,7 +213,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 	if ([step.order count] == 0 && step.modelBefore == nil && [step.edits count] == 0) {
 		return nil;
 	}
-	for (WKDModelElement *element in step.order) {
+	for (id<WKDJournalElement> element in step.order) {
 		[step.after setObject:[element journalState] forKey:element];
 	}
 	if (step.modelBefore != nil) {
@@ -223,7 +222,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 	return step;
 }
 
-- (void)willChange:(WKDModelElement *)element
+- (void)willChange:(id<WKDJournalElement>)element
 {
 	if (_step == nil || element == nil || [_step.before objectForKey:element] != nil) {
 		return;
@@ -355,7 +354,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 
 - (void)merge:(WKDJournalStep *)later into:(WKDJournalStep *)earlier
 {
-	for (WKDModelElement *element in later.order) {
+	for (id<WKDJournalElement> element in later.order) {
 		if ([earlier.before objectForKey:element] == nil) {
 			[earlier.before setObject:[later.before objectForKey:element] forKey:element];
 			[earlier.order addObject:element];
@@ -380,12 +379,10 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 	if (inverse.modelAfter != nil) {
 		[_model restoreJournalState:inverse.modelAfter];
 	}
-	for (WKDModelElement *element in inverse.order) {
+	for (id<WKDJournalElement> element in inverse.order) {
 		[element restoreJournalState:[inverse.after objectForKey:element]];
 	}
-	/* The XML is as the states say: nothing is left to write. */
-	[_model.changedElements removeAllObjects];
-	[_model.deletedElements removeAllObjects];
+	[_model journalDidRestore];
 	return inverse;
 }
 
@@ -579,4 +576,27 @@ WKDLogText(WKDJournal *journal, NSXMLNode *node, NSString *text)
 	}
 	[node setStringValue:text ?: @""];
 	[journal didSetText:node from:before to:text];
+}
+
+void
+WKDLogQualifiedAttribute(WKDJournal *journal, NSXMLDocument *document, NSXMLElement *element, NSString *uri,
+                         NSString *local, NSString *value)
+{
+	NSString *before = WKDQualifiedAttribute(document, element, uri, local);
+	if ([value length] == 0) {
+		value = nil;
+	}
+	if (value == before || [value isEqualToString:before]) {
+		return;
+	}
+	NSXMLElement *root = [document rootElement];
+	[journal willEditXML:element];
+	if (root != element) {
+		[journal willEditXML:root];
+	}
+	WKDSetQualifiedAttribute(document, element, uri, local, value);
+	[journal didEditXML:element];
+	if (root != element) {
+		[journal didEditXML:root];
+	}
 }

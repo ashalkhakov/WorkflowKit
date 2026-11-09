@@ -1,6 +1,21 @@
 #import <Foundation/Foundation.h>
 
-@class WKDModel, WKDModelElement;
+/* What a journal keeps the record of: a model whose elements' states and
+ * own lists it can take and put back, held in a document. */
+@protocol WKDJournalElement <NSObject>
+- (NSDictionary *)journalState;
+- (void)restoreJournalState:(NSDictionary *)state;
+@end
+
+@protocol WKDJournalModel <WKDJournalElement>
+@property (nonatomic, readonly, strong) NSXMLDocument *document;
+/* Whether the node is an element's carrier: kept as itself when the XML
+ * round it is put back. */
+- (BOOL)carries:(NSXMLNode *)node;
+/* After an undo or a redo: the XML is as the states say, and nothing is
+ * left to write. */
+- (void)journalDidRestore;
+@end
 
 /*
  * What one editor operation changed, to undo and redo it: each element it
@@ -16,7 +31,7 @@
 
 @interface WKDJournal : NSObject
 
-- (instancetype)initWithModel:(WKDModel *)model;
+- (instancetype)initWithModel:(id<WKDJournalModel>)model;
 
 /* A step begins; until it ends, what is touched and written is recorded. */
 - (void)begin;
@@ -25,7 +40,7 @@
 @property (nonatomic, readonly) BOOL isRecording;
 
 /* Before an element's values or links change. */
-- (void)willChange:(WKDModelElement *)element;
+- (void)willChange:(id<WKDJournalElement>)element;
 /* Before the model's own lists change: its nodes, flows, lanes. */
 - (void)willChangeModel;
 
@@ -67,3 +82,7 @@ void WKDLogInsert(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child, N
 void WKDLogAdd(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child);
 void WKDLogDetach(WKDJournal *journal, NSXMLNode *child);
 void WKDLogText(WKDJournal *journal, NSXMLNode *node, NSString *text);
+/* A namespaced attribute (nil or empty: none), its namespace declared on
+ * the root when it is not. */
+void WKDLogQualifiedAttribute(WKDJournal *journal, NSXMLDocument *document, NSXMLElement *element, NSString *uri,
+                              NSString *local, NSString *value);

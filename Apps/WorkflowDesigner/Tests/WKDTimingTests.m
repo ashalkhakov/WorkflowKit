@@ -1,5 +1,6 @@
 #import <XCTest/XCTest.h>
 #import "WKDEditor.h"
+#import "WKDDecisions.h"
 #import "WKDXML.h"
 
 /* How long editing a large process takes: run with WKD_TIMING set (to the
@@ -115,6 +116,67 @@ WKDTime(NSUInteger count, void (^block)(NSUInteger i))
 	      @"inspector %.2f, rename %.2f, undo rename %.2f, insert %.2f ms",
 	      (unsigned long)tasks, open, move, undoMove, name, inspector, rename, undoRename, insert);
 	WKDEditor.checksAgreement = checks;
+}
+
+
+static NSString *
+WKDLargeTable(NSUInteger rules)
+{
+	NSMutableString *rows = [NSMutableString string];
+	for (NSUInteger i = 0; i < rules; i++) {
+		[rows appendFormat:@"<rule id=\"r%lu\"><inputEntry id=\"a%lu\"><text>&lt; %lu</text></inputEntry>"
+			@"<inputEntry id=\"b%lu\"><text>-</text></inputEntry><inputEntry id=\"c%lu\"><text>\"x\"</text></inputEntry>"
+			@"<outputEntry id=\"d%lu\"><text>%lu</text></outputEntry></rule>",
+			(unsigned long)i, (unsigned long)i, (unsigned long)i, (unsigned long)i, (unsigned long)i, (unsigned long)i,
+			(unsigned long)i];
+	}
+	return [NSString stringWithFormat:
+		@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+		@"<definitions xmlns=\"https://www.omg.org/spec/DMN/20191111/MODEL/\" id=\"defs\" name=\"D\" namespace=\"urn:t\">"
+		@"<decision id=\"big\" name=\"Big\"><decisionTable id=\"t\">"
+		@"<input id=\"i1\"><inputExpression id=\"e1\" typeRef=\"integer\"><text>a</text></inputExpression></input>"
+		@"<input id=\"i2\"><inputExpression id=\"e2\" typeRef=\"string\"><text>b</text></inputExpression></input>"
+		@"<input id=\"i3\"><inputExpression id=\"e3\" typeRef=\"string\"><text>c</text></inputExpression></input>"
+		@"<output id=\"o1\" name=\"n\" typeRef=\"integer\"/>%@</decisionTable></decision></definitions>", rows];
+}
+
+- (void)testEditingALargeTable
+{
+	NSString *setting = [[[NSProcessInfo processInfo] environment] objectForKey:@"WKD_TIMING"];
+	if (setting == nil) {
+		return;
+	}
+	NSUInteger rules = [setting integerValue] > 0 ? (NSUInteger)[setting integerValue] : 1000;
+	NSString *xml = WKDLargeTable(rules);
+	BOOL checks = WKDDmnEditor.checksAgreement;
+	WKDDmnEditor.checksAgreement = NO;
+	NSUndoManager *undo = [[NSUndoManager alloc] init];
+	[undo setGroupsByEvent:NO];
+	__block WKDDmnEditor *editor = nil;
+	double open = WKDTime(1, ^(NSUInteger i) {
+		NSXMLDocument *document = [[NSXMLDocument alloc] initWithXMLString:xml options:0 error:NULL];
+		editor = [[WKDDmnEditor alloc] initWithDocument:document undoManager:undo];
+	});
+	XCTAssertEqual([[editor decisionWithId:@"big"].rules count], rules);
+	void (^step)(void (^)(void)) = ^(void (^operation)(void)) {
+		[undo beginUndoGrouping];
+		operation();
+		[undo endUndoGrouping];
+	};
+	NSUInteger middle = rules / 2;
+	double entry = WKDTime(20, ^(NSUInteger i) {
+		step(^{ [editor setEntry:[NSString stringWithFormat:@"> %lu", (unsigned long)i] rule:middle column:0 of:@"big"]; });
+	});
+	double undoEntry = WKDTime(20, ^(NSUInteger i) { [undo undo]; });
+	double insert = WKDTime(10, ^(NSUInteger i) {
+		step(^{ [editor insertRuleAt:middle of:@"big"]; });
+	});
+	double move = WKDTime(10, ^(NSUInteger i) {
+		step(^{ [editor moveRule:middle to:0 of:@"big"]; });
+	});
+	NSLog(@"WKDTiming %lu rules: open %.1f ms; per operation: entry %.2f, undo entry %.2f, insert rule %.2f, "
+	      @"move rule %.2f ms", (unsigned long)rules, open, entry, undoEntry, insert, move);
+	WKDDmnEditor.checksAgreement = checks;
 }
 
 @end

@@ -43,6 +43,10 @@ WorkflowDesigner_OBJC_FILES = \
 	WKDTableEditor.m \
 	WKDDeployment.m \
 	WKDDecisions.m \
+	WKDDmnModel.m \
+	WKDDmnReader.m \
+	WKDDmnWriter.m \
+	WKDDmnModelCheck.m \
 	WKDDecisionDocument.m \
 	WKDDecisionWindowController.m \
 	WKDDocument.m \
