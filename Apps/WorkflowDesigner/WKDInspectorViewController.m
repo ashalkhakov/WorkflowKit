@@ -30,6 +30,8 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 {
 	NSMutableArray<WKDInspectorRow *> *_rows;
 	NSString *_shape;
+	/* The editor the rows were built over: read again, they are built anew. */
+	WKDEditor *_builtOn;
 }
 
 - (instancetype)initWithProcessEditor:(WKDProcessEditor *)processEditor showingProcess:(BOOL)process
@@ -95,8 +97,9 @@ WKDShapeOf(NSArray<WKDSection *> *sections)
 	NSArray *sections = elementId != nil ? WKDSectionsFor([self editor], elementId) : @[];
 	NSString *shape = WKDShapeOf(sections);
 	if (![shape isEqualToString:_shape] || ![elementId isEqualToString:_elementId ?: @""]
-	    || (elementId == nil) != (_elementId == nil)) {
+	    || (elementId == nil) != (_elementId == nil) || [self editor] != _builtOn) {
 		_shape = shape;
+		_builtOn = [self editor];
 		_elementId = [elementId copy];
 		[self build:sections];
 		return;

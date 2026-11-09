@@ -15,24 +15,26 @@ static const NSTimeInterval WKDCheckDelay = 0.3;
 {
 	/* The rename the next change makes. */
 	NSDictionary *_renamed;
+	/* What the process is read again on. */
+	NSUndoManager *_undoManager;
 }
 
-- (instancetype)initWithEditor:(WKDEditor *)editor
+- (instancetype)initWithEditor:(WKDEditor *)editor undoManager:(NSUndoManager *)undoManager
 {
 	if ((self = [super init])) {
-		_editor = editor;
+		_undoManager = undoManager;
 		_selection = [[WKDSelection alloc] init];
 		_problems = @[];
-		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(editorDidChange:)
-		                                             name:WKDEditorDidChangeNotification object:editor];
-		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(editorWillRename:)
-		                                             name:WKDEditorWillRenameNotification object:editor];
+		[self follow:editor];
 		[self checkNow];
 	}
 	return self;
 }
 
-- (instancetype)initWithData:(NSData *)data undoManager:(NSUndoManager *)undoManager error:(NSError **)error
+/* The process the text holds, laid out when it has no diagram; nil, with
+ * why, when it holds none. */
+static WKDEditor *
+WKDReadProcess(NSData *data, NSUndoManager *undoManager, BOOL *laidOut, NSError **error)
 {
 	NSError *parseError = nil;
 	NSXMLDocument *document = data != nil ? [[NSXMLDocument alloc] initWithData:data options:0 error:&parseError] : nil;
@@ -46,18 +48,55 @@ static const NSTimeInterval WKDCheckDelay = 0.3;
 		}
 		return nil;
 	}
-	BOOL drawn = !editor.model.needsLayout;
+	*laidOut = editor.model.needsLayout;
 	[editor completeDiagram];
-	if ((self = [self initWithEditor:editor])) {
-		_laidOut = !drawn;
+	return editor;
+}
+
+- (instancetype)initWithData:(NSData *)data undoManager:(NSUndoManager *)undoManager error:(NSError **)error
+{
+	BOOL laidOut = NO;
+	WKDEditor *editor = WKDReadProcess(data, undoManager, &laidOut, error);
+	if (editor == nil) {
+		return nil;
+	}
+	if ((self = [self initWithEditor:editor undoManager:undoManager])) {
+		_laidOut = laidOut;
 	}
 	return self;
+}
+
+- (BOOL)readData:(NSData *)data error:(NSError **)error
+{
+	BOOL laidOut = NO;
+	WKDEditor *editor = WKDReadProcess(data, _undoManager, &laidOut, error);
+	if (editor == nil) {
+		return NO;
+	}
+	_laidOut = laidOut;
+	[self follow:editor];
+	[self editorDidChange:nil];
+	return YES;
+}
+
+/* The editor whose changes are followed: this one, not the last. */
+- (void)follow:(WKDEditor *)editor
+{
+	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+	if (_editor != nil) {
+		[center removeObserver:self name:WKDEditorDidChangeNotification object:_editor];
+		[center removeObserver:self name:WKDEditorWillRenameNotification object:_editor];
+	}
+	_editor = editor;
+	[center addObserver:self selector:@selector(editorDidChange:) name:WKDEditorDidChangeNotification object:editor];
+	[center addObserver:self selector:@selector(editorWillRename:) name:WKDEditorWillRenameNotification object:editor];
 }
 
 - (instancetype)initNewProcessWithUndoManager:(NSUndoManager *)undoManager
 {
 	return [self initWithEditor:[[WKDEditor alloc] initWithDocument:[WKDEditor newProcessDocument]
-	                                                    undoManager:undoManager]];
+	                                                    undoManager:undoManager]
+	                undoManager:undoManager];
 }
 
 - (void)dealloc

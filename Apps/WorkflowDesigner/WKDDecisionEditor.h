@@ -30,6 +30,12 @@ extern NSString * const WKDDecisionEditorProblemsDidChangeNotification;
 @property (nonatomic, readonly, strong) WKDDmnEditor *editor;
 - (NSData *)data;
 
+/* The text read again, after it changed some other way -- undone in, or
+ * typed into, a text it is the model of: the decisions anew, on the same
+ * undo manager, what is chosen kept where it still is, and a change
+ * posted. NO, with why, for text that is not DMN: nothing changes then. */
+- (BOOL)readData:(NSData *)data error:(NSError **)error;
+
 /* The decision chosen, kept to one the file has: after one goes, its
  * neighbour; after one is renamed, it under its new id. */
 @property (nonatomic, copy) NSString *decisionId;

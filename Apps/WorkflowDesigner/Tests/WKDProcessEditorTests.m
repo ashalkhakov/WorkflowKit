@@ -58,6 +58,42 @@
 	[center removeObserver:changed];
 }
 
+/* The text changed some other way -- undone in, or typed into, the text
+ * the process is the model of -- read again: what is selected kept where
+ * it still is. */
+- (void)testTheTextIsReadAgain
+{
+	WKDProcessEditor *editor = [self modeller];
+	editor.selection.selectedIds = @[ @"review", @"ok" ];
+	__block NSUInteger changes = 0;
+	id changed = [[NSNotificationCenter defaultCenter] addObserverForName:WKDProcessEditorDidChangeNotification
+	                                                               object:editor queue:nil
+	                                                           usingBlock:^(NSNotification *note) { changes++; }];
+	WKDEditor *before = editor.editor;
+	NSString *text = [[NSString alloc] initWithData:[editor data] encoding:NSUTF8StringEncoding];
+	text = [text stringByReplacingOccurrencesOfString:@"name=\"Review\"" withString:@"name=\"Check\""];
+	/* ok renamed, and the flows and the shape naming it */
+	text = [text stringByReplacingOccurrencesOfString:@"\"ok\"" withString:@"\"fine\""];
+	NSError *error = nil;
+	XCTAssertTrue([editor readData:[text dataUsingEncoding:NSUTF8StringEncoding] error:&error], @"%@", error);
+	XCTAssertNotEqual(editor.editor, before, @"an editor of the text as it is");
+	XCTAssertEqualObjects([editor.editor.model nodeWithId:@"review"].name, @"Check");
+	XCTAssertEqualObjects(editor.selection.selectedIds, @[ @"review" ], @"what is no longer there is not selected");
+	XCTAssertEqual(changes, (NSUInteger)1);
+	XCTAssertFalse(editor.laidOut, @"its diagram read with it");
+
+	XCTAssertFalse([editor readData:[@"<notBpmn/>" dataUsingEncoding:NSUTF8StringEncoding] error:&error]);
+	XCTAssertNotNil(error);
+	XCTAssertEqualObjects([editor.editor.model nodeWithId:@"review"].name, @"Check", @"nothing changed");
+	XCTAssertEqual(changes, (NSUInteger)1);
+
+	/* Its changes are followed, not the last editor's. */
+	[editor.editor deleteElements:@[ @"review" ]];
+	XCTAssertEqualObjects(editor.selection.selectedIds, @[]);
+	XCTAssertEqual(changes, (NSUInteger)2);
+	[[NSNotificationCenter defaultCenter] removeObserver:changed];
+}
+
 - (void)testTheEnginesProblemsAreCheckedWithWhatIsBeside
 {
 	WKDProcessEditor *editor = [self modeller];

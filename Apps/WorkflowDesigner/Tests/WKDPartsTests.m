@@ -51,6 +51,28 @@ WKDTitles(NSMenu *menu)
 	return titles;
 }
 
+/* The text read again: the canvas draws the process as it is, and the
+ * inspector edits it, not the process read before. */
+- (void)testThePartsFollowTheTextReadAgain
+{
+	WKDProcessEditor *editor = [self modeller];
+	WKDCanvasViewController *canvas = [[WKDCanvasViewController alloc] initWithProcessEditor:editor];
+	[canvas view];
+	WKDInspectorViewController *inspector = [[WKDInspectorViewController alloc] initWithProcessEditor:editor showingProcess:NO];
+	[inspector view];
+	editor.selection.selectedIds = @[ @"review" ];
+	WKDElementModel *before = [inspector.models firstObject];
+	NSString *text = [[NSString alloc] initWithData:[editor data] encoding:NSUTF8StringEncoding];
+	XCTAssertTrue([editor readData:[[text stringByReplacingOccurrencesOfString:@"name=\"Review\"" withString:@"name=\"Check\""]
+	                                   dataUsingEncoding:NSUTF8StringEncoding] error:NULL]);
+	XCTAssertEqual(canvas.canvas.model, editor.editor.model);
+	WKDElementModel *general = [inspector.models firstObject];
+	XCTAssertNotEqual(general, before, @"built again, over the editor of the text as it is");
+	XCTAssertEqualObjects(general.editor, editor.editor);
+	[general setValue:@"Checked" forKey:@"name"];
+	XCTAssertEqualObjects([editor.editor.model nodeWithId:@"review"].name, @"Checked");
+}
+
 - (void)testThePartsLoadFromTheirXIBsConnected
 {
 	WKDProcessEditor *editor = [self modeller];

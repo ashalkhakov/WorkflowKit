@@ -28,11 +28,18 @@ extern NSString * const WKDProcessEditorProblemsDidChangeNotification;
 
 @property (nonatomic, readonly, strong) WKDEditor *editor;
 @property (nonatomic, readonly, strong) WKDSelection *selection;
-/* The process was laid out as it was read: it has changed. */
+/* The process was laid out as it was last read: it has changed. */
 @property (nonatomic, readonly) BOOL laidOut;
 
 /* The text, as it is now. */
 - (NSData *)data;
+
+/* The text read again, after it changed some other way -- undone in, or
+ * typed into, a text it is the model of: the process anew, on the same
+ * undo manager, what is selected kept where it still is, and a change
+ * posted. NO, with why, for text that holds no BPMN process: nothing
+ * changes then. Laid out (laidOut) as when it was first read. */
+- (BOOL)readData:(NSData *)data error:(NSError **)error;
 
 /* What the process is checked as: a deployment of the file under its
  * name (process.bpmn when nil) with what the block gives -- the forms and

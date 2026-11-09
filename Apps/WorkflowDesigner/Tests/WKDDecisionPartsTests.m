@@ -43,6 +43,30 @@
 	XCTAssertNotNil(error);
 }
 
+/* The text changed some other way, read again: what is chosen kept where
+ * it still is, the parts showing the text as it is. */
+- (void)testTheTextIsReadAgain
+{
+	WKDDecisionEditor *editor = [self dishes];
+	editor.decisionId = @"drink";
+	WKDLiteralViewController *literal = [[WKDLiteralViewController alloc] initWithDecisionEditor:editor];
+	[literal view];
+	NSString *text = [[NSString alloc] initWithData:[editor data] encoding:NSUTF8StringEncoding];
+	NSError *error = nil;
+	XCTAssertTrue([editor readData:[[text stringByReplacingOccurrencesOfString:@"if dish" withString:@"if meal"]
+	                                   dataUsingEncoding:NSUTF8StringEncoding] error:&error], @"%@", error);
+	XCTAssertEqualObjects(editor.decisionId, @"drink", @"still chosen");
+	XCTAssertTrue([literal.literalField.stringValue hasPrefix:@"if meal"], @"shown as it is now");
+	XCTAssertFalse([editor readData:[@"<process/>" dataUsingEncoding:NSUTF8StringEncoding] error:&error]);
+	XCTAssertTrue([literal.literalField.stringValue hasPrefix:@"if meal"], @"nothing changed");
+	XCTAssertTrue([editor readData:[[text stringByReplacingOccurrencesOfString:@"\"drink\"" withString:@"\"juice\""]
+	                                   dataUsingEncoding:NSUTF8StringEncoding] error:&error], @"%@", error);
+	XCTAssertNotNil(editor.decisionId, @"gone: another chosen");
+	XCTAssertFalse([editor.decisionId isEqualToString:@"drink"]);
+	[editor.editor setName:@"Changed" of:editor.decisionId];
+	XCTAssertEqualObjects(editor.decision.name, @"Changed", @"its changes followed");
+}
+
 - (void)testThePartsLoadFromTheirXIBsConnected
 {
 	WKDDecisionEditor *editor = [self dishes];

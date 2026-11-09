@@ -19,24 +19,26 @@ static const NSTimeInterval WKDCheckDelay = 0.3;
 	/* Where the decision chosen was among them: its neighbour is chosen
 	 * when it goes. */
 	NSUInteger _index;
+	/* What the decisions are read again on. */
+	NSUndoManager *_undoManager;
 }
 
-- (instancetype)initWithEditor:(WKDDmnEditor *)editor
+- (instancetype)initWithEditor:(WKDDmnEditor *)editor undoManager:(NSUndoManager *)undoManager
 {
 	if ((self = [super init])) {
-		_editor = editor;
+		_undoManager = undoManager;
 		_column = NSNotFound;
 		_problems = @[];
 		_decisionId = [[editor.decisions firstObject].decisionId copy];
-		NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-		[center addObserver:self selector:@selector(editorDidChange:) name:WKDDmnEditorDidChangeNotification object:editor];
-		[center addObserver:self selector:@selector(editorWillRename:) name:WKDDmnEditorWillRenameNotification object:editor];
+		[self follow:editor];
 		[self checkNow];
 	}
 	return self;
 }
 
-- (instancetype)initWithData:(NSData *)data undoManager:(NSUndoManager *)undoManager error:(NSError **)error
+/* The decisions the text holds; nil, with why, when it is not DMN. */
+static WKDDmnEditor *
+WKDReadDecisions(NSData *data, NSUndoManager *undoManager, NSError **error)
 {
 	NSError *parseError = nil;
 	NSXMLDocument *document = data != nil ? [[NSXMLDocument alloc] initWithData:data options:0 error:&parseError] : nil;
@@ -51,13 +53,44 @@ static const NSTimeInterval WKDCheckDelay = 0.3;
 		}
 		return nil;
 	}
-	return [self initWithEditor:[[WKDDmnEditor alloc] initWithDocument:document undoManager:undoManager]];
+	return [[WKDDmnEditor alloc] initWithDocument:document undoManager:undoManager];
+}
+
+- (instancetype)initWithData:(NSData *)data undoManager:(NSUndoManager *)undoManager error:(NSError **)error
+{
+	WKDDmnEditor *editor = WKDReadDecisions(data, undoManager, error);
+	return editor != nil ? [self initWithEditor:editor undoManager:undoManager] : nil;
 }
 
 - (instancetype)initNewWithUndoManager:(NSUndoManager *)undoManager
 {
 	return [self initWithEditor:[[WKDDmnEditor alloc] initWithDocument:[WKDDmnEditor newDecisionsDocument]
-	                                                      undoManager:undoManager]];
+	                                                      undoManager:undoManager]
+	                undoManager:undoManager];
+}
+
+- (BOOL)readData:(NSData *)data error:(NSError **)error
+{
+	WKDDmnEditor *editor = WKDReadDecisions(data, _undoManager, error);
+	if (editor == nil) {
+		return NO;
+	}
+	[self follow:editor];
+	[self editorDidChange:nil];
+	return YES;
+}
+
+/* The editor whose changes are followed: this one, not the last. */
+- (void)follow:(WKDDmnEditor *)editor
+{
+	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+	if (_editor != nil) {
+		[center removeObserver:self name:WKDDmnEditorDidChangeNotification object:_editor];
+		[center removeObserver:self name:WKDDmnEditorWillRenameNotification object:_editor];
+	}
+	_editor = editor;
+	[center addObserver:self selector:@selector(editorDidChange:) name:WKDDmnEditorDidChangeNotification object:editor];
+	[center addObserver:self selector:@selector(editorWillRename:) name:WKDDmnEditorWillRenameNotification object:editor];
 }
 
 - (void)dealloc
