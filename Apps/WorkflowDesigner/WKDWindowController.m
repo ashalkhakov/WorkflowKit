@@ -24,11 +24,6 @@
 #import "DMTabBarItem.h"
 #endif
 
-/* What the designer puts on the pasteboard: a BPMN document of the
- * elements copied, beside the same XML as text. */
-static NSString * const WKDFragmentPasteboardType = @"local.workflowkit.bpmn-fragment";
-
-/* The side panes' widths, and how narrow they and the canvas may get. */
 static const double WKDLeftWidth = 230;
 static const double WKDRightWidth = 360;
 static const double WKDSideMinimum = 170;
@@ -36,19 +31,20 @@ static const double WKDCentreMinimum = 320;
 
 @implementation WKDWindowController
 {
-	WKDOutline *_outline;
-	NSTextView *_problems;
 	WKDInspectorView *_inspector;
 	WKDInspectorView *_processInspector;
 	/* What the last change refused, shown until the next. */
 	NSString *_note;
-	/* Pastes since the last copy: each lands a step further down. */
-	NSUInteger _pastes;
 }
 
 - (instancetype)init
 {
-	return [super initWithWindowNibName:@"DesignerWindow"];
+	return [super initWithWindowNibPath:WKDNibPath(@"DesignerWindow") owner:self];
+}
+
+- (void)dealloc
+{
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (WKDDocument *)designerDocument
@@ -56,12 +52,17 @@ static const double WKDCentreMinimum = 320;
 	return (WKDDocument *)[self document];
 }
 
-- (WKDEditor *)editor
+- (WKDProcessEditor *)processEditor
 {
-	return [self designerDocument].editor;
+	return [self designerDocument].processEditor;
 }
 
-#pragma mark Building
+- (WKDEditor *)editor
+{
+	return [self processEditor].editor;
+}
+
+#pragma mark Putting the parts in their places
 
 /* A bar of drawn badges, a tab each; the colours are RDLKit's and the
  * XForms Designer's, grouped by role. */
@@ -108,48 +109,34 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	WKDSelectTab(sender, self.rightTabView);
 }
 
-- (void)buildPanes
+- (void)windowDidLoad
 {
-	WKDFillTabBar(self.leftTabBar, self, @selector(leftTabChanged:), @[
-		@[ @"O", @"Outline", @0.40, @0.48, @0.58 ],
-		@[ @"+", @"Insert", @0.20, @0.50, @0.90 ],
-		@[ @"!", @"Problems", @0.90, @0.45, @0.15 ] ]);
-	WKDFillTabBar(self.rightTabBar, self, @selector(rightTabChanged:), @[
-		@[ @"E", @"Element", @0.20, @0.50, @0.90 ],
-		@[ @"P", @"Process", @0.40, @0.48, @0.58 ] ]);
-
-	NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:[self.outlineHost bounds]];
-	[scroll setHasVerticalScroller:YES];
-	[scroll setAutohidesScrollers:YES];
-	[scroll setBorderType:NSNoBorder];
-	NSOutlineView *outlineView = [[NSOutlineView alloc] initWithFrame:[[scroll contentView] bounds]];
-	NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"title"];
-	[column setEditable:NO];
-	[column setWidth:NSWidth([self.outlineHost bounds]) - 20];
-	[outlineView addTableColumn:column];
-	[outlineView setOutlineTableColumn:column];
-	[outlineView setHeaderView:nil];
-	[outlineView setColumnAutoresizingStyle:NSTableViewLastColumnOnlyAutoresizingStyle];
-	[scroll setDocumentView:outlineView];
-	WKDFillHost(self.outlineHost, scroll);
-	_outline = [[WKDOutline alloc] initWithOutlineView:outlineView];
-	_outline.delegate = self;
-
-	NSScrollView *problems = [[NSScrollView alloc] initWithFrame:[self.problemsHost bounds]];
-	[problems setHasVerticalScroller:YES];
-	[problems setBorderType:NSNoBorder];
-	_problems = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, [problems contentSize].width, [problems contentSize].height)];
-	[_problems setEditable:NO];
-	[_problems setRichText:NO];
-	[_problems setTextContainerInset:NSMakeSize(8, 8)];
-	[_problems setAutoresizingMask:NSViewWidthSizable];
-	[problems setDocumentView:_problems];
-	WKDFillHost(self.problemsHost, problems);
-
+	[super windowDidLoad];
+	WKDProcessEditor *processEditor = [self processEditor];
 	__weak WKDWindowController *weakSelf = self;
 	void (^refused)(NSString *) = ^(NSString *reason) {
 		[weakSelf note:reason];
 	};
+
+	_canvasController = [[WKDCanvasViewController alloc] initWithProcessEditor:processEditor];
+	WKDFillHost(self.canvasHost, _canvasController.view);
+	_canvasController.refused = refused;
+	_paletteController = [[WKDPaletteViewController alloc] init];
+	WKDFillHost(self.paletteHost, _paletteController.view);
+	_paletteController.chosen = ^(WKDLook *tool) {
+		[weakSelf.canvasController armTool:tool];
+	};
+	_canvasController.toolUsed = ^{
+		[weakSelf.paletteController choosePointer];
+	};
+	_outlineController = [[WKDOutlineViewController alloc] initWithProcessEditor:processEditor];
+	WKDFillHost(self.outlineHost, _outlineController.view);
+	_outlineController.processChosen = ^{
+		[weakSelf showProcessInspector:weakSelf];
+	};
+	_problemsController = [[WKDProblemsViewController alloc] initWithProcessEditor:processEditor];
+	WKDFillHost(self.problemsHost, _problemsController.view);
+
 	/* An expression's problem as it is typed: said, not beeped at. */
 	void (^explained)(NSString *) = ^(NSString *problem) {
 		[weakSelf explain:problem];
@@ -164,6 +151,32 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	_processInspector.refused = refused;
 	_processInspector.explained = explained;
 	WKDFillHostScrolling(self.processHost, _processInspector);
+
+	WKDFillTabBar(self.leftTabBar, self, @selector(leftTabChanged:), @[
+		@[ @"O", @"Outline", @0.40, @0.48, @0.58 ],
+		@[ @"+", @"Insert", @0.20, @0.50, @0.90 ],
+		@[ @"!", @"Problems", @0.90, @0.45, @0.15 ] ]);
+	WKDFillTabBar(self.rightTabBar, self, @selector(rightTabChanged:), @[
+		@[ @"E", @"Element", @0.20, @0.50, @0.90 ],
+		@[ @"P", @"Process", @0.40, @0.48, @0.58 ] ]);
+
+	/* The Editor menu's commands, after this in the responder chain. */
+	_commands = [[WKDProcessCommands alloc] initWithProcessEditor:processEditor];
+	_commands.host = self;
+	[_commands setNextResponder:[self nextResponder]];
+	[self setNextResponder:_commands];
+
+	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+	[center addObserver:self selector:@selector(processDidChange:) name:WKDProcessEditorDidChangeNotification
+	             object:processEditor];
+	[center addObserver:self selector:@selector(selectionDidChange:) name:WKDSelectionDidChangeNotification
+	             object:processEditor.selection];
+	[center addObserver:self selector:@selector(problemsDidChange:) name:WKDProcessEditorProblemsDidChangeNotification
+	             object:processEditor];
+	[self setDefaultPaneWidths];
+	[self showInspectors];
+	[_canvasController scrollToContent];
+	[[self window] makeFirstResponder:_canvasController.canvas];
 }
 
 - (void)setDefaultPaneWidths
@@ -176,78 +189,49 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	[self.split setPosition:width - WKDRightWidth - divider ofDividerAtIndex:1];
 }
 
-- (void)windowDidLoad
-{
-	[super windowDidLoad];
-	self.canvas.canvasDelegate = self;
-	self.palette.delegate = self;
-	[self buildPanes];
-	WKDProcessEditor *processEditor = [self designerDocument].processEditor;
-	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-	[center addObserver:self selector:@selector(documentDidChange) name:WKDProcessEditorDidChangeNotification
-	             object:processEditor];
-	[center addObserver:self selector:@selector(problemsDidChange) name:WKDProcessEditorProblemsDidChangeNotification
-	             object:processEditor];
-	[self setDefaultPaneWidths];
-	[self showDocument];
-	[self.canvas scrollToContent];
-	[[self window] makeFirstResponder:self.canvas];
-}
-
-#pragma mark Following the document
+#pragma mark Following the process editor
 
 - (NSString *)processId
 {
 	return WKDAttribute([self editor].model.process, @"id");
 }
 
-- (void)showDocument
+- (NSString *)selectedId
 {
-	WKDModel *diagram = [self editor].model;
-	self.canvas.model = diagram;
-	[_outline showDiagram:diagram];
+	NSArray *selected = [self processEditor].selection.selectedIds;
+	return [selected count] == 1 ? [selected firstObject] : nil;
+}
+
+- (void)showInspectors
+{
+	_inspector.elementId = [self selectedId];
 	_processInspector.elementId = [self processId];
-	[self selectionDidChange];
-	NSString *problem = [self designerDocument].problem;
-	[_problems setString:problem == nil ? @"The engine runs this process." : problem];
-}
-
-- (void)dealloc
-{
-	[[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
-- (void)problemsDidChange
-{
-	NSString *problem = [self designerDocument].problem;
-	[_problems setString:problem == nil ? @"The engine runs this process." : problem];
 	[self updateStatus];
 }
 
-- (void)documentDidChange
+- (void)processDidChange:(NSNotification *)notification
 {
 	/* An element renamed in the inspector: selected under its new id. */
 	NSString *shown = _inspector.elementId;
-	if (shown != nil && [self.canvas.selection count] == 1 && ![self.canvas.selection containsObject:shown]
-	    && [[self editor] elementWithId:shown] != nil) {
-		self.canvas.model = [self editor].model;
-		self.canvas.selection = [NSSet setWithObject:shown];
+	WKDSelection *selection = [self processEditor].selection;
+	if (shown != nil && [selection.selectedIds count] == 0 && [[self editor] elementWithId:shown] != nil) {
+		selection.selectedIds = @[ shown ];
 	}
-	[self showDocument];
+	[_inspector reload];
+	[self showInspectors];
 }
 
-/* The one element selected on the canvas, if one is. */
-- (NSString *)selectedId
+- (void)selectionDidChange:(NSNotification *)notification
 {
-	return [self.canvas.selection count] == 1 ? [self.canvas.selection anyObject] : nil;
+	/* An element chosen: its inspector to the front. */
+	if ([self selectedId] != nil) {
+		[self showElementInspector:self];
+	}
+	[self showInspectors];
 }
 
-- (void)selectionDidChange
+- (void)problemsDidChange:(NSNotification *)notification
 {
-	NSString *selected = [self selectedId];
-	_inspector.elementId = selected;
-	_processInspector.elementId = [self processId];
-	[_outline select:selected];
 	[self updateStatus];
 }
 
@@ -255,7 +239,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 {
 	NSString *problem = [self designerDocument].problem;
 	NSString *state = problem == nil ? @"The engine runs this process." : [NSString stringWithFormat:@"Not runnable: %@", problem];
-	NSUInteger selected = [self.canvas.selection count];
+	NSUInteger selected = [[self processEditor].selection.selectedIds count];
 	NSMutableArray *parts = [NSMutableArray array];
 	if (_note != nil) {
 		[parts addObject:_note];
@@ -270,9 +254,6 @@ WKDSelectTab(id sender, NSTabView *tabView)
 - (void)note:(NSString *)note
 {
 	_note = [note copy];
-	if (note != nil) {
-		NSBeep();
-	}
 	[self updateStatus];
 }
 
@@ -282,371 +263,93 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	[self updateStatus];
 }
 
-#pragma mark Canvas, palette and outline
+#pragma mark The commands' host
 
-- (void)canvas:(WKDCanvasView *)canvas insert:(WKDLook *)tool at:(NSPoint)point
+- (void)commands:(WKDProcessCommands *)commands refused:(NSString *)reason
 {
-	NSString *reason = nil;
-	NSString *added = [[self editor] insertNodeOfType:tool.type eventDefinition:tool.eventDefinition at:point
-	                                            error:&reason];
-	[self note:added == nil ? reason : nil];
-	if (added != nil) {
-		canvas.selection = [NSSet setWithObject:added];
+	if (reason != nil) {
+		NSBeep();
 	}
+	[self note:reason];
 }
 
-- (void)canvas:(WKDCanvasView *)canvas move:(NSArray<NSString *> *)elementIds by:(NSSize)offset
+- (void)commands:(WKDProcessCommands *)commands say:(NSString *)status
 {
 	_note = nil;
-	[[self editor] moveElements:elementIds by:offset];
+	self.status = status;
 }
 
-- (void)canvas:(WKDCanvasView *)canvas connect:(NSString *)sourceId to:(NSString *)targetId
+- (void)commands:(WKDProcessCommands *)commands alert:(NSString *)message detail:(NSString *)detail
 {
-	NSString *reason = nil;
-	NSString *flow = [[self editor] connect:sourceId to:targetId error:&reason];
-	[self note:flow == nil ? reason : nil];
-	if (flow != nil) {
-		canvas.selection = [NSSet setWithObject:flow];
-	}
+	[self alert:message detail:detail];
 }
 
-- (void)canvas:(WKDCanvasView *)canvas resize:(NSString *)elementId to:(NSRect)bounds
+- (NSURL *)documentURLForCommands:(WKDProcessCommands *)commands
 {
-	_note = nil;
-	[[self editor] resizeElement:elementId to:bounds];
+	return [[self designerDocument] fileURL];
 }
 
-- (void)canvas:(WKDCanvasView *)canvas delete:(NSArray<NSString *> *)elementIds
+- (NSDictionary<NSString *, NSString *> *)editedResourcesForCommands:(WKDProcessCommands *)commands
 {
-	_note = nil;
-	[[self editor] deleteElements:elementIds];
+	return [self editedResources];
 }
 
-- (void)canvas:(WKDCanvasView *)canvas reconnect:(NSString *)flowId atSource:(BOOL)atSource to:(NSString *)nodeId
+- (void)commands:(WKDProcessCommands *)commands rename:(NSString *)elementId
 {
-	NSString *reason = nil;
-	BOOL done = [[self editor] reconnect:flowId atSource:atSource to:nodeId error:&reason];
-	[self note:done ? nil : reason];
+	[_canvasController beginRenaming:elementId];
 }
 
-- (void)canvas:(WKDCanvasView *)canvas moveBend:(NSUInteger)index of:(NSString *)flowId to:(NSPoint)point
+- (void)commandsDidArrange:(WKDProcessCommands *)commands
 {
-	_note = nil;
-	[[self editor] moveBend:index of:flowId to:point];
+	[_canvasController scrollToContent];
 }
 
-- (void)canvas:(WKDCanvasView *)canvas nudge:(NSArray<NSString *> *)elementIds by:(NSSize)offset
+/* In this app: a form in the form editor (an XFDDocument, Info.plist's
+ * XForms Form type), a DMN file in the decision editor (a
+ * WKDDecisionDocument), the decision added to it when the file has not
+ * got it; each brought forward when it is open already. */
+- (void)commands:(WKDProcessCommands *)commands open:(NSURL *)url decision:(NSString *)decision
 {
-	_note = nil;
-	[[self editor] nudgeElements:elementIds by:offset];
-}
-
-- (void)canvas:(WKDCanvasView *)canvas moveLabelOf:(NSString *)elementId by:(NSSize)offset
-{
-	_note = nil;
-	[[self editor] moveLabelOf:elementId by:offset];
-}
-
-- (void)canvas:(WKDCanvasView *)canvas rename:(NSString *)elementId to:(NSString *)name
-{
-	_note = nil;
-	[[self editor] setName:name of:elementId];
-}
-
-/* Rename, Change Type for one node, then the clipboard's. */
-- (NSMenu *)canvasMenu:(WKDCanvasView *)canvas
-{
-	NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Element"];
-	[menu setAutoenablesItems:NO];
-	NSString *selected = [self selectedId];
-	if (selected != nil) {
-		[[menu addItemWithTitle:@"Rename" action:@selector(rename:) keyEquivalent:@""] setTarget:self];
-		if ([[self editor].model laneWithId:selected] != nil) {
-			[[menu addItemWithTitle:@"Add Lane" action:@selector(addLane:) keyEquivalent:@""] setTarget:self];
+	NSString *name = [url lastPathComponent];
+	[[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:url display:YES
+		completionHandler:^(NSDocument *opened, BOOL wasOpen, NSError *error) {
+		if (opened == nil || (decision != nil && ![opened isKindOfClass:[WKDDecisionDocument class]])) {
+			[self alert:[NSString stringWithFormat:@"%@ could not be opened.", name]
+			     detail:[error localizedDescription] ?: [url path]];
+			return;
 		}
-		NSArray *types = [[self editor] typesFor:selected];
-		if ([types count] > 0) {
-			WKDNode *shape = [[self editor].model nodeWithId:selected];
-			NSMenu *submenu = [[NSMenu alloc] initWithTitle:@"Change Type"];
-			[submenu setAutoenablesItems:NO];
-			for (WKDNodeType *type in types) {
-				NSMenuItem *item = (NSMenuItem *)[submenu addItemWithTitle:type.title action:@selector(changeType:) keyEquivalent:@""];
-				[item setTarget:self];
-				[item setRepresentedObject:type];
-				BOOL current = [type.type isEqualToString:shape.type]
-					&& [type.eventDefinition ?: @"" isEqualToString:shape.eventDefinition ?: @""];
-				[item setState:current ? NSControlStateValueOn : NSControlStateValueOff];
+		if (decision != nil) {
+			WKDDecisionDocument *decisions = (WKDDecisionDocument *)opened;
+			if ([decisions.editor decisionWithId:decision] == nil) {
+				[decisions.editor addDecisionTable:YES withId:decision];
 			}
-			NSMenuItem *change = (NSMenuItem *)[menu addItemWithTitle:@"Change Type" action:NULL keyEquivalent:@""];
-			[change setSubmenu:submenu];
+			[decisions showDecision:decision];
 		}
-		[menu addItem:[NSMenuItem separatorItem]];
-	}
-	if ([[self selectedShapes] count] >= 2) {
-		/* Several: lined up with the first selected, or spread out. */
-		NSArray *groups = @[ @[ @"Align", @[ @[ @"Left Edges", @"alignLeftEdges:" ], @[ @"Centres", @"alignCentres:" ],
-		                                    @[ @"Right Edges", @"alignRightEdges:" ], @[ @"Top Edges", @"alignTopEdges:" ],
-		                                    @[ @"Middles", @"alignMiddles:" ], @[ @"Bottom Edges", @"alignBottomEdges:" ] ] ],
-		                     @[ @"Distribute", @[ @[ @"Across", @"distributeAcross:" ], @[ @"Down", @"distributeDown:" ] ] ] ];
-		for (NSArray *group in groups) {
-			NSMenu *submenu = [[NSMenu alloc] initWithTitle:group[0]];
-			[submenu setAutoenablesItems:NO];
-			for (NSArray *entry in group[1]) {
-				NSMenuItem *item = (NSMenuItem *)[submenu addItemWithTitle:entry[0] action:NSSelectorFromString(entry[1])
-				                                             keyEquivalent:@""];
-				[item setTarget:self];
-				[item setEnabled:[self validateUserInterfaceItem:item]];
-			}
-			NSMenuItem *holder = (NSMenuItem *)[menu addItemWithTitle:group[0] action:NULL keyEquivalent:@""];
-			[holder setSubmenu:submenu];
-		}
-		[menu addItem:[NSMenuItem separatorItem]];
-	}
-	for (NSArray *entry in @[ @[ @"Cut", NSStringFromSelector(@selector(cut:)) ],
-	                          @[ @"Copy", NSStringFromSelector(@selector(copy:)) ],
-	                          @[ @"Duplicate", NSStringFromSelector(@selector(duplicate:)) ],
-	                          @[ @"Delete", NSStringFromSelector(@selector(delete:)) ] ]) {
-		NSMenuItem *item = (NSMenuItem *)[menu addItemWithTitle:entry[0] action:NSSelectorFromString(entry[1]) keyEquivalent:@""];
-		[item setTarget:[entry[0] isEqualToString:@"Delete"] ? (id)self.canvas : self];
-	}
-	return menu;
+		[self note:nil];
+		self.status = [NSString stringWithFormat:@"%@ is open in the %@ editor.", name, decision != nil ? @"decision" : @"form"];
+	}];
 }
 
-- (void)canvasSelectionDidChange:(WKDCanvasView *)canvas
-{
-	/* An element chosen: its inspector to the front. */
-	if ([self selectedId] != nil) {
-		[self showElementInspector:self];
-	}
-	[self selectionDidChange];
-}
-
-- (void)canvasToolWasUsed:(WKDCanvasView *)canvas
-{
-	[self.palette choosePointer];
-}
-
-- (void)palette:(WKDPaletteView *)palette didChoose:(WKDLook *)tool
-{
-	self.canvas.tool = tool;
-	[[self window] makeFirstResponder:self.canvas];
-}
-
-- (void)outline:(WKDOutline *)outline didSelect:(NSString *)elementId
-{
-	if ([elementId isEqualToString:[self processId]]) {
-		self.canvas.selection = [NSSet set];
-		[self showProcessInspector:self];
-		return;
-	}
-	self.canvas.selection = [NSSet setWithObject:elementId];
-}
-
-#pragma mark Menus
+#pragma mark The View menu
 
 - (IBAction)zoomIn:(id)sender
 {
-	self.canvas.zoom *= 1.25;
+	[_canvasController zoomIn:sender];
 }
 
 - (IBAction)zoomOut:(id)sender
 {
-	self.canvas.zoom /= 1.25;
+	[_canvasController zoomOut:sender];
 }
 
 - (IBAction)actualSize:(id)sender
 {
-	self.canvas.zoom = 1;
-}
-
-- (IBAction)arrange:(id)sender
-{
-	_note = nil;
-	[[self editor] arrange];
-	[self.canvas scrollToContent];
+	[_canvasController actualSize:sender];
 }
 
 - (IBAction)zoomToFit:(id)sender
 {
-	[self.canvas zoomToFit];
-}
-
-- (IBAction)rename:(id)sender
-{
-	if ([self selectedId] != nil) {
-		[self.canvas beginRenaming:[self selectedId]];
-	}
-}
-
-- (IBAction)changeType:(id)sender
-{
-	WKDNodeType *type = [sender representedObject];
-	NSString *selected = [self selectedId];
-	if (![type isKindOfClass:[WKDNodeType class]] || selected == nil) {
-		return;
-	}
-	NSString *reason = nil;
-	BOOL done = [[self editor] changeType:selected to:type error:&reason];
-	[self note:done ? nil : reason];
-}
-
-#pragma mark Arranging several
-
-/* The selected shapes, the anchor first. */
-- (NSArray<NSString *> *)selectedShapes
-{
-	NSMutableArray *shapes = [NSMutableArray array];
-	for (NSString *elementId in self.canvas.orderedSelection) {
-		if ([[self editor].model nodeWithId:elementId] != nil) {
-			[shapes addObject:elementId];
-		}
-	}
-	return shapes;
-}
-
-- (void)align:(WKDAlignment)alignment
-{
-	_note = nil;
-	if (![[self editor] alignElements:[self selectedShapes] to:alignment]) {
-		[self note:@"Select two shapes or more to line up with the first."];
-	}
-}
-
-- (IBAction)alignLeftEdges:(id)sender
-{
-	[self align:WKDAlignLeft];
-}
-
-- (IBAction)alignCentres:(id)sender
-{
-	[self align:WKDAlignCentre];
-}
-
-- (IBAction)alignRightEdges:(id)sender
-{
-	[self align:WKDAlignRight];
-}
-
-- (IBAction)alignTopEdges:(id)sender
-{
-	[self align:WKDAlignTop];
-}
-
-- (IBAction)alignMiddles:(id)sender
-{
-	[self align:WKDAlignMiddle];
-}
-
-- (IBAction)alignBottomEdges:(id)sender
-{
-	[self align:WKDAlignBottom];
-}
-
-- (IBAction)distributeAcross:(id)sender
-{
-	_note = nil;
-	if (![[self editor] distributeElements:[self selectedShapes] vertically:NO]) {
-		[self note:@"Select three shapes or more to spread out."];
-	}
-}
-
-- (IBAction)distributeDown:(id)sender
-{
-	_note = nil;
-	if (![[self editor] distributeElements:[self selectedShapes] vertically:YES]) {
-		[self note:@"Select three shapes or more to spread out."];
-	}
-}
-
-#pragma mark Clipboard
-
-/* The selection as a fragment of BPMN; nil, with a beep, when there is
- * nothing in it to copy. */
-- (NSXMLDocument *)fragmentOfSelection
-{
-	NSXMLDocument *fragment = [[self editor] fragmentOfElements:[self.canvas.selection allObjects]];
-	if (fragment == nil) {
-		NSBeep();
-	}
-	return fragment;
-}
-
-- (IBAction)copy:(id)sender
-{
-	NSXMLDocument *fragment = [self fragmentOfSelection];
-	if (fragment == nil) {
-		return;
-	}
-	NSString *xml = [fragment XMLStringWithOptions:NSXMLNodePrettyPrint];
-	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
-	[pasteboard declareTypes:@[ WKDFragmentPasteboardType, NSPasteboardTypeString ] owner:nil];
-	[pasteboard setString:xml forType:WKDFragmentPasteboardType];
-	[pasteboard setString:xml forType:NSPasteboardTypeString];
-	_pastes = 0;
-}
-
-- (IBAction)cut:(id)sender
-{
-	if ([self fragmentOfSelection] != nil) {
-		[self copy:sender];
-		[[self editor] deleteElements:[self.canvas.selection allObjects]];
-	}
-}
-
-/* Pasted a step further down each time, the elements pasted selected. */
-- (void)pasteFragment:(NSXMLDocument *)fragment
-{
-	_pastes++;
-	NSString *reason = nil;
-	NSArray *added = [[self editor] paste:fragment offset:NSMakeSize(30.0 * _pastes, 30.0 * _pastes) error:&reason];
-	[self note:added == nil ? reason : nil];
-	if (added != nil) {
-		self.canvas.selection = [NSSet setWithArray:added];
-	}
-}
-
-- (IBAction)paste:(id)sender
-{
-	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
-	NSString *xml = [pasteboard stringForType:WKDFragmentPasteboardType] ?: [pasteboard stringForType:NSPasteboardTypeString];
-	NSXMLDocument *fragment = [xml length] > 0 ? [[NSXMLDocument alloc] initWithXMLString:xml options:0 error:NULL] : nil;
-	if (fragment == nil) {
-		[self note:@"The clipboard holds no BPMN to paste."];
-		NSBeep();
-		return;
-	}
-	[self pasteFragment:fragment];
-}
-
-- (IBAction)duplicate:(id)sender
-{
-	NSXMLDocument *fragment = [self fragmentOfSelection];
-	if (fragment != nil) {
-		_pastes = 0;
-		[self pasteFragment:fragment];
-	}
-}
-
-#pragma mark Pools and lanes
-
-- (IBAction)addPool:(id)sender
-{
-	NSString *pool = [[self editor] addPool];
-	if (pool != nil) {
-		self.canvas.selection = [NSSet setWithObject:pool];
-	}
-}
-
-- (IBAction)addLane:(id)sender
-{
-	/* After the lane selected, else at the bottom of the pool. */
-	NSString *selected = [self selectedId];
-	NSString *after = [[self editor].model laneWithId:selected] != nil ? selected : nil;
-	NSString *lane = [[self editor] addLaneAfter:after];
-	if (lane != nil) {
-		self.canvas.selection = [NSSet setWithObject:lane];
-	}
+	[_canvasController zoomToFit:sender];
 }
 
 #pragma mark Deploying
@@ -715,8 +418,6 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	}];
 }
 
-#pragma mark Forms
-
 /* The files beside the process open in an editor -- its forms in the form
  * editor, DMN files in the decision editor -- as they stand there, by name. */
 - (NSDictionary<NSString *, NSString *> *)editedResources
@@ -741,174 +442,10 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	return edited;
 }
 
-/* The element whose form is edited: the one selected, a user task or a
- * start event. */
-- (NSXMLElement *)formElement
-{
-	NSString *elementId = [self selectedId];
-	NSXMLElement *element = elementId != nil ? [[self editor] elementWithId:elementId] : nil;
-	NSString *type = [element localName];
-	return [type isEqualToString:@"userTask"] || [type isEqualToString:@"startEvent"] ? element : nil;
-}
-
-- (IBAction)editForm:(id)sender
-{
-	NSXMLElement *element = [self formElement];
-	if (element == nil) {
-		[self alert:@"Select a user task or a start event." detail:@"Their forms are what the form designer edits."];
-		return;
-	}
-	NSURL *file = [[self designerDocument] fileURL];
-	if (file == nil) {
-		[self alert:@"Save the process first." detail:@"Its forms are kept beside it, and deployed with it."];
-		return;
-	}
-	NSXMLDocument *document = [self editor].document;
-	NSString *elementId = WKDAttribute(element, @"id");
-	NSString *name = WKDEmbeddedFormOf(document, element);
-	BOOL named = name != nil;
-	if (!named) {
-		name = [elementId stringByAppendingPathExtension:@"xhtml"];
-	}
-	NSURL *form = [[file URLByDeletingLastPathComponent] URLByAppendingPathComponent:name];
-	if (![[NSFileManager defaultManager] fileExistsAtPath:[form path]]) {
-		NSError *error = nil;
-		NSXMLDocument *made = WKDGeneratedForm(document, elementId, &error);
-		if (made == nil || ![[made XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement]
-		                       writeToURL:form options:NSDataWritingAtomic error:&error]) {
-			[self alert:[NSString stringWithFormat:@"Could not make %@.", name] detail:[error localizedDescription]];
-			return;
-		}
-	}
-	if (!named) {
-		/* One change: the key that names it, undone like any other. */
-		[[self editor] edit:elementId action:@"Form key" with:^(NSXMLElement *edited, NSXMLDocument *xml) {
-			WKDSetQualifiedAttribute(xml, edited, WKDCamundaNamespace, @"formKey",
-			                         [@"embedded:deployment:" stringByAppendingString:name]);
-		}];
-	}
-	/* In this app, an XFDDocument (Info.plist's XForms Form type); brought
-	 * forward when it is open already. */
-	[[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:form display:YES
-		completionHandler:^(NSDocument *opened, BOOL wasOpen, NSError *error) {
-		if (opened == nil) {
-			[self alert:[NSString stringWithFormat:@"%@ could not be opened.", name]
-			     detail:[error localizedDescription] ?: [form path]];
-			return;
-		}
-		[self note:nil];
-		self.status = [NSString stringWithFormat:@"%@ is open in the form editor.", name];
-	}];
-}
-
-#pragma mark Decisions
-
-/* The business rule task selected. */
-- (NSXMLElement *)decisionElement
-{
-	NSString *elementId = [self selectedId];
-	NSXMLElement *element = elementId != nil ? [[self editor] elementWithId:elementId] : nil;
-	return [[element localName] isEqualToString:@"businessRuleTask"] ? element : nil;
-}
-
-- (IBAction)editDecision:(id)sender
-{
-	NSXMLElement *element = [self decisionElement];
-	if (element == nil) {
-		[self alert:@"Select a business rule task." detail:@"Its decision is what the decision editor edits."];
-		return;
-	}
-	NSURL *file = [[self designerDocument] fileURL];
-	if (file == nil) {
-		[self alert:@"Save the process first." detail:@"Its decisions are kept beside it, and deployed with it."];
-		return;
-	}
-	NSXMLDocument *document = [self editor].document;
-	NSString *elementId = WKDAttribute(element, @"id");
-	NSString *key = WKDQualifiedAttribute(document, element, WKDCamundaNamespace, @"decisionRef");
-	if ([key hasPrefix:@"${"] || [key hasPrefix:@"#{"] || [key hasPrefix:@"="]) {
-		[self alert:@"The task names its decision by an expression."
-		     detail:@"Which decision it evaluates is known only as it runs."];
-		return;
-	}
-	BOOL named = [key length] > 0;
-	if (!named) {
-		key = elementId;
-	}
-	NSURL *directory = [file URLByDeletingLastPathComponent];
-	NSString *name = WKDDecisionFileDefining(key, directory, [self editedResources])
-		?: [key stringByAppendingPathExtension:@"dmn"];
-	NSURL *url = [directory URLByAppendingPathComponent:name];
-	if (![[NSFileManager defaultManager] fileExistsAtPath:[url path]]) {
-		/* A file of its own, whose one table is the decision. */
-		WKDDmnEditor *made = [[WKDDmnEditor alloc] initWithDocument:[WKDDmnEditor newDecisionsDocument] undoManager:nil];
-		NSString *first = [made.decisions firstObject].decisionId;
-		NSString *title = WKDAttribute(element, @"name");
-		[made renameDecision:first to:key error:NULL];
-		[made setName:[title length] > 0 ? title : key of:key];
-		NSError *error = nil;
-		if (![[made.document XMLDataWithOptions:NSXMLNodePrettyPrint | NSXMLNodeCompactEmptyElement]
-		        writeToURL:url options:NSDataWritingAtomic error:&error]) {
-			[self alert:[NSString stringWithFormat:@"Could not make %@.", name] detail:[error localizedDescription]];
-			return;
-		}
-	}
-	if (!named) {
-		[[self editor] edit:elementId action:@"Decision" with:^(NSXMLElement *edited, NSXMLDocument *xml) {
-			WKDSetQualifiedAttribute(xml, edited, WKDCamundaNamespace, @"decisionRef", key);
-		}];
-	}
-	/* In this app, a WKDDecisionDocument (Info.plist's DMN type); brought
-	 * forward when it is open already, and the decision added to it when
-	 * the file beside has that name but not the decision. */
-	[[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:url display:YES
-		completionHandler:^(NSDocument *opened, BOOL wasOpen, NSError *error) {
-		if (![opened isKindOfClass:[WKDDecisionDocument class]]) {
-			[self alert:[NSString stringWithFormat:@"%@ could not be opened.", name]
-			     detail:[error localizedDescription] ?: [url path]];
-			return;
-		}
-		WKDDecisionDocument *decisions = (WKDDecisionDocument *)opened;
-		if ([decisions.editor decisionWithId:key] == nil) {
-			[decisions.editor addDecisionTable:YES withId:key];
-		}
-		[decisions showDecision:key];
-		[self note:nil];
-		self.status = [NSString stringWithFormat:@"%@ is open in the decision editor.", name];
-	}];
-}
-
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
-	if ([item action] == @selector(editForm:)) {
-		return [self formElement] != nil;
-	}
-	if ([item action] == @selector(editDecision:)) {
-		return [self decisionElement] != nil;
-	}
-	if ([item action] == @selector(addPool:)) {
-		return [self editor].model.pool == nil;
-	}
 	if ([item action] == @selector(deploy:)) {
 		return [self designerDocument].problem == nil;
-	}
-	SEL action = [item action];
-	if (action == @selector(copy:) || action == @selector(cut:) || action == @selector(duplicate:)) {
-		return [self.canvas.selection count] > 0;
-	}
-	NSString *name = NSStringFromSelector(action);
-	if ([name hasPrefix:@"align"]) {
-		return [[self selectedShapes] count] >= 2;
-	}
-	if ([name hasPrefix:@"distribute"]) {
-		return [[self selectedShapes] count] >= 3;
-	}
-	if (action == @selector(rename:)) {
-		return [self selectedId] != nil;
-	}
-	if (action == @selector(paste:)) {
-		NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
-		return [pasteboard availableTypeFromArray:@[ WKDFragmentPasteboardType, NSPasteboardTypeString ]] != nil;
 	}
 	return YES;
 }

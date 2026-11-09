@@ -85,7 +85,9 @@ DESIGNER_RESOURCES = make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_RESOU
 DESIGNER_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "*.h")))
 DESIGNER_TEST_FILES = make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_OBJC_FILES")
 DESIGNER_TESTS = [t for t in DESIGNER_TEST_FILES if not t.startswith("../")]
-DESIGNER_TESTED = [t[3:] for t in DESIGNER_TEST_FILES if t.startswith("../")]
+DESIGNER_TESTED = apple([t[3:] for t in DESIGNER_TEST_FILES if t.startswith("../")])
+# The parts' XIBs, which the tests load from their own bundle.
+DESIGNER_TEST_RESOURCES = [t[3:] for t in make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_RESOURCE_FILES")]
 DESIGNER_TEST_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "Tests", "*.h")))
 ODATA_OTHERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "OData", "*.h"))
                       if os.path.basename(p) not in ODATA_HEADERS)
@@ -446,9 +448,14 @@ wg_embed = add(oid("phase", "WorkflowDesigner", "Embed Frameworks"), "Embed Fram
 gt_sources = phase("PBXSourcesBuildPhase", "WorkflowDesignerTests", "Sources", names(
     [buildfile("WorkflowDesignerTests", designer_test_refs[t], t) for t in DESIGNER_TESTS] +
     [buildfile("WorkflowDesignerTests", app_file(designer_refs, f), os.path.basename(f)) for f in DESIGNER_TESTED]))
+# The app's sources are compiled into the tests: its frameworks with them.
 gt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesignerTests", "Frameworks", names(
-    [buildfile("WorkflowDesignerTests", p_fw, "WorkflowKit.framework"),
-     buildfile("WorkflowDesignerTests", diagramkit, "DiagramKit.framework")]))
+    [buildfile("WorkflowDesignerTests", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
+    [buildfile("WorkflowDesignerTests", appkit, "AppKit.framework"),
+     buildfile("WorkflowDesignerTests", coredata, "CoreData.framework")]))
+gt_resources = phase("PBXResourcesBuildPhase", "WorkflowDesignerTests", "Resources", names(
+    [buildfile("WorkflowDesignerTests", app_file(designer_res_refs, r), os.path.basename(r))
+     for r in DESIGNER_TEST_RESOURCES]))
 
 
 # ---------------------------------------------------------------- groups
@@ -685,7 +692,7 @@ t_desk_tests = target("WorkflowDeskTests", cl_desk_tests, [wt_sources, wt_framew
 t_designer = target("WorkflowDesigner", cl_designer, [wg_model, wg_sources, wg_resources, wg_frameworks, wg_embed],
                     [dependency("WorkflowDesigner", t_fw, "WorkflowKit")],
                     p_designer, "com.apple.product-type.application")
-t_designer_tests = target("WorkflowDesignerTests", cl_designer_tests, [gt_sources, gt_frameworks],
+t_designer_tests = target("WorkflowDesignerTests", cl_designer_tests, [gt_sources, gt_frameworks, gt_resources],
                           [dependency("WorkflowDesignerTests", t_fw, "WorkflowKit")],
                           p_designer_tests, "com.apple.product-type.bundle.unit-test")
 

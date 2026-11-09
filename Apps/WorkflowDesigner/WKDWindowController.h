@@ -1,75 +1,49 @@
 #import <AppKit/AppKit.h>
-#import "WKDCanvasView.h"
-#import "WKDOutline.h"
-#import "WKDPaletteView.h"
+#import "WKDCanvasViewController.h"
+#import "WKDOutlineViewController.h"
+#import "WKDPaletteViewController.h"
+#import "WKDProblemsViewController.h"
+#import "WKDProcessCommands.h"
 
 /*
  * A document's window, in three panes, as RDLKit's and XFormsKit's
  * designers have them: on the left the process's outline, the palette and
  * the engine's problems, each behind a tab; the canvas in the middle; on
  * the right the inspector, for the element selected and for the process.
- * The outline, the canvas and the inspector follow one selection.
+ * It puts the parts in their places in DesignerWindow.xib and nothing
+ * more: each follows the document's process editor, and the Editor menu's
+ * commands are in its responder chain.
  */
-@interface WKDWindowController : NSWindowController <WKDCanvasDelegate, WKDPaletteDelegate, WKDOutlineDelegate,
-                                                    NSSplitViewDelegate>
+@interface WKDWindowController : NSWindowController <WKDProcessCommandsHost, NSSplitViewDelegate>
 
-@property (nonatomic, strong) IBOutlet WKDCanvasView *canvas;
-@property (nonatomic, strong) IBOutlet WKDPaletteView *palette;
 @property (nonatomic, strong) IBOutlet NSSplitView *split;
 @property (nonatomic, strong) IBOutlet NSView *leftTabBar;
 @property (nonatomic, strong) IBOutlet NSTabView *leftTabView;
 @property (nonatomic, strong) IBOutlet NSView *rightTabBar;
 @property (nonatomic, strong) IBOutlet NSTabView *rightTabView;
 @property (nonatomic, strong) IBOutlet NSView *outlineHost;
+@property (nonatomic, strong) IBOutlet NSView *paletteHost;
 @property (nonatomic, strong) IBOutlet NSView *problemsHost;
+@property (nonatomic, strong) IBOutlet NSView *canvasHost;
 @property (nonatomic, strong) IBOutlet NSView *inspectorHost;
 @property (nonatomic, strong) IBOutlet NSView *processHost;
 @property (nonatomic, copy) NSString *status;
 
+/* The parts, once the window has loaded. */
+@property (nonatomic, readonly, strong) WKDCanvasViewController *canvasController;
+@property (nonatomic, readonly, strong) WKDOutlineViewController *outlineController;
+@property (nonatomic, readonly, strong) WKDPaletteViewController *paletteController;
+@property (nonatomic, readonly, strong) WKDProblemsViewController *problemsController;
+@property (nonatomic, readonly, strong) WKDProcessCommands *commands;
+
+/* The canvas's zoom, for the View menu. */
 - (IBAction)zoomIn:(id)sender;
 - (IBAction)zoomOut:(id)sender;
 - (IBAction)actualSize:(id)sender;
-- (IBAction)arrange:(id)sender;
+- (IBAction)zoomToFit:(id)sender;
 /* Server ▸ Deploy: the process, its forms and its decisions -- as their
  * editors have them, for those open in one -- to the server connected. */
 - (IBAction)deploy:(id)sender;
-/* Diagram ▸ Edit Form: the selected task's or start event's embedded form,
- * beside the process, opened in this app's form editor (XFormsDesignKit's);
- * made from its fields first, and named in its form key, when there is
- * none. */
-- (IBAction)editForm:(id)sender;
-/* Diagram ▸ Edit Decision: the selected business rule task's decision,
- * from the DMN file beside the process that defines it, opened in this
- * app's decision editor; a file of its own made for it, and named in the
- * task's decisionRef, when there is none. */
-- (IBAction)editDecision:(id)sender;
-/* Diagram ▸ Align: the selected shapes lined up with the first selected;
- * Diagram ▸ Distribute: spread out evenly, across or down. */
-- (IBAction)alignLeftEdges:(id)sender;
-- (IBAction)alignCentres:(id)sender;
-- (IBAction)alignRightEdges:(id)sender;
-- (IBAction)alignTopEdges:(id)sender;
-- (IBAction)alignMiddles:(id)sender;
-- (IBAction)alignBottomEdges:(id)sender;
-- (IBAction)distributeAcross:(id)sender;
-- (IBAction)distributeDown:(id)sender;
-/* Diagram ▸ Add Pool: the process in a pool of its own. Diagram ▸ Add
- * Lane: a lane after the one selected, or at the bottom of the pool. */
-- (IBAction)addPool:(id)sender;
-- (IBAction)addLane:(id)sender;
-/* View ▸ Zoom to Fit: the whole diagram in the window. */
-- (IBAction)zoomToFit:(id)sender;
-/* Diagram ▸ Rename: the selected element's name typed over it. */
-- (IBAction)rename:(id)sender;
-/* A Change Type menu item's type (its represented object) for the
- * selected node. */
-- (IBAction)changeType:(id)sender;
-/* The selection to the pasteboard as BPMN, and back as copies under ids
- * of their own, a step further down each time; Duplicate both at once. */
-- (IBAction)copy:(id)sender;
-- (IBAction)cut:(id)sender;
-- (IBAction)paste:(id)sender;
-- (IBAction)duplicate:(id)sender;
 - (IBAction)showOutline:(id)sender;
 - (IBAction)showPalette:(id)sender;
 - (IBAction)showProblems:(id)sender;

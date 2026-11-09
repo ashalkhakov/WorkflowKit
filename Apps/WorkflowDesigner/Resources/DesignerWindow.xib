@@ -9,8 +9,8 @@
         <customObject id="-2" userLabel="File's Owner" customClass="WKDWindowController">
             <connections>
                 <outlet property="window" destination="WKDw-window" id="WKDw-o-window"/>
-                <outlet property="canvas" destination="WKDw-canvas" id="WKDw-o-canvas"/>
-                <outlet property="palette" destination="WKDw-palette" id="WKDw-o-palette"/>
+                <outlet property="canvasHost" destination="WKDw-canvashost" id="WKDw-o-canvasHost"/>
+                <outlet property="paletteHost" destination="WKDw-palettehost" id="WKDw-o-paletteHost"/>
                 <outlet property="split" destination="WKDw-split" id="WKDw-o-split"/>
                 <outlet property="leftTabBar" destination="WKDw-leftbar" id="WKDw-o-leftTabBar"/>
                 <outlet property="leftTabView" destination="WKDw-lefttabs" id="WKDw-o-leftTabView"/>
@@ -68,7 +68,7 @@
                                                     <rect key="frame" x="0" y="0" width="230" height="726"/>
                                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                     <subviews>
-                                                        <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-palette" customClass="WKDPaletteView">
+                                                        <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-palettehost">
                                                             <rect key="frame" x="0" y="0" width="230" height="726"/>
                                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                         </customView>
@@ -91,31 +91,10 @@
                                     </tabView>
                                 </subviews>
                             </customView>
-                            <scrollView fixedFrame="YES" borderType="none" autohidesScrollers="NO" horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" hasHorizontalScroller="YES" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-canvasscroll">
+                            <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-canvashost">
                                 <rect key="frame" x="231" y="0" width="748" height="752"/>
                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                <clipView key="contentView" id="WKDw-clip">
-                                    <rect key="frame" x="0" y="0" width="748" height="752"/>
-                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                    <subviews>
-                                        <customView id="WKDw-canvas" customClass="WKDCanvasView">
-                                            <rect key="frame" x="0" y="0" width="2000" height="2000"/>
-                                            <autoresizingMask key="autoresizingMask"/>
-                                        </customView>
-                                    </subviews>
-                                </clipView>
-                                <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="WKDw-hs">
-                                    <rect key="frame" x="0" y="737" width="748" height="15"/>
-                                    <autoresizingMask key="autoresizingMask"/>
-                                </scroller>
-                                <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="WKDw-vs">
-                                    <rect key="frame" x="733" y="0" width="15" height="752"/>
-                                    <autoresizingMask key="autoresizingMask"/>
-                                </scroller>
-                                <connections>
-                                    <outlet property="documentView" destination="WKDw-canvas" id="WKDw-o-doc"/>
-                                </connections>
-                            </scrollView>
+                            </customView>
                             <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="WKDw-right">
                                 <rect key="frame" x="980" y="0" width="300" height="752"/>
                                 <autoresizingMask key="autoresizingMask" heightSizable="YES"/>

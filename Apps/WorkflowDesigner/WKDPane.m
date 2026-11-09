@@ -56,3 +56,17 @@ WKDTabBadge(NSString *letters, double r, double g, double b)
 	[cache setObject:image forKey:key];
 	return image;
 }
+
+/* A class of the designer's, to find its bundle by. */
+@interface WKDPaneBundleMarker : NSObject
+@end
+
+@implementation WKDPaneBundleMarker
+@end
+
+NSString *
+WKDNibPath(NSString *name)
+{
+	NSBundle *bundle = [NSBundle bundleForClass:[WKDPaneBundleMarker class]];
+	return [bundle pathForResource:name ofType:@"nib"] ?: [bundle pathForResource:name ofType:@"xib"];
+}

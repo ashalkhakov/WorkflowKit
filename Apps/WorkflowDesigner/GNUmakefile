@@ -16,24 +16,18 @@
 #                                                  # deployments
 include $(GNUSTEP_MAKEFILES)/common.make
 
-ifneq ($(ODATAKIT),)
-override ODATAKIT := $(abspath $(ODATAKIT))
-endif
-export ODATAKIT
-ifneq ($(XFORMSKIT),)
-override XFORMSKIT := $(abspath $(XFORMSKIT))
-XFORMSDESIGNKIT = $(XFORMSKIT)/Sources/XFormsDesignKit
-else
-# Installed, its headers are laid out as in its tree.
-XFORMSDESIGNKIT = $(GNUSTEP_LOCAL_HEADERS)/XFormsDesignKit
-endif
-export XFORMSKIT
+include designer.make
 
 APP_NAME = WorkflowDesigner
 
 WorkflowDesigner_OBJC_FILES = \
 	main.m \
 	WKDCanvasView.m \
+	WKDCanvasViewController.m \
+	WKDOutlineViewController.m \
+	WKDPaletteViewController.m \
+	WKDProblemsViewController.m \
+	WKDProcessCommands.m \
 	WKDPaletteView.m \
 	WKDProperties.m \
 	WKDPane.m \
@@ -80,6 +74,10 @@ WorkflowDesigner_OBJC_FILES = \
 WorkflowDesigner_RESOURCE_FILES = \
 	Resources/MainMenu.xib \
 	Resources/DesignerWindow.xib \
+	Resources/WKDCanvas.xib \
+	Resources/WKDOutlineView.xib \
+	Resources/WKDPalette.xib \
+	Resources/WKDProblems.xib \
 	Resources/ServerProcesses.xib \
 	../Shared/Resources/ConnectWindow.xib \
 	Resources/WorkflowDesigner.png
@@ -89,43 +87,28 @@ WorkflowDesigner_XCDATAMODELD_FILES = ../../Model/WorkflowKit.xcdatamodeld
 
 WorkflowDesigner_MAIN_MODEL_FILE = MainMenu.xib
 WorkflowDesigner_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include WKDGNUstepCompat.h
-WorkflowDesigner_INCLUDE_DIRS = -I../../Headers -I../Shared \
-	-I$(XFORMSDESIGNKIT) -I$(XFORMSDESIGNKIT)/ThirdParty/DMTabBar
-WorkflowDesigner_LIB_DIRS = -L../../$(GNUSTEP_OBJ_DIR)
-ifneq ($(ODATAKIT),)
-WorkflowDesigner_INCLUDE_DIRS += \
-	-I$(ODATAKIT)/Source/ODataKit/include -I$(ODATAKIT)/Source/ODataIncrementalStore/include \
-	-I$(ODATAKIT)/Source/OTelKit/include
-WorkflowDesigner_LIB_DIRS += -L$(ODATAKIT)/obj
-ODATAKIT_LIBRARY_PATH = $(ODATAKIT)/obj:
-endif
-ifneq ($(XFORMSKIT),)
-WorkflowDesigner_INCLUDE_DIRS += -I$(XFORMSKIT)/Sources -I$(XFORMSKIT)/Sources/XFormsKit
-WorkflowDesigner_LIB_DIRS += \
-	-L$(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current \
-	-L$(XFORMSKIT)/XFormsKit.framework/Versions/Current
-XFORMSKIT_LIBRARY_PATH = $(XFORMSDESIGNKIT)/XFormsDesignKit.framework/Versions/Current:$(XFORMSKIT)/XFormsKit.framework/Versions/Current:
-endif
-# DiagramKit: the process diagram's layout (../Shared/WKDEditor.m); and
-# DiagramKitUI's canvas, which WKDCanvasView is.
-WorkflowDesigner_GUI_LIBS += -lWorkflowKit -lDiagramKitUI -lDiagramKit -lODataIncrementalStore -lODataKit -lOTelKit \
-	-lXFormsDesignKit -lXFormsKit -lGSUpdater -lCoreData -ldispatch -lgnutls
+WorkflowDesigner_INCLUDE_DIRS = $(WKD_INCLUDE_DIRS)
+WorkflowDesigner_LIB_DIRS = $(WKD_LIB_DIRS)
+WorkflowDesigner_GUI_LIBS += $(WKD_LIBS)
 
 # Sockets for signing in (../Shared/WDSockets.h): Winsock's on Windows.
-ifneq ($(filter mingw% windows%,$(GNUSTEP_TARGET_OS)),)
+ifeq ($(WKD_WINDOWS),yes)
 WorkflowDesigner_OBJC_FILES := $(subst WDSockets-posix.m,WDSockets-windows.m,$(WorkflowDesigner_OBJC_FILES))
-WorkflowDesigner_GUI_LIBS += -lws2_32
 endif
 
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
 include $(GNUSTEP_MAKEFILES)/application.make
 
-export LD_LIBRARY_PATH := $(CURDIR)/../../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$(XFORMSKIT_LIBRARY_PATH)$(LD_LIBRARY_PATH)
-export PATH := $(CURDIR)/../../$(GNUSTEP_OBJ_DIR):$(ODATAKIT_LIBRARY_PATH)$(XFORMSKIT_LIBRARY_PATH)$(PATH)
+export LD_LIBRARY_PATH := $(WKD_LIBRARY_PATH)$(LD_LIBRARY_PATH)
+export PATH := $(WKD_LIBRARY_PATH)$(PATH)
 
 .PHONY: run check
 run: all
 	openapp ./WorkflowDesigner.app
 
+# The tests open windows: under xvfb-run where there is no display, as
+# ORMKit's designer tests are.
+XVFB = $(if $(DISPLAY),,$(shell command -v xvfb-run >/dev/null 2>&1 && echo xvfb-run -a))
+
 check::
-	$(MAKE) -C Tests run-tests
+	$(XVFB) $(MAKE) -C Tests run-tests
