@@ -1,5 +1,6 @@
 #import "WKDEditorPriv.h"
 #import "WKDXML.h"
+#import "WKDModelPriv.h"
 
 /*
  * What the canvas changes directly: names typed over a shape, a flow's
@@ -21,24 +22,19 @@
 	if ((now == nil && value == nil) || [now isEqualToString:value]) {
 		return;
 	}
-	[self edit:elementId action:@"Rename" with:^(NSXMLElement *edited, NSXMLDocument *document) {
-		if (annotation) {
-			WKDSetChildText(document, edited, WKDBpmnNamespace, @"text", value);
-		} else {
+	WKDModelElement *modelled = [self.model nodeWithId:elementId] ?: [self.model flowWithId:elementId]
+		?: (WKDModelElement *)[self.model laneWithId:elementId];
+	if (modelled == nil) {
+		[self edit:elementId action:@"Rename" with:^(NSXMLElement *edited, NSXMLDocument *document) {
 			WKDSetAttribute(edited, @"name", value);
-		}
-	}];
-}
-
-/* The incoming or outgoing reference to the flow in the node, gone. */
-static void
-WKDRemoveReference(NSXMLElement *node, NSString *local, NSString *flowId)
-{
-	for (NSXMLElement *reference in WKDChildren(node, WKDBpmnNamespace, local)) {
-		if ([[reference stringValue] isEqualToString:flowId]) {
-			[reference detach];
-		}
+		}];
+		return;
 	}
+	[self change:@"Rename" with:^{
+		[modelled willChange];
+		modelled.name = value;
+		[self.model write];
+	}];
 }
 
 - (BOOL)reconnect:(NSString *)flowId atSource:(BOOL)atSource to:(NSString *)nodeId error:(NSString **)reason
@@ -61,14 +57,19 @@ WKDRemoveReference(NSXMLElement *node, NSString *local, NSString *flowId)
 		}
 		return NO;
 	}
-	WKDShape *old = atSource ? flow.source : flow.target;
 	[self change:@"Reconnect" with:^{
-		WKDSetAttribute(flow.element, atSource ? @"sourceRef" : @"targetRef", nodeId);
-		WKDRemoveReference(old.element, atSource ? @"outgoing" : @"incoming", flowId);
-		[self addReference:atSource ? @"outgoing" : @"incoming" to:flowId in:node.element];
-		if (atSource && [WKDAttribute(old.element, @"default") isEqualToString:flowId]) {
-			WKDSetAttribute(old.element, @"default", nil);
+		WKDModel *model = self.model;
+		WKDFlow *modelled = [model flowWithId:flowId];
+		WKDNode *end = [model nodeWithId:nodeId];
+		if (atSource) {
+			if (modelled.source.defaultFlow == modelled) {
+				[model setDefaultFlow:nil ofNode:modelled.source];
+			}
+			[model setSource:end ofFlow:modelled];
+		} else {
+			[model setTarget:end ofFlow:modelled];
 		}
+		[model write];
 		self.diagram = [WKDDiagram diagramOfDocument:self.document];
 		WKDConnection *now = [self.diagram connectionWithId:flowId];
 		[self reroute:now];

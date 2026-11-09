@@ -299,11 +299,10 @@ WKDByDiagramIndex(id a, id b, void *context)
 			WKDLogAttribute(self.journal, element, @"triggeredByEvent", node.eventSubProcess ? @"true" : nil);
 		}
 	}
-	/* A default that names no flow of the node is not the model's, and is
-	 * left as it is. */
+	/* A default that names a flow the model knows -- or one leaving -- is the
+	 * model's to write; one naming what it never knew is left as it is. */
 	NSString *written = WKDAttribute(element, @"default");
-	WKDFlow *writtenFlow = [self flowWithId:written];
-	if (node.defaultFlow != nil || (writtenFlow != nil && writtenFlow.source == node)) {
+	if (node.defaultFlow != nil || (written != nil && [self knowsFlow:written])) {
 		WKDWriteAttribute(self.journal, element, @"default", node.defaultFlow.elementId);
 	}
 	if (listsFlows) {

@@ -763,22 +763,16 @@ WKDOnEdge(NSRect host, NSPoint point)
 	NSSize size = [WKDEditor sizeOfType:type];
 	NSPoint centre = host != nil ? WKDOnEdge(host.bounds, point) : point;
 	[self change:@"Add" with:^{
-		NSXMLElement *element = WKDNewElement(self->_document, WKDBpmnNamespace, type);
-		WKDSetAttribute(element, @"id", elementId);
+		WKDModel *model = self->_model;
+		WKDNode *node = [model makeNodeOfType:type elementId:elementId in:[model nodeWithId:container.elementId]];
+		node.eventDefinition = eventDefinition;
 		if (host != nil) {
-			WKDSetAttribute(element, @"attachedToRef", host.elementId);
+			[model setHost:[model nodeWithId:host.elementId] ofNode:node];
 		}
-		if (eventDefinition != nil) {
-			NSXMLElement *definition = WKDNewElement(self->_document, WKDBpmnNamespace, eventDefinition);
-			NSString *prefix = [[eventDefinition substringToIndex:1] uppercaseString];
-			prefix = [prefix stringByAppendingString:[eventDefinition substringFromIndex:1]];
-			WKDSetAttribute(definition, @"id", [self freshId:prefix]);
-			[element addChild:definition];
-		}
-		[(container != nil ? container.element : self->_diagram.process) addChild:element];
+		node.bounds = NSMakeRect(centre.x - size.width / 2, centre.y - size.height / 2, size.width, size.height);
+		node.hasBounds = YES;
+		[model write];
 		self->_diagram = [WKDDiagram diagramOfDocument:self->_document];
-		[self setBounds:NSMakeRect(centre.x - size.width / 2, centre.y - size.height / 2, size.width, size.height)
-		             of:elementId];
 	}];
 	return elementId;
 }
@@ -824,17 +818,13 @@ WKDOnEdge(NSRect host, NSPoint point)
 	}
 	NSString *flowId = [self freshId:@"Flow"];
 	[self change:@"Connect" with:^{
-		NSXMLElement *flow = WKDNewElement(self->_document, WKDBpmnNamespace, @"sequenceFlow");
-		WKDSetAttribute(flow, @"id", flowId);
-		WKDSetAttribute(flow, @"sourceRef", sourceId);
-		WKDSetAttribute(flow, @"targetRef", targetId);
-		[(target.parent != nil ? target.parent.element : self->_diagram.process) addChild:flow];
-		[self addReference:@"outgoing" to:flowId in:source.element];
-		[self addReference:@"incoming" to:flowId in:target.element];
-		[self setWaypoints:[WKDEditor routeFrom:source.bounds to:target.bounds fromBoundary:source.host != nil
-		                            fromGateway:source.kind == WKDShapeGateway
-		                             toActivity:target.kind == WKDShapeActivity]
-		                of:flowId];
+		WKDModel *model = self->_model;
+		WKDFlow *flow = [model makeFlowFrom:[model nodeWithId:sourceId] to:[model nodeWithId:targetId] elementId:flowId
+		                        association:NO];
+		flow.waypoints = [WKDEditor routeFrom:source.bounds to:target.bounds fromBoundary:source.host != nil
+		                          fromGateway:source.kind == WKDShapeGateway
+		                           toActivity:target.kind == WKDShapeActivity];
+		[model write];
 	}];
 	return flowId;
 }
@@ -1138,38 +1128,14 @@ WKDOnEdge(NSRect host, NSPoint point)
 		if ([bands count] > 0) {
 			[self removeBands:bands];
 		}
+		WKDModel *model = self->_model;
 		for (NSString *flowId in flows) {
-			WKDConnection *connection = [self->_diagram connectionWithId:flowId];
-			for (WKDShape *end in @[ connection.source, connection.target ]) {
-				if ([nodes containsObject:end.elementId]) {
-					continue;
-				}
-				for (NSXMLElement *reference in WKDChildren(end.element, WKDBpmnNamespace, nil)) {
-					NSString *local = [reference localName];
-					if (([local isEqualToString:@"incoming"] || [local isEqualToString:@"outgoing"])
-					    && [[reference stringValue] isEqualToString:flowId]) {
-						[reference detach];
-					}
-				}
-				if ([WKDAttribute(end.element, @"default") isEqualToString:flowId]) {
-					WKDSetAttribute(end.element, @"default", nil);
-				}
-			}
-			[connection.element detach];
+			[model removeFlow:[model flowWithId:flowId]];
 		}
 		for (NSString *nodeId in nodes) {
-			[[self->_diagram shapeWithId:nodeId].element detach];
+			[model removeNode:[model nodeWithId:nodeId]];
 		}
-		NSMutableSet *gone = [NSMutableSet setWithSet:nodes];
-		[gone unionSet:flows];
-		NSArray *planes = WKDDescendants([self->_document rootElement], WKDBpmnDINamespace, @"BPMNPlane");
-		for (NSXMLElement *plane in planes) {
-			for (NSXMLElement *child in WKDChildren(plane, WKDBpmnDINamespace, nil)) {
-				if ([gone containsObject:WKDAttribute(child, @"bpmnElement") ?: @""]) {
-					[child detach];
-				}
-			}
-		}
+		[model write];
 	}];
 }
 
