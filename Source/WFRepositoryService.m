@@ -8,6 +8,7 @@
 #import "WFTimers.h"
 #import "WFProcessEngine+Internal.h"
 #import "WFCommandContext.h"
+#import "WFDeployment+Internal.h"
 
 static NSError *
 WFRepositoryError(WFErrorCode code, NSString *message)
@@ -15,18 +16,6 @@ WFRepositoryError(WFErrorCode code, NSString *message)
 	return [NSError errorWithDomain:WFErrorDomain
 	                           code:code
 	                       userInfo:@{ NSLocalizedDescriptionKey: message }];
-}
-
-static BOOL
-WFIsBpmnResource(NSString *name)
-{
-	return [name hasSuffix:@".bpmn"] || [name hasSuffix:@".bpmn20.xml"];
-}
-
-static BOOL
-WFIsDmnResource(NSString *name)
-{
-	return [name hasSuffix:@".dmn"] || [name hasSuffix:@".dmn11.xml"];
 }
 
 @interface WFDeployment ()
@@ -39,23 +28,6 @@ WFIsDmnResource(NSString *name)
 
 @implementation WFDeployment
 @end
-
-/* The forms of a definition's nodes, and of the nodes of the
- * subprocesses in it, by activity id. */
-static NSDictionary<NSString *, WFFormDefinition *> *
-WFFormsOf(WFProcessDefinition *definition)
-{
-	NSMutableDictionary *forms = [NSMutableDictionary dictionary];
-	for (WFFlowNode *node in [definition.nodes allValues]) {
-		if (node.form != nil) {
-			[forms setObject:node.form forKey:node.elementId];
-		}
-		if ([node isKindOfClass:[WFSubProcess class]]) {
-			[forms addEntriesFromDictionary:WFFormsOf([(WFSubProcess *)node innerDefinition])];
-		}
-	}
-	return forms;
-}
 
 @implementation WFRepositoryService
 {
@@ -412,6 +384,15 @@ WFFormsOf(WFProcessDefinition *definition)
 	if (parsedDecisions == nil) {
 		return nil;
 	}
+	for (NSArray *pair in parsed) {
+		NSError *refusal = [WFDeploymentRefusals([pair objectAtIndex:0], resources) firstObject];
+		if (refusal != nil) {
+			if (error != NULL) {
+				*error = refusal;
+			}
+			return nil;
+		}
+	}
 	NSMutableArray *decisionRecords = [NSMutableArray array];
 	for (NSArray *pair in parsedDecisions) {
 		WFDecisionDefinition *decision = [pair objectAtIndex:0];
@@ -450,12 +431,8 @@ WFFormsOf(WFProcessDefinition *definition)
 				NSXMLDocument *document = bytes != nil
 					? [[NSXMLDocument alloc] initWithData:bytes options:0 error:NULL] : nil;
 				if (document == nil) {
-					if (error != NULL) {
-						*error = WFRepositoryError(WFErrorInvalidDefinition, [NSString stringWithFormat:
-							@"%@: form %@ is %@ the deployment", activityId, resource,
-							bytes == nil ? @"not in" : @"not an XML document in"]);
-					}
-					return nil;
+					/* Refused above. */
+					continue;
 				}
 				/* XML, not the HTML Apple's takes an <html> root for, whose
 				 * element names it writes in lower case: the instance's too. */
@@ -481,13 +458,8 @@ WFFormsOf(WFProcessDefinition *definition)
 			NSDate *due = nil;
 			NSString *repeat = nil;
 			NSError *timerError = nil;
-			if (!WFTimerSchedule(start.timer, @{}, [NSDate date], &due, &repeat, &timerError)) {
-				if (error != NULL) {
-					*error = WFRepositoryError(WFErrorInvalidDefinition, [NSString stringWithFormat:
-						@"%@: %@", start.elementId, [timerError localizedDescription]]);
-				}
-				return nil;
-			}
+			/* Refused above when it cannot be scheduled. */
+			WFTimerSchedule(start.timer, @{}, [NSDate date], &due, &repeat, &timerError);
 			record.timerStartActivityId = start.elementId;
 			record.timerStartDue = due;
 			record.timerStartRepeat = repeat;

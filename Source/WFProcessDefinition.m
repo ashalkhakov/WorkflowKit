@@ -245,8 +245,14 @@
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WFSequenceFlow *> *flows;
 @property (nonatomic, strong) NSMutableArray<NSString *> *flowOrder;
 @property (nonatomic) NSUInteger flowSerial;
-/* The first thing added wrongly, which -build: reports. */
+/* The first thing added wrongly, which -build: reports, and every one. */
 @property (nonatomic, strong) NSError *firstError;
+@property (nonatomic, strong) NSMutableArray<NSError *> *addedErrors;
+/* While a build collects every problem: where they go, and the elements
+ * the reader could not read, whose consequences are not problems too. */
+@property (nonatomic, strong) NSMutableArray<NSError *> *problems;
+@property (nonatomic, copy) NSSet<NSString *> *unread;
+@property (nonatomic) BOOL flowsLinked;
 /* Activities compensation boundary events name, made handlers at -build:. */
 @property (nonatomic, strong) NSMutableSet<NSString *> *compensationHandlers;
 @end
@@ -501,9 +507,9 @@
 		[node addExecutionListener:listener];
 	}
 	if (problem != nil) {
-		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain code:WFErrorInvalidDefinition
+		[self noteError:[NSError errorWithDomain:WFErrorDomain code:WFErrorInvalidDefinition
 			userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@: a %@ listener: %@",
-				elementId, [WFListener nameOfEvent:listener.event], problem] }];
+				elementId, [WFListener nameOfEvent:listener.event], problem] }]];
 	}
 	return self;
 }
@@ -740,9 +746,9 @@
 {
 	WFFlowNode *node = [self.nodes objectForKey:elementId];
 	if (![node isKindOfClass:[WFTask class]] || [(WFTask *)node kind] != WFTaskKindUser) {
-		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+		[self noteError:[NSError errorWithDomain:WFErrorDomain
 			code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
-				[NSString stringWithFormat:@"%@: only a user task has an assignment", elementId] }];
+				[NSString stringWithFormat:@"%@: only a user task has an assignment", elementId] }]];
 		return self;
 	}
 	WFTask *task = (WFTask *)node;
@@ -756,10 +762,10 @@
 			? WFAttributeExpression([attributes objectForKey:key], (WFAttributeKind)[kind integerValue], &error)
 			: nil;
 		if (expression == nil) {
-			self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+			[self noteError:[NSError errorWithDomain:WFErrorDomain
 				code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
 					[NSString stringWithFormat:@"%@: %@: %@", elementId, key,
-						kind == nil ? @"not an assignment attribute" : [error localizedDescription]] }];
+						kind == nil ? @"not an assignment attribute" : [error localizedDescription]] }]];
 			continue;
 		}
 		[task setValue:expression forKey:[key isEqualToString:@"assignee"] ? @"assigneeExpression" : key];
@@ -772,10 +778,10 @@
 	NSError *error = nil;
 	WFFeelExpression *expression = WFAttributeExpression(value, WFAttributeKindString, &error);
 	if (expression == nil && value != nil) {
-		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+		[self noteError:[NSError errorWithDomain:WFErrorDomain
 			code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
 				[NSString stringWithFormat:@"%@: parameter %@: %@", elementId, name,
-					[error localizedDescription]] }];
+					[error localizedDescription]] }]];
 	}
 	return expression;
 }
@@ -947,9 +953,9 @@
 		: !start && form.businessKeyFieldId != nil ? @"only a start form sets the business key"
 		: [form problem];
 	if (problem != nil) {
-		self.firstError = self.firstError ?: [NSError errorWithDomain:WFErrorDomain
+		[self noteError:[NSError errorWithDomain:WFErrorDomain
 			code:WFErrorInvalidDefinition userInfo:@{ NSLocalizedDescriptionKey:
-				[NSString stringWithFormat:@"%@: %@", elementId, problem] }];
+				[NSString stringWithFormat:@"%@: %@", elementId, problem] }]];
 		return self;
 	}
 	[node setForm:form];
@@ -977,7 +983,7 @@
 	NSError *error = nil;
 	WFFeelExpression *expression = [WFFeelExpression expressionWithString:text error:&error];
 	if (expression == nil) {
-		self.firstError = self.firstError ?: error;
+		[self noteError:error];
 	}
 	return expression;
 }
@@ -1085,7 +1091,7 @@
 	NSError *error = nil;
 	WFFeelExpression *expression = [WFFeelExpression expressionWithString:condition error:&error];
 	if (expression == nil) {
-		self.firstError = self.firstError ?: error;
+		[self noteError:error];
 		return self;
 	}
 	return [self connect:sourceId to:targetId flowId:nil condition:expression];
@@ -1122,12 +1128,26 @@
 	return self;
 }
 
+- (void)noteError:(NSError *)error
+{
+	if (error == nil) {
+		return;
+	}
+	if (self.addedErrors == nil) {
+		self.addedErrors = [NSMutableArray array];
+	}
+	[self.addedErrors addObject:error];
+	self.firstError = self.firstError ?: error;
+}
+
 - (BOOL)fail:(NSError **)error message:(NSString *)message
 {
+	NSError *problem = [NSError errorWithDomain:WFErrorDomain
+	                                       code:WFErrorInvalidDefinition
+	                                   userInfo:@{ NSLocalizedDescriptionKey: message }];
+	[self.problems addObject:problem];
 	if (error != NULL) {
-		*error = [NSError errorWithDomain:WFErrorDomain
-		                             code:WFErrorInvalidDefinition
-		                         userInfo:@{ NSLocalizedDescriptionKey: message }];
+		*error = problem;
 	}
 	return NO;
 }
@@ -1230,23 +1250,33 @@
 			}
 		}
 	}
-	if (starts != 1) {
-		return [self fail:error message:@"definition needs exactly one start event"];
+	BOOL valid = YES;
+	/* With elements unread, how many starts and ends there are is not known. */
+	if ([self.unread count] == 0) {
+		if (starts != 1) {
+			valid = [self fail:error message:@"definition needs exactly one start event"];
+		}
+		if (ends < 1) {
+			valid = [self fail:error message:@"definition needs at least one end event"];
+		}
 	}
-	if (ends < 1) {
-		return [self fail:error message:@"definition needs at least one end event"];
+	if (!valid && self.problems == nil) {
+		return NO;
 	}
 
 	for (WFSequenceFlow *flow in [self.flows allValues]) {
-		if ([self.nodes objectForKey:flow.sourceId] == nil) {
-			return [self fail:error
-			          message:[NSString stringWithFormat:
-					@"flow %@ source %@ missing", flow.elementId, flow.sourceId]];
+		if ([self.unread containsObject:flow.sourceId] || [self.unread containsObject:flow.targetId]) {
+			continue;
 		}
-		if ([self.nodes objectForKey:flow.targetId] == nil) {
-			return [self fail:error
-			          message:[NSString stringWithFormat:
-					@"flow %@ target %@ missing", flow.elementId, flow.targetId]];
+		if ([self.nodes objectForKey:flow.sourceId] == nil) {
+			valid = [self fail:error message:[NSString stringWithFormat:
+				@"%@: its source %@ is missing", flow.elementId, flow.sourceId]];
+		} else if ([self.nodes objectForKey:flow.targetId] == nil) {
+			valid = [self fail:error message:[NSString stringWithFormat:
+				@"%@: its target %@ is missing", flow.elementId, flow.targetId]];
+		}
+		if (!valid && self.problems == nil) {
+			return NO;
 		}
 	}
 
@@ -1256,166 +1286,209 @@
 		WFEvent *event = [node isKindOfClass:[WFEvent class]] ? (WFEvent *)node : nil;
 		if (event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateCatch) {
 			if ([event.linkName length] == 0 || [linkCatches objectForKey:event.linkName] != nil) {
-				return [self fail:error message:[NSString stringWithFormat:
+				valid = [self fail:error message:[NSString stringWithFormat:
 					@"%@: a link catch event needs a name no other one in its scope has", node.elementId]];
+				if (self.problems == nil) {
+					return NO;
+				}
+				continue;
 			}
 			[linkCatches setObject:event forKey:event.linkName];
 		}
 	}
 
+	/* Each node's first problem, and on to the next when collecting. */
 	for (WFFlowNode *node in [self.nodes allValues]) {
-		WFEvent *event = [node isKindOfClass:[WFEvent class]] ? (WFEvent *)node : nil;
-		BOOL isLinkCatch = event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateCatch;
-		BOOL isLinkThrow = event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateThrow;
-		if (isLinkThrow && [linkCatches objectForKey:event.linkName ?: @""] == nil) {
-			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: no link catch event in its scope is named \"%@\"", node.elementId, event.linkName]];
+		if ([self.unread containsObject:node.elementId]) {
+			continue;
 		}
-		if ((isLinkThrow && [node.outgoingFlowIds count] > 0) || (isLinkCatch && [node.incomingFlowIds count] > 0)) {
-			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: a link throw event has no outgoing flow, and a link catch event no incoming one",
-				node.elementId]];
+		if (![self validateNode:node linkCatches:linkCatches error:error]) {
+			valid = NO;
+			if (self.problems == nil) {
+				return NO;
+			}
 		}
-		if (event.trigger == WFEventTriggerConditional && event.condition == nil) {
-			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: a conditional event needs its condition", node.elementId]];
-		}
-		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node delegate] != nil
-		    && [(WFTask *)node kind] != WFTaskKindService && [(WFTask *)node kind] != WFTaskKindSend
-		    && [(WFTask *)node kind] != WFTaskKindBusinessRule) {
-			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: only service, send and business rule tasks run a delegate", node.elementId]];
-		}
-		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindBusinessRule
-		    && [[(WFTask *)node decisionRef] length] == 0 && [[(WFTask *)node actionKey] length] == 0
-		    && [(WFTask *)node delegate] == nil) {
-			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: a business rule task needs a decision or an external task's topic", node.elementId]];
-		}
-		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node decisionBinding] == WFCalledElementBindingVersion
-		    && [(WFTask *)node decisionVersion] < 1) {
-			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: a decision bound by version needs the version", node.elementId]];
-		}
-		if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindReceive
-		    && [[(WFTask *)node messageName] length] == 0) {
-			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: a receive task needs its message", node.elementId]];
-		}
-		BOOL isStart = [node isKindOfClass:[WFEvent class]]
-			&& [(WFEvent *)node kind] == WFEventKindStart;
-		BOOL isEnd = [node isKindOfClass:[WFEvent class]]
-			&& [(WFEvent *)node kind] == WFEventKindEnd;
-		BOOL isBoundary = [node isKindOfClass:[WFEvent class]]
-			&& [(WFEvent *)node kind] == WFEventKindBoundary;
+	}
+	return valid;
+}
 
-		if ([node isKindOfClass:[WFGateway class]] && node.isAsyncAfter
-		    && [(WFGateway *)node kind] == WFGatewayKindEventBased) {
+- (BOOL)validateNode:(WFFlowNode *)node linkCatches:(NSDictionary *)linkCatches error:(NSError **)error
+{
+	WFEvent *event = [node isKindOfClass:[WFEvent class]] ? (WFEvent *)node : nil;
+	BOOL isLinkCatch = event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateCatch;
+	BOOL isLinkThrow = event.trigger == WFEventTriggerLink && event.kind == WFEventKindIntermediateThrow;
+	if (isLinkThrow && [linkCatches objectForKey:event.linkName ?: @""] == nil) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: no link catch event in its scope is named \"%@\"", node.elementId, event.linkName]];
+	}
+	if ((isLinkThrow && [node.outgoingFlowIds count] > 0) || (isLinkCatch && [node.incomingFlowIds count] > 0)) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: a link throw event has no outgoing flow, and a link catch event no incoming one",
+			node.elementId]];
+	}
+	if (event.trigger == WFEventTriggerConditional && event.condition == nil) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: a conditional event needs its condition", node.elementId]];
+	}
+	if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node delegate] != nil
+	    && [(WFTask *)node kind] != WFTaskKindService && [(WFTask *)node kind] != WFTaskKindSend
+	    && [(WFTask *)node kind] != WFTaskKindBusinessRule) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: only service, send and business rule tasks run a delegate", node.elementId]];
+	}
+	if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindBusinessRule
+	    && [[(WFTask *)node decisionRef] length] == 0 && [[(WFTask *)node actionKey] length] == 0
+	    && [(WFTask *)node delegate] == nil) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: a business rule task needs a decision or an external task's topic", node.elementId]];
+	}
+	if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node decisionBinding] == WFCalledElementBindingVersion
+	    && [(WFTask *)node decisionVersion] < 1) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: a decision bound by version needs the version", node.elementId]];
+	}
+	if ([node isKindOfClass:[WFTask class]] && [(WFTask *)node kind] == WFTaskKindReceive
+	    && [[(WFTask *)node messageName] length] == 0) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: a receive task needs its message", node.elementId]];
+	}
+	BOOL isStart = [node isKindOfClass:[WFEvent class]]
+		&& [(WFEvent *)node kind] == WFEventKindStart;
+	BOOL isEnd = [node isKindOfClass:[WFEvent class]]
+		&& [(WFEvent *)node kind] == WFEventKindEnd;
+	BOOL isBoundary = [node isKindOfClass:[WFEvent class]]
+		&& [(WFEvent *)node kind] == WFEventKindBoundary;
+
+	if ([node isKindOfClass:[WFGateway class]] && node.isAsyncAfter
+	    && [(WFGateway *)node kind] == WFGatewayKindEventBased) {
+		return [self fail:error
+		          message:[NSString stringWithFormat:
+				@"%@: an event-based gateway waits for its events; asyncAfter has nothing to defer",
+				node.elementId]];
+	}
+
+	if ([node isKindOfClass:[WFCallActivity class]]
+	    && ![self validateCall:(WFCallActivity *)node error:error]) {
+		return NO;
+	}
+	if (node.multiInstance != nil && ![self validateMultiInstance:node error:error]) {
+		return NO;
+	}
+	if (([node.inputParameters count] > 0 || [node.outputParameters count] > 0)
+	    && ![node isKindOfClass:[WFTask class]] && ![node isKindOfClass:[WFSubProcess class]]
+	    && ![node isKindOfClass:[WFCallActivity class]]) {
+		return [self fail:error message:[NSString stringWithFormat:
+			@"%@: only tasks, subprocesses and call activities map inputs and outputs", node.elementId]];
+	}
+	if ([node isKindOfClass:[WFSubProcess class]] && ![self validateSubProcess:(WFSubProcess *)node error:error]) {
+		return NO;
+	}
+	if ([node isKindOfClass:[WFSubProcess class]] && [(WFSubProcess *)node isTriggeredByEvent]) {
+		/* Checked above; it has no flows to check. */
+		return YES;
+	}
+
+	if ([node isKindOfClass:[WFEvent class]] && [(WFEvent *)node trigger] == WFEventTriggerTimer
+	    && [(WFEvent *)node timer] == nil) {
+		return [self fail:error message:[NSString stringWithFormat:@"%@: a timer event needs its timer",
+			node.elementId]];
+	}
+
+	if (node.retryTimeCycle != nil) {
+		NSInteger attempts = 0;
+		NSArray *delays = nil;
+		if (!WFParseRetryCycle(node.retryTimeCycle, &attempts, &delays)) {
 			return [self fail:error
 			          message:[NSString stringWithFormat:
-					@"%@: an event-based gateway waits for its events; asyncAfter has nothing to defer",
+					@"%@: retry time cycle \"%@\" is neither R<n>/<duration> nor a list of durations",
+					node.elementId, node.retryTimeCycle]];
+		}
+	}
+
+	if (isBoundary) {
+		WFEvent *boundary = (WFEvent *)node;
+		WFFlowNode *host = [self.nodes objectForKey:boundary.attachedToId];
+		if (![host isKindOfClass:[WFTask class]] && ![host isKindOfClass:[WFSubProcess class]]
+		    && ![host isKindOfClass:[WFCallActivity class]]) {
+			return [self fail:error
+			          message:[NSString stringWithFormat:
+					@"%@: a boundary event needs a task, subprocess or call activity host",
 					node.elementId]];
 		}
+		if (boundary.trigger == WFEventTriggerCompensation) {
+			/* Its handler hangs off an association, not a flow. */
+			WFFlowNode *handler = [self.nodes objectForKey:boundary.compensationHandlerId];
+			if (handler == nil || [node.outgoingFlowIds count] > 0) {
+				return [self fail:error message:[NSString stringWithFormat:
+					@"%@: a compensation boundary event needs a handler in its scope, and no outgoing flow",
+					node.elementId]];
+			}
+			return YES;
+		}
+		if ([node.outgoingFlowIds count] == 0) {
+			return [self fail:error
+			          message:[NSString stringWithFormat:
+					@"%@: a boundary event needs an outgoing flow", node.elementId]];
+		}
+		return YES;
+	}
 
-		if ([node isKindOfClass:[WFCallActivity class]]
-		    && ![self validateCall:(WFCallActivity *)node error:error]) {
-			return NO;
-		}
-		if (node.multiInstance != nil && ![self validateMultiInstance:node error:error]) {
-			return NO;
-		}
-		if (([node.inputParameters count] > 0 || [node.outputParameters count] > 0)
-		    && ![node isKindOfClass:[WFTask class]] && ![node isKindOfClass:[WFSubProcess class]]
-		    && ![node isKindOfClass:[WFCallActivity class]]) {
+	if (node.isForCompensation) {
+		if ([node.incomingFlowIds count] > 0 || [node.outgoingFlowIds count] > 0) {
 			return [self fail:error message:[NSString stringWithFormat:
-				@"%@: only tasks, subprocesses and call activities map inputs and outputs", node.elementId]];
+				@"%@: a compensation handler has no sequence flows", node.elementId]];
 		}
-		if ([node isKindOfClass:[WFSubProcess class]] && ![self validateSubProcess:(WFSubProcess *)node error:error]) {
-			return NO;
-		}
-		if ([node isKindOfClass:[WFSubProcess class]] && [(WFSubProcess *)node isTriggeredByEvent]) {
-			/* Checked above; it has no flows to check. */
-			continue;
-		}
+		return YES;
+	}
 
-		if ([node isKindOfClass:[WFEvent class]] && [(WFEvent *)node trigger] == WFEventTriggerTimer
-		    && [(WFEvent *)node timer] == nil) {
-			return [self fail:error message:[NSString stringWithFormat:@"%@: a timer event needs its timer",
-				node.elementId]];
+	if ([node isKindOfClass:[WFEvent class]] && [(WFEvent *)node trigger] == WFEventTriggerCompensation) {
+		NSString *target = [(WFEvent *)node activityRef];
+		if (target != nil && [self.nodes objectForKey:target] == nil) {
+			return [self fail:error message:[NSString stringWithFormat:
+				@"%@: it compensates %@, which is not in its scope", node.elementId, target]];
 		}
+	}
 
-		if (node.retryTimeCycle != nil) {
-			NSInteger attempts = 0;
-			NSArray *delays = nil;
-			if (!WFParseRetryCycle(node.retryTimeCycle, &attempts, &delays)) {
-				return [self fail:error
-				          message:[NSString stringWithFormat:
-						@"%@: retry time cycle \"%@\" is neither R<n>/<duration> nor a list of durations",
-						node.elementId, node.retryTimeCycle]];
-			}
-		}
-
-		if (isBoundary) {
-			WFEvent *boundary = (WFEvent *)node;
-			WFFlowNode *host = [self.nodes objectForKey:boundary.attachedToId];
-			if (![host isKindOfClass:[WFTask class]] && ![host isKindOfClass:[WFSubProcess class]]
-			    && ![host isKindOfClass:[WFCallActivity class]]) {
-				return [self fail:error
-				          message:[NSString stringWithFormat:
-						@"boundary %@ needs a task, subprocess or call activity host",
-						node.elementId]];
-			}
-			if (boundary.trigger == WFEventTriggerCompensation) {
-				/* Its handler hangs off an association, not a flow. */
-				WFFlowNode *handler = [self.nodes objectForKey:boundary.compensationHandlerId];
-				if (handler == nil || [node.outgoingFlowIds count] > 0) {
-					return [self fail:error message:[NSString stringWithFormat:
-						@"compensation boundary %@ needs a handler in its scope, and no outgoing flow",
-						node.elementId]];
-				}
-				continue;
-			}
-			if ([node.outgoingFlowIds count] == 0) {
-				return [self fail:error
-				          message:[NSString stringWithFormat:
-						@"boundary %@ has no outgoing flow", node.elementId]];
-			}
-			continue;
-		}
-
-		if (node.isForCompensation) {
-			if ([node.incomingFlowIds count] > 0 || [node.outgoingFlowIds count] > 0) {
-				return [self fail:error message:[NSString stringWithFormat:
-					@"compensation handler %@ has no sequence flows", node.elementId]];
-			}
-			continue;
-		}
-
-		if ([node isKindOfClass:[WFEvent class]] && [(WFEvent *)node trigger] == WFEventTriggerCompensation) {
-			NSString *target = [(WFEvent *)node activityRef];
-			if (target != nil && [self.nodes objectForKey:target] == nil) {
-				return [self fail:error message:[NSString stringWithFormat:
-					@"%@ compensates %@, which is not in its scope", node.elementId, target]];
-			}
-		}
-
-		if (!isStart && !isLinkCatch && [node.incomingFlowIds count] == 0) {
-			return [self fail:error
-			          message:[NSString stringWithFormat:
-					@"node %@ has no incoming flow", node.elementId]];
-		}
-		if (!isEnd && !isLinkThrow && [node.outgoingFlowIds count] == 0) {
-			return [self fail:error
-			          message:[NSString stringWithFormat:
-					@"node %@ has no outgoing flow", node.elementId]];
-		}
+	if (!isStart && !isLinkCatch && [node.incomingFlowIds count] == 0) {
+		return [self fail:error
+		          message:[NSString stringWithFormat:
+				@"%@: no incoming flow", node.elementId]];
+	}
+	if (!isEnd && !isLinkThrow && [node.outgoingFlowIds count] == 0) {
+		return [self fail:error
+		          message:[NSString stringWithFormat:
+				@"%@: no outgoing flow", node.elementId]];
 	}
 	return YES;
 }
 
+- (WFProcessDefinition *)buildCollecting:(NSMutableArray<NSError *> *)problems unread:(NSSet<NSString *> *)unread
+{
+	NSUInteger before = [problems count];
+	self.problems = problems;
+	self.unread = unread;
+	for (WFSequenceFlow *flow in [self.flows allValues]) {
+		[[self.nodes objectForKey:flow.sourceId] addOutgoingFlowId:flow.elementId];
+		[[self.nodes objectForKey:flow.targetId] addIncomingFlowId:flow.elementId];
+	}
+	[problems addObjectsFromArray:self.addedErrors ?: @[]];
+	for (NSString *handlerId in self.compensationHandlers) {
+		[[self.nodes objectForKey:handlerId] setForCompensation:YES];
+	}
+	[self validate:NULL];
+	self.problems = nil;
+	self.unread = nil;
+	if ([problems count] > before) {
+		return nil;
+	}
+	/* Built as -build: does, from here on: the flows are linked already. */
+	self.flowsLinked = YES;
+	return [self build:NULL];
+}
+
 - (WFProcessDefinition *)build:(NSError **)error
 {
-	for (WFSequenceFlow *flow in [self.flows allValues]) {
+	for (WFSequenceFlow *flow in self.flowsLinked ? @[] : [self.flows allValues]) {
 		WFFlowNode *source = [self.nodes objectForKey:flow.sourceId];
 		WFFlowNode *target = [self.nodes objectForKey:flow.targetId];
 		[source addOutgoingFlowId:flow.elementId];

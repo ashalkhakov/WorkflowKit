@@ -13,6 +13,7 @@ WorkflowKitTests_OBJC_FILES = \
 	WFFeelTests.m \
 	WFExpressionTextTests.m \
 	WFDmnTests.m \
+	WFDeploymentCheckerTests.m \
 	WFInMemoryTests.m \
 	WFSQLiteTests.m
 

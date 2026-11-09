@@ -35,6 +35,7 @@ WorkflowKit_OBJC_FILES = \
 	Source/WFHandlers.m \
 	Source/WFStore.m \
 	Source/WFRepositoryService.m \
+	Source/WFDeploymentChecker.m \
 	Source/WFDuration.m \
 	Source/WFBpmn.m \
 	Source/WFDmn.m \
@@ -61,6 +62,7 @@ WorkflowKit_HEADER_FILES = \
 	WFHandlers.h \
 	WFStore.h \
 	WFRepositoryService.h \
+	WFDeploymentChecker.h \
 	WFRuntimeService.h \
 	WFIdentity.h \
 	WFTaskQuery.h \
