@@ -142,4 +142,8 @@
 /* WKDBpmnWriter.m: the model's changes written into the carrier. */
 @interface WKDModel (WKDWriting)
 - (void)writeChanges;
+/* Only the element's place in the diagram -- a shape's bounds, an edge's
+ * waypoints, a label's bounds -- written now, the rest of it left to the
+ * XML: for an operation that edits the rest of the XML itself. */
+- (void)writeGeometryOf:(WKDModelElement *)element;
 @end

@@ -234,61 +234,82 @@ WKDIdPrefix(NSString *type)
 	return element;
 }
 
+/* The model's element of the id. One an operation has just made in the XML
+ * is read into the model first, until every operation makes its elements
+ * in the model. */
+- (WKDModelElement *)modelElement:(NSString *)elementId
+{
+	WKDModelElement *element = [_model nodeWithId:elementId] ?: [_model flowWithId:elementId]
+		?: (WKDModelElement *)[_model laneWithId:elementId];
+	if (element == nil && elementId != nil) {
+		[_model readDocumentAgain:_document];
+		element = [_model nodeWithId:elementId] ?: [_model flowWithId:elementId]
+			?: (WKDModelElement *)[_model laneWithId:elementId];
+	}
+	return element;
+}
+
+/* The geometry is the model's: set there and written at once, so what the
+ * rest of a change reads of the XML is what it set. */
 - (void)setBounds:(NSRect)bounds of:(NSString *)elementId
 {
-	NSXMLElement *shape = [self diagramElement:@"BPMNShape" of:elementId create:YES];
-	WKDShape *node = [_diagram shapeWithId:elementId];
-	if (node != nil && WKDIsContainerType(node.type)) {
-		WKDSetAttribute(shape, @"isExpanded", @"true");
+	WKDModelElement *element = [self modelElement:elementId];
+	if (element == nil) {
+		/* An element not yet in the document (a lane being made): its shape
+		 * by its id, as before the model. */
+		NSXMLElement *shape = [self diagramElement:@"BPMNShape" of:elementId create:YES];
+		NSXMLElement *box = WKDChild(shape, WKDDCNamespace, @"Bounds");
+		if (box == nil) {
+			box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
+			[shape insertChild:box atIndex:0];
+		}
+		WKDSetAttribute(box, @"x", WKDFormat(bounds.origin.x));
+		WKDSetAttribute(box, @"y", WKDFormat(bounds.origin.y));
+		WKDSetAttribute(box, @"width", WKDFormat(bounds.size.width));
+		WKDSetAttribute(box, @"height", WKDFormat(bounds.size.height));
+		return;
 	}
-	NSXMLElement *box = WKDChild(shape, WKDDCNamespace, @"Bounds");
-	if (box == nil) {
-		box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
-		[shape insertChild:box atIndex:0];
+	if ([element isKindOfClass:[WKDFlow class]]) {
+		return;
 	}
-	WKDSetAttribute(box, @"x", WKDFormat(bounds.origin.x));
-	WKDSetAttribute(box, @"y", WKDFormat(bounds.origin.y));
-	WKDSetAttribute(box, @"width", WKDFormat(bounds.size.width));
-	WKDSetAttribute(box, @"height", WKDFormat(bounds.size.height));
+	[_model.journal willChange:element];
+	if ([element isKindOfClass:[WKDNode class]]) {
+		((WKDNode *)element).bounds = bounds;
+		((WKDNode *)element).hasBounds = YES;
+	} else {
+		((WKDSwimlane *)element).bounds = bounds;
+		((WKDSwimlane *)element).hasBounds = YES;
+	}
+	[_model writeGeometryOf:element];
 }
 
 - (void)setWaypoints:(NSArray<NSValue *> *)points of:(NSString *)flowId
 {
-	NSXMLElement *edge = [self diagramElement:@"BPMNEdge" of:flowId create:YES];
-	for (NSXMLElement *old in WKDChildren(edge, WKDDINamespace, @"waypoint")) {
-		[old detach];
+	WKDFlow *flow = (WKDFlow *)[self modelElement:flowId];
+	if (![flow isKindOfClass:[WKDFlow class]]) {
+		return;
 	}
-	NSUInteger index = 0;
-	for (NSValue *value in points) {
-		NSPoint point = [value pointValue];
-		NSXMLElement *waypoint = WKDNewElement(_document, WKDDINamespace, @"waypoint");
-		WKDSetAttribute(waypoint, @"x", WKDFormat(point.x));
-		WKDSetAttribute(waypoint, @"y", WKDFormat(point.y));
-		[edge insertChild:waypoint atIndex:index++];
-	}
+	[_model.journal willChange:flow];
+	flow.waypoints = points;
+	[_model writeGeometryOf:flow];
 }
 
 - (void)setLabelBounds:(NSRect)bounds of:(NSString *)elementId
 {
-	NSString *local = [_diagram connectionWithId:elementId] != nil ? @"BPMNEdge" : @"BPMNShape";
-	NSXMLElement *owner = [self diagramElement:local of:elementId create:NO];
-	if (owner == nil) {
+	WKDModelElement *element = [self modelElement:elementId];
+	WKDFlow *flow = [element isKindOfClass:[WKDFlow class]] ? (WKDFlow *)element : nil;
+	WKDNode *node = [element isKindOfClass:[WKDNode class]] ? (WKDNode *)element : nil;
+	/* A label goes on a shape or an edge that is there. */
+	if ((flow == nil && node == nil) || (flow ?: (WKDModelElement *)node).diagramElement == nil) {
 		return;
 	}
-	NSXMLElement *label = WKDChild(owner, WKDBpmnDINamespace, @"BPMNLabel");
-	if (label == nil) {
-		label = WKDNewElement(_document, WKDBpmnDINamespace, @"BPMNLabel");
-		[owner addChild:label];
+	[_model.journal willChange:element];
+	if (flow != nil) {
+		flow.labelBounds = bounds;
+	} else {
+		node.labelBounds = bounds;
 	}
-	NSXMLElement *box = WKDChild(label, WKDDCNamespace, @"Bounds");
-	if (box == nil) {
-		box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
-		[label addChild:box];
-	}
-	WKDSetAttribute(box, @"x", WKDFormat(bounds.origin.x));
-	WKDSetAttribute(box, @"y", WKDFormat(bounds.origin.y));
-	WKDSetAttribute(box, @"width", WKDFormat(bounds.size.width));
-	WKDSetAttribute(box, @"height", WKDFormat(bounds.size.height));
+	[_model writeGeometryOf:element];
 }
 
 static NSValue *

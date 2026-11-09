@@ -65,13 +65,17 @@ WKDWriteAttribute(WKDJournal *journal, NSXMLElement *element, NSString *name, NS
 	WKDLogAttribute(journal, element, name, value);
 }
 
-static void
+/* YES when anything was written. */
+static BOOL
 WKDWriteBounds(WKDJournal *journal, NSXMLElement *box, NSRect rect)
 {
+	BOOL same = WKDSameNumber(box, @"x", rect.origin.x) && WKDSameNumber(box, @"y", rect.origin.y)
+		&& WKDSameNumber(box, @"width", rect.size.width) && WKDSameNumber(box, @"height", rect.size.height);
 	WKDWriteNumber(journal, box, @"x", rect.origin.x);
 	WKDWriteNumber(journal, box, @"y", rect.origin.y);
 	WKDWriteNumber(journal, box, @"width", rect.size.width);
 	WKDWriteNumber(journal, box, @"height", rect.size.height);
+	return !same;
 }
 
 /* The texts of the element's children of that local name, trimmed. */
@@ -382,6 +386,11 @@ WKDByDiagramIndex(id a, id b, void *context)
 	WKDWriteAttribute(self.journal, element, @"name", flow.name);
 	WKDWriteAttribute(self.journal, element, @"sourceRef", flow.source.elementId);
 	WKDWriteAttribute(self.journal, element, @"targetRef", flow.target.elementId);
+	[self writeEdgeOf:flow];
+}
+
+- (void)writeEdgeOf:(WKDFlow *)flow
+{
 	if ([flow.waypoints count] < 2 && NSIsEmptyRect(flow.labelBounds)) {
 		return;
 	}
@@ -447,6 +456,19 @@ WKDByDiagramIndex(id a, id b, void *context)
 
 #pragma mark The diagram
 
+- (void)writeGeometryOf:(WKDModelElement *)element
+{
+	if ([element isKindOfClass:[WKDNode class]]) {
+		WKDNode *node = (WKDNode *)element;
+		[self writeShapeOf:node bounds:node.bounds hasBounds:node.hasBounds labelBounds:node.labelBounds];
+	} else if ([element isKindOfClass:[WKDSwimlane class]]) {
+		WKDSwimlane *lane = (WKDSwimlane *)element;
+		[self writeShapeOf:lane bounds:lane.bounds hasBounds:lane.hasBounds labelBounds:NSZeroRect];
+	} else if ([element isKindOfClass:[WKDFlow class]]) {
+		[self writeEdgeOf:(WKDFlow *)element];
+	}
+}
+
 - (void)writeShapeOf:(WKDModelElement *)element bounds:(NSRect)bounds hasBounds:(BOOL)hasBounds labelBounds:(NSRect)label
 {
 	if (!hasBounds) {
@@ -461,7 +483,12 @@ WKDByDiagramIndex(id a, id b, void *context)
 		box = WKDNewElement(self.document, WKDDCNamespace, @"Bounds");
 		WKDLogInsert(self.journal, shape, box, 0);
 	}
-	WKDWriteBounds(self.journal, box, bounds);
+	/* A container's shape is drawn expanded, as the editor has always
+	 * written it whenever it placed one. */
+	if (WKDWriteBounds(self.journal, box, bounds) && [element isKindOfClass:[WKDNode class]]
+	    && WKDIsContainerType(((WKDNode *)element).type)) {
+		WKDWriteAttribute(self.journal, shape, @"isExpanded", @"true");
+	}
 	[self writeLabelBounds:label of:shape];
 }
 
@@ -485,15 +512,24 @@ WKDByDiagramIndex(id a, id b, void *context)
 	WKDWriteBounds(self.journal, box, rect);
 }
 
-/* A BPMNShape or BPMNEdge for the element, at the end of the plane; nil
- * when the document has no diagram. */
+/* A BPMNShape or BPMNEdge for the element, at the end of the plane, which
+ * is made when the document has no diagram. */
 - (NSXMLElement *)newDiagramElement:(NSString *)local for:(WKDModelElement *)element
 {
 	if (self.plane == nil) {
-		return nil;
+		NSString *processId = WKDAttribute(self.process, @"id");
+		NSXMLElement *diagram = WKDNewElement(self.document, WKDBpmnDINamespace, @"BPMNDiagram");
+		WKDSetAttribute(diagram, @"id", [NSString stringWithFormat:@"BPMNDiagram_%@", processId]);
+		NSXMLElement *plane = WKDNewElement(self.document, WKDBpmnDINamespace, @"BPMNPlane");
+		WKDSetAttribute(plane, @"id", [NSString stringWithFormat:@"BPMNPlane_%@", processId]);
+		WKDSetAttribute(plane, @"bpmnElement", processId);
+		[diagram addChild:plane];
+		WKDLogAdd(self.journal, [self.document rootElement], diagram);
+		self.plane = plane;
 	}
 	NSXMLElement *diagramElement = WKDNewElement(self.document, WKDBpmnDINamespace, local);
-	WKDSetAttribute(diagramElement, @"id", [element.elementId stringByAppendingString:@"_di"]);
+	NSString *suffix = [local isEqualToString:@"BPMNShape"] ? @"Shape" : @"Edge";
+	WKDSetAttribute(diagramElement, @"id", [NSString stringWithFormat:@"%@_%@", element.elementId, suffix]);
 	WKDSetAttribute(diagramElement, @"bpmnElement", element.elementId);
 	WKDLogAdd(self.journal, self.plane, diagramElement);
 	element.diagramElement = diagramElement;
