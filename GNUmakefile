@@ -36,6 +36,7 @@ WorkflowKit_OBJC_FILES = \
 	Source/WFStore.m \
 	Source/WFRepositoryService.m \
 	Source/WFDeploymentChecker.m \
+	Source/WFBuiltDeployment.m \
 	Source/WFDuration.m \
 	Source/WFBpmn.m \
 	Source/WFDmn.m \
@@ -63,6 +64,7 @@ WorkflowKit_HEADER_FILES = \
 	WFStore.h \
 	WFRepositoryService.h \
 	WFDeploymentChecker.h \
+	WFBuiltDeployment.h \
 	WFRuntimeService.h \
 	WFIdentity.h \
 	WFTaskQuery.h \
@@ -165,9 +167,10 @@ export postgresql mysql
 export WORKFLOWKIT_TEST_POSTGRES_URL ?= $(POSTGRES_URL)
 export WORKFLOWKIT_TEST_MYSQL_URL ?= $(MYSQL_URL)
 
-# wf-serve and the apps, over the OData API, and the chooser between the
-# apps that the AppImage and the Windows installer open (Apps/WorkflowLauncher).
-WF_PARTS = $(if $(filter yes,$(odata)),Server Apps/WorkflowDesk Apps/WorkflowDesigner Apps/WorkflowLauncher)
+# wf-build and workflow-deployment.make (Tools/), always; wf-serve and the
+# apps, over the OData API, and the chooser between the apps that the
+# AppImage and the Windows installer open (Apps/WorkflowLauncher).
+WF_PARTS = Tools $(if $(filter yes,$(odata)),Server Apps/WorkflowDesk Apps/WorkflowDesigner Apps/WorkflowLauncher)
 
 after-all::
 	@for part in $(WF_PARTS); do $(MAKE) -C $$part || exit 1; done

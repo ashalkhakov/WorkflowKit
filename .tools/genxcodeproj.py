@@ -39,6 +39,11 @@ ODATA_HEADERS = make_list("GNUmakefile", "WorkflowKitOData_HEADER_FILES")  # X.h
 # wf-serve: HSMain with WorkflowKitOData's application, served by ODataKit's
 # HTTPServerKit framework.
 SERVE = make_list("Server/GNUmakefile", "wf-serve_OBJC_FILES")             # X.m
+# wf-build: a deployment's directory built into a .wfdeployment; and the
+# deployments the tests' bundle carries, built by it as the GNUmakefile's
+# workflow-deployment.make does (paths under Tests/).
+BUILD = make_list("Tools/GNUmakefile", "wf-build_OBJC_FILES")              # X.m
+TEST_DEPLOYMENTS = make_list("Tests/GNUmakefile", "WorkflowKitTests_WORKFLOW_DEPLOYMENTS")
 ODATAKIT = "../ODataKit"
 # What both apps share (Apps/Shared): connecting to a server and its API.
 # Their GNUmakefiles name these files as ../Shared/X.
@@ -127,6 +132,7 @@ cfg_refs = {c: fileref("Xcode/Configs/" + c, c, "text.xcconfig") for c in CONFIG
 odata_refs = {o: fileref(o, os.path.basename(o), ftype(o)) for o in ODATA_SOURCES}
 odata_hdr_refs = {h: fileref("OData/" + h, h, ftype(h)) for h in ODATA_HEADERS + ODATA_OTHERS}
 serve_refs = {s: fileref("Server/" + s, s, ftype(s)) for s in SERVE}
+build_refs = {s: fileref("Tools/" + s, s, ftype(s)) for s in BUILD}
 shared_refs = {f: fileref(SHARED + f, os.path.basename(f), "file.xib" if f.endswith(".xib") else ftype(f))
                for f in SHARED_FILES + SHARED_RESOURCES}
 
@@ -237,6 +243,7 @@ p_odata = product("WorkflowKitOData", ".framework", "wrapper.framework")
 p_tests = product("WorkflowKitTests", ".xctest", "wrapper.cfbundle")
 p_demo = product("PurchaseRequestDemo", "", '"compiled.mach-o.executable"')
 p_serve = product("wf-serve", "", '"compiled.mach-o.executable"')
+p_build = product("wf-build", "", '"compiled.mach-o.executable"')
 p_desk = product("WorkflowDesk", ".app", "wrapper.application")
 p_desk_tests = product("WorkflowDeskTests", ".xctest", "wrapper.cfbundle")
 p_designer = product("WorkflowDesigner", ".app", "wrapper.application")
@@ -289,6 +296,40 @@ o_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowKitOData", "Frameworks"
      buildfile("WorkflowKitOData", otelkit, "OTelKit.framework"),
      buildfile("WorkflowKitOData", foundation, "Foundation.framework"),
      buildfile("WorkflowKitOData", coredata, "CoreData.framework")]))
+
+b_sources = phase("PBXSourcesBuildPhase", "wf-build", "Sources", names(
+    [buildfile("wf-build", build_refs[s], s) for s in BUILD]))
+b_frameworks = phase("PBXFrameworksBuildPhase", "wf-build", "Frameworks", names(
+    [buildfile("wf-build", p_fw, "WorkflowKit.framework"),
+     buildfile("wf-build", foundation, "Foundation.framework"),
+     buildfile("wf-build", coredata, "CoreData.framework")]))
+
+
+# A target's deployments, each directory built by wf-build into its
+# resources; always run, as the GNUmakefile's rule is: a directory's mtime
+# does not change when a file in it does.
+def deployments_phase(target, base, directories):
+    built = ['"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/%s.wfdeployment"'
+             % os.path.splitext(os.path.basename(d.rstrip("/")))[0] for d in directories]
+    script = "".join('"$BUILT_PRODUCTS_DIR/wf-build" -o "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/%s.wfdeployment" '
+                     '"$SRCROOT/%s" || exit 1\n'
+                     % (os.path.splitext(os.path.basename(d.rstrip("/")))[0], os.path.normpath(os.path.join(base, d)))
+                     for d in directories)
+    return add(oid("phase", target, "Build Deployments"), "Build Deployments", [
+        ("isa", "PBXShellScriptBuildPhase"),
+        ("alwaysOutOfDate", "1"),
+        ("buildActionMask", "2147483647"),
+        ("files", []),
+        ("inputPaths", ['"$(SRCROOT)/%s"' % os.path.normpath(os.path.join(base, d)) for d in directories]),
+        ("name", q("Build Deployments")),
+        ("outputPaths", built),
+        ("runOnlyForDeploymentPostprocessing", "0"),
+        ("shellPath", "/bin/sh"),
+        ("shellScript", q(script)),
+    ])
+
+
+t_deployments = deployments_phase("WorkflowKitTests", "Tests", TEST_DEPLOYMENTS)
 
 t_sources = phase("PBXSourcesBuildPhase", "WorkflowKitTests", "Sources", names(
     [buildfile("WorkflowKitTests", test_refs[t], t) for t in TESTS]))
@@ -428,6 +469,7 @@ g_odata = group("OData", "OData", [odata_hdr_refs[h] for h in ODATA_HEADERS + OD
 g_tests = group("Tests", "Tests", [test_refs[t] for t in TESTS + TEST_BODIES], "Tests")
 g_examples = group("Examples", "Examples", [demo_refs[d] for d in DEMO], "Examples")
 g_server = group("Server", "Server", [serve_refs[s] for s in SERVE], "Server")
+g_tools = group("Tools", "Tools", [build_refs[s] for s in BUILD], "Tools")
 g_model = group("Model", "Model", [model_refs[m] for m in MODELS], "Model")
 g_shared_res = group("SharedResources", "Resources", [shared_refs[r] for r in SHARED_RESOURCES], "Resources")
 g_shared = group("Shared", "Shared",
@@ -449,12 +491,12 @@ g_designer = group("WorkflowDesigner", "WorkflowDesigner",
                    "WorkflowDesigner")
 g_apps = group("Apps", "Apps", [g_shared, g_desk, g_designer], "Apps")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
-g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_plugin, p_desk,
+g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_build, p_plugin, p_desk,
                                             p_desk_tests, p_designer, p_designer_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
                                                   httpserverkit, otelkit, xformskit, diagramkit, diagramkitui, sparkle])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
-               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_apps, g_configs,
+               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_tools, g_apps, g_configs,
                 g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
@@ -506,6 +548,10 @@ TESTS_S = {
     "GCC_PREPROCESSOR_DEFINITIONS": '("$(inherited)", "WORKFLOWKIT_ODATA=1")',
     "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData", "$(SRCROOT)/Examples/Plugins")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
+}
+BUILD_S = {
+    "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
+    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
 }
 SERVE_S = {
     "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData")',
@@ -569,6 +615,7 @@ cl_odata = configs("WorkflowKitOData", settings(ODATA_FW), settings(ODATA_FW))
 cl_tests = configs("WorkflowKitTests", settings(TESTS_S), settings(TESTS_S))
 cl_demo = configs("PurchaseRequestDemo", settings(DEMO_S), settings(DEMO_S))
 cl_serve = configs("wf-serve", settings(SERVE_S), settings(SERVE_S))
+cl_build = configs("wf-build", settings(BUILD_S), settings(BUILD_S))
 cl_plugin = configs("ExampleDelegates", settings(PLUGIN_S), settings(PLUGIN_S))
 cl_desk = configs("WorkflowDesk", settings(DESK_S), settings(DESK_S))
 cl_desk_tests = configs("WorkflowDeskTests", settings(DESK_TESTS_S), settings(DESK_TESTS_S))
@@ -614,9 +661,13 @@ t_fw = target("WorkflowKit", cl_fw, [fw_headers, fw_sources, fw_frameworks], [],
 t_odata = target("WorkflowKitOData", cl_odata, [o_headers, o_sources, o_frameworks],
                  [dependency("WorkflowKitOData", t_fw, "WorkflowKit")],
                  p_odata, "com.apple.product-type.framework")
-t_tests = target("WorkflowKitTests", cl_tests, [t_sources, t_frameworks],
+t_build = target("wf-build", cl_build, [b_sources, b_frameworks],
+                 [dependency("wf-build", t_fw, "WorkflowKit")],
+                 p_build, "com.apple.product-type.tool")
+t_tests = target("WorkflowKitTests", cl_tests, [t_sources, t_frameworks, t_deployments],
                  [dependency("WorkflowKitTests", t_fw, "WorkflowKit"),
-                  dependency("WorkflowKitTests", t_odata, "WorkflowKitOData")],
+                  dependency("WorkflowKitTests", t_odata, "WorkflowKitOData"),
+                  dependency("WorkflowKitTests", t_build, "wf-build")],
                  p_tests, "com.apple.product-type.bundle.unit-test")
 t_demo = target("PurchaseRequestDemo", cl_demo, [d_sources, d_frameworks],
                 [dependency("PurchaseRequestDemo", t_fw, "WorkflowKit")],
@@ -650,7 +701,7 @@ add(project_id, "Project object", [
     ("productRefGroup", "%s /* Products */" % g_products),
     ("projectDirPath", '""'),
     ("projectRoot", '""'),
-    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve, t_plugin, t_desk, t_desk_tests, t_designer,
+    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve, t_build, t_plugin, t_desk, t_desk_tests, t_designer,
                        t_designer_tests])),
 ])
 

@@ -14,6 +14,7 @@ WorkflowKitTests_OBJC_FILES = \
 	WFExpressionTextTests.m \
 	WFDmnTests.m \
 	WFDeploymentCheckerTests.m \
+	WFBuiltDeploymentTests.m \
 	WFInMemoryTests.m \
 	WFSQLiteTests.m
 
@@ -58,7 +59,14 @@ WorkflowKitTests_XCDATAMODELD_FILES = ../Model/WorkflowKit.xcdatamodeld
 WorkflowKitTests_NEEDS_GUI = no
 WorkflowKitTests_PRINCIPAL_CLASS = WFTestCase
 
+# Two example processes as an application ships them, built by the
+# wf-build of this tree (Tools/): what WFBuiltDeploymentTests deploys.
+WorkflowKitTests_WORKFLOW_DEPLOYMENTS = ../Examples/Processes/expense-review ../Examples/Processes/loan-application
+WF_BUILD = LD_LIBRARY_PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$$LD_LIBRARY_PATH" \
+	PATH="$(CURDIR)/../$(GNUSTEP_OBJ_DIR):$$PATH" ../Tools/$(GNUSTEP_OBJ_DIR)/wf-build
+
 include $(GNUSTEP_MAKEFILES)/coredata-model.make
+include ../Tools/workflow-deployment.make
 include $(GNUSTEP_MAKEFILES)/bundle.make
 
 XCTEST ?= xctest

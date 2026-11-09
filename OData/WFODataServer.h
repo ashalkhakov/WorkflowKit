@@ -31,8 +31,10 @@
  *   Deployments   a directory, or (in the property list) a list of them:
  *                 each directory in one is a deployment of the files in
  *                 it, by their paths under it -- BPMN, DMN, the XForms
- *                 documents its forms name -- deployed at start, unless
- *                 the latest deployment of that name is the same byte for
+ *                 documents its forms name -- and each .wfdeployment in
+ *                 it, or named itself, a deployment wf-build built
+ *                 (WFBuiltDeployment.h); deployed at start, unless the
+ *                 latest deployment of that name is the same byte for
  *                 byte
  *   Plugins       a directory of bundles, each a WFEnginePlugin's
  *                 (WFProcessEngine.h): delegates, listeners, form handlers.

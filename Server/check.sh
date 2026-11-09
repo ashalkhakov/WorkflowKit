@@ -5,13 +5,17 @@
 # that a retry resolves; then what HTTPServerKit adds: health, readiness,
 # and the requests counted.
 #
-#   ./check.sh path/to/wf-serve
+#   ./check.sh path/to/wf-serve [deployments]
+#
+# The deployments are Examples/deployments, or what is given: make check
+# gives the purchase request as wf-build built it, a .wfdeployment.
 set -eu
 serve=$1
+deployments=${2:-Examples/deployments}
 port=${WF_CHECK_PORT:-18089}
 root="http://127.0.0.1:$port/api"
 log=$(mktemp)
-"$serve" -StoreType InMemory -Deployments Examples/deployments -Port "$port" -DevelopmentUser checker 2>"$log" &
+"$serve" -StoreType InMemory -Deployments "$deployments" -Port "$port" -DevelopmentUser checker 2>"$log" &
 pid=$!
 trap 'kill $pid 2>/dev/null || true; rm -f "$log"' EXIT
 

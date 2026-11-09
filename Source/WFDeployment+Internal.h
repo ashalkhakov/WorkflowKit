@@ -1,5 +1,6 @@
 #import "WFProcessDefinition.h"
 #import "WFBpmn.h"
+#import "WFDeploymentChecker.h"
 
 /* What deploying and checking a deployment share: which resources are
  * what, every problem the reader finds, and what a deployment is refused
@@ -33,4 +34,9 @@ NSError *WFErrorNamingElement(NSError *error);
 /* The executable processes read without a problem, and every problem
  * found in the document, each naming its element where it has one. */
 + (NSArray<WFProcessDefinition *> *)definitionsFromData:(NSData *)data problems:(NSMutableArray<NSError *> *)problems;
+@end
+
+@interface WFProblem (WFMaking)
+/* A problem of the deployment as a whole. */
++ (instancetype)problemWithMessage:(NSString *)message;
 @end

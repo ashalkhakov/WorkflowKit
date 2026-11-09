@@ -49,5 +49,8 @@ run: all
 	$(MAKE) -C ../Examples/Plugins
 	$(GNUSTEP_OBJ_DIR)/wf-serve -Config Examples/server.plist
 
+# The purchase request as an application ships it: built by wf-build.
 check:: all
-	./check.sh $(GNUSTEP_OBJ_DIR)/wf-serve
+	$(MAKE) -C ../Tools
+	../Tools/$(GNUSTEP_OBJ_DIR)/wf-build -o $(GNUSTEP_OBJ_DIR)/purchase.wfdeployment Examples/deployments/purchase
+	./check.sh $(GNUSTEP_OBJ_DIR)/wf-serve $(GNUSTEP_OBJ_DIR)/purchase.wfdeployment

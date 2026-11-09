@@ -109,6 +109,13 @@ WFErrorNamingElement(NSError *error)
 
 @implementation WFProblem
 
++ (instancetype)problemWithMessage:(NSString *)message
+{
+	WFProblem *problem = [[self alloc] init];
+	problem.message = message;
+	return problem;
+}
+
 - (NSString *)description
 {
 	NSMutableString *text = [NSMutableString stringWithString:self.resourceName ?: @"deployment"];
