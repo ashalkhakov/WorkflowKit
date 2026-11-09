@@ -77,18 +77,24 @@ DESK_TESTS = [t for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTest
               if not t.startswith("../")]                                             # Tests/X.m
 DESK_TESTED = [t[3:] for t in make_list(DESK + "Tests/GNUmakefile", "WorkflowDeskTests_OBJC_FILES")
                if t.startswith("../")]                                                # X.m, ../Shared/X.m
-# WorkflowDesigner (Apps/WorkflowDesigner), over the engine's framework, whose
-# BPMN reader checks what it draws.
+# The designer's parts (Apps/WorkflowDesigner, designer.make), over the
+# engine's framework, whose BPMN reader checks what they draw: what UDCode's
+# extension and the parts' tests compile, their XIBs in each bundle.
 DESIGNER = "Apps/WorkflowDesigner/"
-DESIGNER_SOURCES = apple(make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_OBJC_FILES"))
-DESIGNER_RESOURCES = make_list(DESIGNER + "GNUmakefile", "WorkflowDesigner_RESOURCE_FILES")
+DESIGNER_SOURCES = apple(make_list(DESIGNER + "designer.make", "WKD_OBJC_FILES"))             # X.m, ../Shared/X.m
+DESIGNER_RESOURCES = make_list(DESIGNER + "designer.make", "WKD_RESOURCE_FILES")              # Resources/X.xib
 DESIGNER_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "*.h")))
-DESIGNER_TEST_FILES = make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_OBJC_FILES")
-DESIGNER_TESTS = [t for t in DESIGNER_TEST_FILES if not t.startswith("../")]
-DESIGNER_TESTED = apple([t[3:] for t in DESIGNER_TEST_FILES if t.startswith("../")])
-# The parts' XIBs, which the tests load from their own bundle.
-DESIGNER_TEST_RESOURCES = [t[3:] for t in make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_RESOURCE_FILES")]
+DESIGNER_TESTS = [t for t in make_list(DESIGNER + "Tests/GNUmakefile", "WorkflowDesignerTests_OBJC_FILES")
+                  if not t.startswith("$(")]                                                  # Tests/X.m
 DESIGNER_TEST_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, DESIGNER, "Tests", "*.h")))
+# UDCode's BPMN and DMN extension (UDCodeExtension), over UDCode's SDK: its
+# XCFrameworks in .deps/, by the version .github/pins.env names.
+EXTENSION = "UDCodeExtension/"
+EXTENSION_SOURCES = make_list(EXTENSION + "GNUmakefile", "WKU_OBJC_FILES")                    # X.m
+EXTENSION_RESOURCES = ["Resources/LanguageInfo.plist"] + make_list(EXTENSION + "GNUmakefile", "WKU_RESOURCE_FILES")
+EXTENSION_HEADERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, EXTENSION, "*.h")))
+EXTENSION_TESTS = [t for t in make_list(EXTENSION + "Tests/GNUmakefile", "WKUTests_OBJC_FILES")
+                   if not t.startswith("../") and not t.startswith("$(")]                     # Tests/X.m
 ODATA_OTHERS = sorted(os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "OData", "*.h"))
                       if os.path.basename(p) not in ODATA_HEADERS)
 DOCS = ["CLAUDE.md", "WorkflowKit-BPMN-Subset.md", "GNUmakefile"]
@@ -151,10 +157,14 @@ def restype(name):
 
 desk_res_refs = {r: fileref(DESK + r, os.path.basename(r), restype(r)) for r in own(DESK_RESOURCES)}
 desk_test_refs = {t: fileref(DESK + "Tests/" + t, t, ftype(t)) for t in DESK_TESTS}
-designer_refs = {f: fileref(DESIGNER + f, f, ftype(f))
-                 for f in own(DESIGNER_SOURCES) + DESIGNER_HEADERS + ["WorkflowDesigner-Info.plist"]}
+designer_refs = {f: fileref(DESIGNER + f, f, ftype(f)) for f in own(DESIGNER_SOURCES) + DESIGNER_HEADERS}
 designer_res_refs = {r: fileref(DESIGNER + r, os.path.basename(r), restype(r)) for r in own(DESIGNER_RESOURCES)}
 designer_test_refs = {t: fileref(DESIGNER + "Tests/" + t, t, ftype(t)) for t in DESIGNER_TESTS + DESIGNER_TEST_HEADERS}
+extension_refs = {f: fileref(EXTENSION + f, os.path.basename(f), "text.plist.xml" if f.endswith(".plist") else ftype(f))
+                  for f in EXTENSION_SOURCES + EXTENSION_HEADERS + ["package.json", "Resources/Info.plist"]}
+extension_res_refs = {r: fileref(EXTENSION + r, os.path.basename(r), "text.plist.xml" if r.endswith(".plist") else restype(r))
+                      for r in EXTENSION_RESOURCES}
+extension_test_refs = {t: fileref(EXTENSION + "Tests/" + t, t, ftype(t)) for t in EXTENSION_TESTS}
 
 
 
@@ -200,6 +210,9 @@ diagramkit = built_framework("DiagramKit")
 diagramkitui = built_framework("DiagramKitUI")
 # Sparkle, the apps' updates: its XCFramework in .deps/, by the version
 # .github/pins.env names (gnustep-release-actions' scripts/deps.sh apple).
+# UDCode's SDK: what the extension is built against, and its tests run on.
+udcodekit = built_framework("UDCodeKit")
+udpiecetable = built_framework("UDPieceTable")
 sparkle = add(oid("deps", "Sparkle"), "Sparkle.xcframework", [
     ("isa", "PBXFileReference"),
     ("lastKnownFileType", "wrapper.xcframework"),
@@ -248,7 +261,8 @@ p_serve = product("wf-serve", "", '"compiled.mach-o.executable"')
 p_build = product("wf-build", "", '"compiled.mach-o.executable"')
 p_desk = product("WorkflowDesk", ".app", "wrapper.application")
 p_desk_tests = product("WorkflowDeskTests", ".xctest", "wrapper.cfbundle")
-p_designer = product("WorkflowDesigner", ".app", "wrapper.application")
+p_extension = product("WorkflowDesigner", ".bundle", "wrapper.cfbundle")
+p_extension_tests = product("WKUTests", ".xctest", "wrapper.cfbundle")
 p_designer_tests = product("WorkflowDesignerTests", ".xctest", "wrapper.cfbundle")
 p_plugin = product("ExampleDelegates", ".bundle", "wrapper.cfbundle")
 
@@ -417,45 +431,52 @@ wt_sources = phase("PBXSourcesBuildPhase", "WorkflowDeskTests", "Sources", names
 wt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDeskTests", "Frameworks", names(
     [buildfile("WorkflowDeskTests", odatakit, "ODataKit.framework")]))
 
-wg_sources = phase("PBXSourcesBuildPhase", "WorkflowDesigner", "Sources", names(
-    [buildfile("WorkflowDesigner", app_file(designer_refs, f), os.path.basename(f))
-     for f in DESIGNER_SOURCES]))
-wg_resources = phase("PBXResourcesBuildPhase", "WorkflowDesigner", "Resources", names(
-    [buildfile("WorkflowDesigner", app_file(designer_res_refs, r), os.path.basename(r))
-     for r in DESIGNER_RESOURCES]))
-# The server's API, as WorkflowDesk opens it; and XFormsKit's form editor.
-DESIGNER_FRAMEWORKS = [(p_fw, "WorkflowKit.framework"), (odatakit, "ODataKit.framework"),
-                       (odatastore, "ODataIncrementalStore.framework"), (otelkit, "OTelKit.framework"),
-                       (xformskit, "XFormsKit.framework"), (xformsdesignkit, "XFormsDesignKit.framework"),
-                       (diagramkit, "DiagramKit.framework"), (diagramkitui, "DiagramKitUI.framework"),
-                       (sparkle, "Sparkle.xcframework")]
-wg_model = model_phase("WorkflowDesigner")
-wg_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesigner", "Frameworks", names(
-    [buildfile("WorkflowDesigner", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
-    [buildfile("WorkflowDesigner", appkit, "AppKit.framework"),
-     buildfile("WorkflowDesigner", coredata, "CoreData.framework")]))
-wg_embed = add(oid("phase", "WorkflowDesigner", "Embed Frameworks"), "Embed Frameworks", [
-    ("isa", "PBXCopyFilesBuildPhase"),
-    ("buildActionMask", "2147483647"),
-    ("dstPath", '""'),
-    ("dstSubfolderSpec", "10"),
-    ("files", names([buildfile("WorkflowDesigner.embed", ref, name,
-                               "{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }")
-                     for ref, name in DESIGNER_FRAMEWORKS])),
-    ("name", q("Embed Frameworks")),
-    ("runOnlyForDeploymentPostprocessing", "0"),
-])
+# The parts' tests, and the extension, compile the parts' sources and carry
+# their XIBs: the bundles are what -bundleForClass: finds them in.
+DESIGNER_FRAMEWORKS = [(p_fw, "WorkflowKit.framework"), (diagramkit, "DiagramKit.framework"),
+                       (diagramkitui, "DiagramKitUI.framework")]
 gt_sources = phase("PBXSourcesBuildPhase", "WorkflowDesignerTests", "Sources", names(
     [buildfile("WorkflowDesignerTests", designer_test_refs[t], t) for t in DESIGNER_TESTS] +
-    [buildfile("WorkflowDesignerTests", app_file(designer_refs, f), os.path.basename(f)) for f in DESIGNER_TESTED]))
-# The app's sources are compiled into the tests: its frameworks with them.
+    [buildfile("WorkflowDesignerTests", app_file(designer_refs, f), os.path.basename(f)) for f in DESIGNER_SOURCES]))
 gt_frameworks = phase("PBXFrameworksBuildPhase", "WorkflowDesignerTests", "Frameworks", names(
     [buildfile("WorkflowDesignerTests", ref, name) for ref, name in DESIGNER_FRAMEWORKS] +
     [buildfile("WorkflowDesignerTests", appkit, "AppKit.framework"),
      buildfile("WorkflowDesignerTests", coredata, "CoreData.framework")]))
 gt_resources = phase("PBXResourcesBuildPhase", "WorkflowDesignerTests", "Resources", names(
     [buildfile("WorkflowDesignerTests", app_file(designer_res_refs, r), os.path.basename(r))
-     for r in DESIGNER_TEST_RESOURCES]))
+     for r in DESIGNER_RESOURCES]))
+
+# The extension: UDCode's own frameworks (UDCodeKit, DiagramKit) are the
+# running UDCode's; the engine's goes inside the bundle.
+EXTENSION_FRAMEWORKS = DESIGNER_FRAMEWORKS + [(udcodekit, "UDCodeKit.framework"), (udpiecetable, "UDPieceTable.framework")]
+
+
+def extension_phases(target, own_sources):
+    sources = phase("PBXSourcesBuildPhase", target, "Sources", names(
+        own_sources +
+        [buildfile(target, extension_refs[f], f) for f in EXTENSION_SOURCES] +
+        [buildfile(target, app_file(designer_refs, f), os.path.basename(f)) for f in DESIGNER_SOURCES]))
+    resources = phase("PBXResourcesBuildPhase", target, "Resources", names(
+        [buildfile(target, extension_res_refs[r], os.path.basename(r)) for r in EXTENSION_RESOURCES] +
+        [buildfile(target, app_file(designer_res_refs, r), os.path.basename(r)) for r in DESIGNER_RESOURCES]))
+    frameworks = phase("PBXFrameworksBuildPhase", target, "Frameworks", names(
+        [buildfile(target, ref, name) for ref, name in EXTENSION_FRAMEWORKS] +
+        [buildfile(target, appkit, "AppKit.framework"), buildfile(target, coredata, "CoreData.framework")]))
+    return [sources, resources, frameworks]
+
+
+ex_phases = extension_phases("WorkflowDesigner", [])
+ex_embed = add(oid("phase", "WorkflowDesigner", "Embed Frameworks"), "Embed Frameworks", [
+    ("isa", "PBXCopyFilesBuildPhase"),
+    ("buildActionMask", "2147483647"),
+    ("dstPath", '""'),
+    ("dstSubfolderSpec", "10"),
+    ("files", names([buildfile("WorkflowDesigner.embed", p_fw, "WorkflowKit.framework",
+                               "{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }")])),
+    ("name", q("Embed Frameworks")),
+    ("runOnlyForDeploymentPostprocessing", "0"),
+])
+et_phases = extension_phases("WKUTests", [buildfile("WKUTests", extension_test_refs[t], t) for t in EXTENSION_TESTS])
 
 
 # ---------------------------------------------------------------- groups
@@ -489,21 +510,33 @@ g_desk = group("WorkflowDesk", "WorkflowDesk",
                [desk_refs["WorkflowDesk-Info.plist"], g_desk_res, g_desk_tests], "WorkflowDesk")
 g_designer_res = group("WorkflowDesignerResources", "Resources",
                        [designer_res_refs[r] for r in own(DESIGNER_RESOURCES)], "Resources")
+g_extension_res = group("ExtensionResources", "Resources",
+                        [extension_refs["Resources/Info.plist"], extension_res_refs["Resources/LanguageInfo.plist"]],
+                        "Resources")
+g_extension_tests = group("ExtensionTests", "Tests", [extension_test_refs[t] for t in EXTENSION_TESTS], "Tests")
+g_extension = group("UDCodeExtension", "UDCodeExtension",
+                    [extension_refs[f] for f in sorted(EXTENSION_HEADERS + EXTENSION_SOURCES,
+                                                       key=lambda n: (n[:-2], n[-1:]))] +
+                    [extension_res_refs[r] for r in EXTENSION_RESOURCES if r.endswith(".xib")] +
+                    [extension_refs["package.json"], g_extension_res, g_extension_tests],
+                    "UDCodeExtension")
 g_designer_tests = group("WorkflowDesignerTests", "Tests",
                          [designer_test_refs[t] for t in DESIGNER_TEST_HEADERS + DESIGNER_TESTS], "Tests")
 g_designer = group("WorkflowDesigner", "WorkflowDesigner",
                    [designer_refs[f] for f in sorted(DESIGNER_HEADERS + own(DESIGNER_SOURCES),
                                                      key=lambda n: (n[:-2], n[-1:]))] +
-                   [designer_refs["WorkflowDesigner-Info.plist"], g_designer_res, g_designer_tests],
+                   [g_designer_res, g_designer_tests],
                    "WorkflowDesigner")
 g_apps = group("Apps", "Apps", [g_shared, g_desk, g_designer], "Apps")
 g_configs = group("Configs", "Configs", [cfg_refs[c] for c in CONFIGS], "Xcode/Configs")
 g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_serve, p_build, p_plugin, p_desk,
-                                            p_desk_tests, p_designer, p_designer_tests])
+                                            p_desk_tests, p_designer_tests, p_extension, p_extension_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
-                                                  httpserverkit, otelkit, xformskit, diagramkit, diagramkitui, sparkle])
+                                                  httpserverkit, otelkit, xformskit, diagramkit, diagramkitui,
+                                                  udcodekit, udpiecetable, sparkle])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
-               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_tools, g_apps, g_configs,
+               [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_tools, g_apps, g_extension,
+                g_configs,
                 g_frameworks, g_products])
 # The main group has no name or path of its own.
 objects[g_main] = ("", [(k, v) for k, v in objects[g_main][1] if k != "name"])
@@ -594,20 +627,30 @@ DESK_TESTS_S = {
     "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Apps/WorkflowDesk", "$(SRCROOT)/Apps/Shared")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
-DESIGNER_S = {
-    "INFOPLIST_FILE": '"Apps/WorkflowDesigner/WorkflowDesigner-Info.plist"',
-    "GENERATE_INFOPLIST_FILE": "NO",
-    "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesigner",
-    "MACOSX_DEPLOYMENT_TARGET": "11.0",
-    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks")',
-    # The model's compiling script writes into the app.
-    "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
-}
 DESIGNER_TESTS_S = {
     "PRODUCT_BUNDLE_IDENTIFIER": "local.workflowkit.WorkflowDesignerTests",
     "GENERATE_INFOPLIST_FILE": "YES",
     "MACOSX_DEPLOYMENT_TARGET": "11.0",
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Apps/WorkflowDesigner"',
+    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
+}
+# The extension's bundle: loaded by UDCode, whose frameworks are its
+# executable's; the engine's is the bundle's own.
+EXTENSION_S = {
+    "INFOPLIST_FILE": '"UDCodeExtension/Resources/Info.plist"',
+    "GENERATE_INFOPLIST_FILE": "NO",
+    "PRODUCT_BUNDLE_IDENTIFIER": "org.workflowkit.udcode.workflowdesigner",
+    "WRAPPER_EXTENSION": "bundle",
+    "MACOSX_DEPLOYMENT_TARGET": "11.0",
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/UDCodeExtension", "$(SRCROOT)/Apps/WorkflowDesigner", "$(SRCROOT)/Apps/Shared")',
+    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
+}
+EXTENSION_TESTS_S = {
+    "PRODUCT_BUNDLE_IDENTIFIER": "org.workflowkit.udcode.WKUTests",
+    "GENERATE_INFOPLIST_FILE": "YES",
+    "MACOSX_DEPLOYMENT_TARGET": "11.0",
+    "HEADER_SEARCH_PATHS": '("$(SRCROOT)/UDCodeExtension", "$(SRCROOT)/Apps/WorkflowDesigner", '
+                           '"$(SRCROOT)/Apps/WorkflowDesigner/Tests", "$(SRCROOT)/Apps/Shared")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
 
@@ -626,7 +669,8 @@ cl_build = configs("wf-build", settings(BUILD_S), settings(BUILD_S))
 cl_plugin = configs("ExampleDelegates", settings(PLUGIN_S), settings(PLUGIN_S))
 cl_desk = configs("WorkflowDesk", settings(DESK_S), settings(DESK_S))
 cl_desk_tests = configs("WorkflowDeskTests", settings(DESK_TESTS_S), settings(DESK_TESTS_S))
-cl_designer = configs("WorkflowDesigner", settings(DESIGNER_S), settings(DESIGNER_S))
+cl_extension = configs("WorkflowDesigner", settings(EXTENSION_S), settings(EXTENSION_S))
+cl_extension_tests = configs("WKUTests", settings(EXTENSION_TESTS_S), settings(EXTENSION_TESTS_S))
 cl_designer_tests = configs("WorkflowDesignerTests", settings(DESIGNER_TESTS_S), settings(DESIGNER_TESTS_S))
 
 project_id = oid("project")
@@ -689,12 +733,15 @@ t_desk = target("WorkflowDesk", cl_desk, [w_model, w_sources, w_resources, w_fra
                 p_desk, "com.apple.product-type.application")
 t_desk_tests = target("WorkflowDeskTests", cl_desk_tests, [wt_sources, wt_frameworks], [],
                       p_desk_tests, "com.apple.product-type.bundle.unit-test")
-t_designer = target("WorkflowDesigner", cl_designer, [wg_model, wg_sources, wg_resources, wg_frameworks, wg_embed],
-                    [dependency("WorkflowDesigner", t_fw, "WorkflowKit")],
-                    p_designer, "com.apple.product-type.application")
 t_designer_tests = target("WorkflowDesignerTests", cl_designer_tests, [gt_sources, gt_frameworks, gt_resources],
                           [dependency("WorkflowDesignerTests", t_fw, "WorkflowKit")],
                           p_designer_tests, "com.apple.product-type.bundle.unit-test")
+t_extension = target("WorkflowDesigner", cl_extension, ex_phases + [ex_embed],
+                     [dependency("WorkflowDesigner", t_fw, "WorkflowKit")],
+                     p_extension, "com.apple.product-type.bundle")
+t_extension_tests = target("WKUTests", cl_extension_tests, et_phases,
+                           [dependency("WKUTests", t_fw, "WorkflowKit")],
+                           p_extension_tests, "com.apple.product-type.bundle.unit-test")
 
 add(project_id, "Project object", [
     ("isa", "PBXProject"),
@@ -708,8 +755,8 @@ add(project_id, "Project object", [
     ("productRefGroup", "%s /* Products */" % g_products),
     ("projectDirPath", '""'),
     ("projectRoot", '""'),
-    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve, t_build, t_plugin, t_desk, t_desk_tests, t_designer,
-                       t_designer_tests])),
+    ("targets", names([t_fw, t_odata, t_tests, t_demo, t_serve, t_build, t_plugin, t_desk, t_desk_tests,
+                       t_designer_tests, t_extension, t_extension_tests])),
 ])
 
 
@@ -810,7 +857,9 @@ scheme("wf-serve", [plugin_ref, serve_ref], run=serve_ref, directory="$(PROJECT_
 desk_ref = ref(t_desk, "WorkflowDesk", "WorkflowDesk.app")
 desk_tests_ref = ref(t_desk_tests, "WorkflowDeskTests", "WorkflowDeskTests.xctest")
 scheme("WorkflowDesk", [desk_ref], test=desk_tests_ref, run=desk_ref)
-designer_ref = ref(t_designer, "WorkflowDesigner", "WorkflowDesigner.app")
 designer_tests_ref = ref(t_designer_tests, "WorkflowDesignerTests", "WorkflowDesignerTests.xctest")
-scheme("WorkflowDesigner", [fw_ref, designer_ref], test=designer_tests_ref, run=designer_ref)
+scheme("WorkflowDesignerTests", [fw_ref, designer_tests_ref], test=designer_tests_ref)
+extension_ref = ref(t_extension, "WorkflowDesigner", "WorkflowDesigner.bundle")
+extension_tests_ref = ref(t_extension_tests, "WKUTests", "WKUTests.xctest")
+scheme("WorkflowDesigner", [fw_ref, extension_ref], test=extension_tests_ref)
 print("wrote", proj)

@@ -1,5 +1,5 @@
-# WorkflowDesigner's tests: the document model and its edits, the layout,
-# that the engine takes what the designer writes, and the parts' XIBs
+# The designer's parts' tests: the models and their edits, the layout,
+# that the engine takes what they write, and the parts' XIBs
 # loaded and connected; run with `make check` one level up, which gives
 # them a display (xvfb-run) where there is none.
 include $(GNUSTEP_MAKEFILES)/common.make
@@ -8,63 +8,7 @@ include ../designer.make
 BUNDLE_NAME = WorkflowDesignerTests
 
 WorkflowDesignerTests_OBJC_FILES = \
-	../WKDCanvasView.m \
-	../WKDCanvasViewController.m \
-	../WKDOutlineViewController.m \
-	../WKDPaletteViewController.m \
-	../WKDProblemsViewController.m \
-	../WKDProcessCommands.m \
-	../WKDPaletteView.m \
-	../WKDProperties.m \
-	../WKDElementModel.m \
-	../WKDTableModel.m \
-	../WKDInspectorRow.m \
-	../WKDTableRowController.m \
-	../WKDInspectorViewController.m \
-	../WKDPane.m \
-	../WKDOutline.m \
-	../WKDExpressionField.m \
-	../WKDDeployment.m \
-	../WKDSelection.m \
-	../WKDProcessEditor.m \
-	../WKDDecisions.m \
-	../WKDDmnModel.m \
-	../WKDDmnReader.m \
-	../WKDDmnWriter.m \
-	../WKDDmnModelCheck.m \
-	../WKDDecisionDocument.m \
-	../WKDDecisionEditor.m \
-	../WKDDecisionListViewController.m \
-	../WKDDecisionDetailViewController.m \
-	../WKDRuleGridViewController.m \
-	../WKDColumnViewController.m \
-	../WKDLiteralViewController.m \
-	../WKDDecisionWindowController.m \
-	../WKDDocument.m \
-	../WKDWindowController.m \
-	../WKDServerProcessesController.m \
-	../WKDAppDelegate.m \
-	../../Shared/WKDXML.m \
-	../../Shared/WKDEditor.m \
-	../../Shared/WKDEditor+Canvas.m \
-	../../Shared/WKDEditor+Clipboard.m \
-	../../Shared/WKDEditor+Types.m \
-	../../Shared/WKDEditor+Alignment.m \
-	../../Shared/WKDEditor+Lanes.m \
-	../../Shared/WKDNotation.m \
-	../../Shared/WKDModel.m \
-	../../Shared/WKDBpmnReader.m \
-	../../Shared/WKDBpmnWriter.m \
-	../../Shared/WKDModelCheck.m \
-	../../Shared/WKDJournal.m \
-	../../Shared/WKDRenderer.m \
-	../../Shared/WDConnectWindowController.m \
-	../../Shared/WDEntities.m \
-	../../Shared/WDSession.m \
-	../../Shared/WDSignIn.m \
-	../../Shared/WDSockets-posix.m \
-	../../Shared/WDTracing.m \
-	../../Shared/WKDUpdater-GNUstep.m \
+	$(addprefix ../,$(WKD_OBJC_FILES)) \
 	WKDDiagramTests.m \
 	WKDModelTests.m \
 	WKDProcessEditorTests.m \
@@ -85,36 +29,11 @@ WorkflowDesignerTests_OBJC_FILES = \
 	WKDDeploymentTests.m \
 	WKDDecisionsTests.m
 
-# The app's parts and their XIBs: the bundle is what -bundleForClass:
-# finds them in, as ORMKit's designer tests have it.
-WorkflowDesignerTests_RESOURCE_FILES = \
-	../Resources/DesignerWindow.xib \
-	../Resources/WKDCanvas.xib \
-	../Resources/WKDOutlineView.xib \
-	../Resources/WKDPalette.xib \
-	../Resources/WKDProblems.xib \
-	../Resources/WKDInspector.xib \
-	../Resources/WKDRowTitle.xib \
-	../Resources/WKDRowText.xib \
-	../Resources/WKDRowExpression.xib \
-	../Resources/WKDRowLongText.xib \
-	../Resources/WKDRowCheck.xib \
-	../Resources/WKDRowChoice.xib \
-	../Resources/WKDRowButton.xib \
-	../Resources/WKDRowTable.xib \
-	../Resources/DecisionWindow.xib \
-	../Resources/WKDDecisionList.xib \
-	../Resources/WKDDecisionDetail.xib \
-	../Resources/WKDRuleGrid.xib \
-	../Resources/WKDColumn.xib \
-	../Resources/WKDLiteral.xib \
-	../Resources/ServerProcesses.xib \
-	../../Shared/Resources/ConnectWindow.xib
+# The parts' XIBs: the bundle is what -bundleForClass: finds them in, as
+# ORMKit's designer tests have it.
+WorkflowDesignerTests_RESOURCE_FILES = $(addprefix ../,$(WKD_RESOURCE_FILES))
 
-ifeq ($(WKD_WINDOWS),yes)
-WorkflowDesignerTests_OBJC_FILES := $(subst WDSockets-posix.m,WDSockets-windows.m,$(WorkflowDesignerTests_OBJC_FILES))
-endif
-WorkflowDesignerTests_OBJCFLAGS += -fobjc-arc -fblocks -Wall -include WKDGNUstepCompat.h
+WorkflowDesignerTests_OBJCFLAGS += $(WKD_OBJCFLAGS)
 WorkflowDesignerTests_INCLUDE_DIRS = $(WKD_INCLUDE_DIRS)
 ADDITIONAL_LIB_DIRS += $(WKD_LIB_DIRS)
 WorkflowDesignerTests_BUNDLE_LIBS += $(WKD_LIBS) -lXCTest

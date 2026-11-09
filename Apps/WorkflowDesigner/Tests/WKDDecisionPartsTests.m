@@ -1,12 +1,16 @@
 #import <XCTest/XCTest.h>
 #import <AppKit/AppKit.h>
-#import "WKDDecisionDocument.h"
-#import "WKDDecisionWindowController.h"
+#import "WKDDecisionEditor.h"
+#import "WKDDecisionListViewController.h"
+#import "WKDDecisionDetailViewController.h"
+#import "WKDRuleGridViewController.h"
+#import "WKDColumnViewController.h"
+#import "WKDLiteralViewController.h"
 #import "WKDExpressionField.h"
 #import "WKDFixtures.h"
 
 /* The decision editor's parts, each from its XIB and connected, following
- * the decision editor they share; and the window that puts them in place. */
+ * the decision editor they share. */
 @interface WKDDecisionPartsTests : XCTestCase
 @end
 
@@ -121,30 +125,6 @@
 	[grid addInput:nil];
 	XCTAssertEqual(editor.column, (NSUInteger)1, @"the column added, after the chosen one, chosen");
 	XCTAssertEqual([[grid.grid tableColumns] count], [editor.decision.columns count] + 2);
-}
-
-- (void)testTheWindowPutsThePartsInPlace
-{
-	WKDDecisionDocument *document = [[WKDDecisionDocument alloc] init];
-	NSError *error = nil;
-	XCTAssertTrue([document readFromData:[WKDDecisionsFile dataUsingEncoding:NSUTF8StringEncoding] ofType:@"DMN"
-	                               error:&error], @"%@", error);
-	[document makeWindowControllers];
-	WKDDecisionWindowController *controller = [[document windowControllers] firstObject];
-	XCTAssertNotNil([controller window], @"DecisionWindow.xib");
-	for (NSView *host in @[ controller.listHost, controller.detailHost, controller.gridHost, controller.columnHost,
-	                        controller.literalHost ]) {
-		XCTAssertGreaterThan([[host subviews] count], (NSUInteger)0, @"a part in its host");
-	}
-	XCTAssertEqual([controller nextResponder], controller.listController, @"the Decision menu's actions in its chain");
-	XCTAssertEqual([controller.listController nextResponder], controller.gridController);
-	XCTAssertFalse([controller.tablePanel isHidden]);
-	XCTAssertTrue([controller.literalHost isHidden]);
-	[controller showDecision:@"drink"];
-	XCTAssertTrue([controller.tablePanel isHidden]);
-	XCTAssertFalse([controller.literalHost isHidden], @"a literal expression's");
-	XCTAssertGreaterThan([[controller.statusField stringValue] length], (NSUInteger)0);
-	[document close];
 }
 
 @end

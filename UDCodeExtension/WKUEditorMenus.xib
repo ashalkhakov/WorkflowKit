@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="23504" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="23504" />
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSObject" />
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder" />
+        <customObject id="-3" userLabel="Application" customClass="NSObject" />
+        <!-- The Editor menu's items (WKUExtension's -editorMenuItemsForWorkbench:): to the
+             first responder, which in a process's tab is its commands and its canvas,
+             and in a DMN file's its list and its grid -->
+        <menu title="BPMN and DMN" id="wkmn-root">
+            <items>
+                <menuItem title="Arrange" id="wkmn-mi-001">
+                    <connections>
+                        <action selector="arrange:" target="-1" id="wkmn-ac-002" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Add Pool" id="wkmn-mi-003">
+                    <connections>
+                        <action selector="addPool:" target="-1" id="wkmn-ac-004" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Add Lane" id="wkmn-mi-005">
+                    <connections>
+                        <action selector="addLane:" target="-1" id="wkmn-ac-006" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Rename" id="wkmn-mi-007">
+                    <connections>
+                        <action selector="rename:" target="-1" id="wkmn-ac-008" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Align" id="wkmn-mi-009">
+                    <menu key="submenu" title="Align" id="wkmn-mn-010">
+                        <items>
+                            <menuItem title="Left Edges" id="wkmn-mi-011">
+                                <connections>
+                                    <action selector="alignLeftEdges:" target="-1" id="wkmn-ac-012" />
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Centres" id="wkmn-mi-013">
+                                <connections>
+                                    <action selector="alignCentres:" target="-1" id="wkmn-ac-014" />
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Right Edges" id="wkmn-mi-015">
+                                <connections>
+                                    <action selector="alignRightEdges:" target="-1" id="wkmn-ac-016" />
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Top Edges" id="wkmn-mi-017">
+                                <connections>
+                                    <action selector="alignTopEdges:" target="-1" id="wkmn-ac-018" />
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Middles" id="wkmn-mi-019">
+                                <connections>
+                                    <action selector="alignMiddles:" target="-1" id="wkmn-ac-020" />
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Bottom Edges" id="wkmn-mi-021">
+                                <connections>
+                                    <action selector="alignBottomEdges:" target="-1" id="wkmn-ac-022" />
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Distribute" id="wkmn-mi-023">
+                    <menu key="submenu" title="Distribute" id="wkmn-mn-024">
+                        <items>
+                            <menuItem title="Across" id="wkmn-mi-025">
+                                <connections>
+                                    <action selector="distributeAcross:" target="-1" id="wkmn-ac-026" />
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Down" id="wkmn-mi-027">
+                                <connections>
+                                    <action selector="distributeDown:" target="-1" id="wkmn-ac-028" />
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="wkmn-sp-029" />
+                <menuItem title="Edit Form…" id="wkmn-mi-030">
+                    <connections>
+                        <action selector="editForm:" target="-1" id="wkmn-ac-031" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Edit Decision…" id="wkmn-mi-032">
+                    <connections>
+                        <action selector="editDecision:" target="-1" id="wkmn-ac-033" />
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="wkmn-sp-034" />
+                <menuItem title="Zoom In" id="wkmn-mi-035">
+                    <connections>
+                        <action selector="zoomIn:" target="-1" id="wkmn-ac-036" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Zoom Out" id="wkmn-mi-037">
+                    <connections>
+                        <action selector="zoomOut:" target="-1" id="wkmn-ac-038" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Actual Size" id="wkmn-mi-039">
+                    <connections>
+                        <action selector="actualSize:" target="-1" id="wkmn-ac-040" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Zoom to Fit" id="wkmn-mi-041">
+                    <connections>
+                        <action selector="zoomToFit:" target="-1" id="wkmn-ac-042" />
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="wkmn-sp-043" />
+                <menuItem title="Add Decision Table" id="wkmn-mi-044">
+                    <connections>
+                        <action selector="addDecisionTable:" target="-1" id="wkmn-ac-045" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Add Literal Expression" id="wkmn-mi-046">
+                    <connections>
+                        <action selector="addLiteralDecision:" target="-1" id="wkmn-ac-047" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Delete Decision" id="wkmn-mi-048">
+                    <connections>
+                        <action selector="deleteDecision:" target="-1" id="wkmn-ac-049" />
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="wkmn-sp-050" />
+                <menuItem title="Add Rule" id="wkmn-mi-051">
+                    <connections>
+                        <action selector="addRule:" target="-1" id="wkmn-ac-052" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Move Rule Up" id="wkmn-mi-053">
+                    <connections>
+                        <action selector="moveRuleUp:" target="-1" id="wkmn-ac-054" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Move Rule Down" id="wkmn-mi-055">
+                    <connections>
+                        <action selector="moveRuleDown:" target="-1" id="wkmn-ac-056" />
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="wkmn-sp-057" />
+                <menuItem title="Add Input" id="wkmn-mi-058">
+                    <connections>
+                        <action selector="addInput:" target="-1" id="wkmn-ac-059" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Add Output" id="wkmn-mi-060">
+                    <connections>
+                        <action selector="addOutput:" target="-1" id="wkmn-ac-061" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Delete Column" id="wkmn-mi-062">
+                    <connections>
+                        <action selector="deleteColumn:" target="-1" id="wkmn-ac-063" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Move Column Left" id="wkmn-mi-064">
+                    <connections>
+                        <action selector="moveColumnLeft:" target="-1" id="wkmn-ac-065" />
+                    </connections>
+                </menuItem>
+                <menuItem title="Move Column Right" id="wkmn-mi-066">
+                    <connections>
+                        <action selector="moveColumnRight:" target="-1" id="wkmn-ac-067" />
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="wkmn-sp-068" />
+                <menuItem title="Show as Text" id="wkmn-mi-069">
+                    <connections>
+                        <action selector="showAsText:" target="-1" id="wkmn-ac-070" />
+                    </connections>
+                </menuItem>
+            </items>
+        </menu>
+    </objects>
+</document>

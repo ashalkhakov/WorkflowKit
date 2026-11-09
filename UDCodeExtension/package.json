@@ -1,0 +1,12 @@
+{
+  "name": "workflowkit",
+  "publisher": "ashalkhakov",
+  "displayName": "BPMN and DMN",
+  "description": "WorkflowKit's BPMN processes and DMN decisions, edited as diagrams and tables: the canvas and its outline, the inspector, the palette in the Library, decision tables and literal expressions; what the engine would refuse in the Issues navigator",
+  "version": "0.0.0",
+  "license": "LGPL-2.1-only",
+  "repository": "https://github.com/ashalkhakov/WorkflowKit",
+  "engines": { "udcode": "^0.22.2" },
+  "main": "./WorkflowDesigner.bundle",
+  "updates": "https://github.com/ashalkhakov/WorkflowKit/releases/latest/download/ashalkhakov.workflowkit-{platform}.json"
+}

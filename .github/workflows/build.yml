@@ -2,19 +2,21 @@ name: Build
 
 # WorkflowKit, built, tested and installed the familiar way (make, make
 # check, make install) by gnustep-release-actions' workflows, the same as
-# every repository's: the engine library, its OData API, wf-serve and the
-# apps, WorkflowDesk and WorkflowDesigner, with the chooser between them
-# (WorkflowLauncher). The tests run on every store the engine can use: in
-# memory, SQLite, and FreeCoreData's PostgreSQL and MySQL stores against the
-# servers the workflow starts (databases). Every push uploads what is
-# installed: the libraries, for what builds on WorkflowKit (library); for
-# macOS WorkflowDesk and WorkflowDesigner, signed and notarized with their
-# Sparkle appcasts on a release (appcast-WorkflowDesk.xml,
-# appcast-WorkflowDesigner.xml), and the frameworks as XCFrameworks; for
-# Linux an AppImage; and for Windows an installer,
-# WorkflowKit-<version>-win64.msi, wf-serve in its runtime. A v* tag (or a run started by hand with one) also releases them,
-# attached to the tag's release (a pre-release when the tag has a '-').
-# What it builds on is in .github/pins.env.
+# every repository's: the engine library, its OData API, wf-serve,
+# WorkflowDesk, and UDCode's BPMN and DMN extension (UDCodeExtension/). The
+# tests run on every store the engine can use: in memory, SQLite, and
+# FreeCoreData's PostgreSQL and MySQL stores against the servers the
+# workflow starts (databases). Every push uploads what is installed: the
+# libraries, for what builds on WorkflowKit (library); for macOS
+# WorkflowDesk, signed and notarized with its Sparkle appcast on a release
+# (appcast-WorkflowDesk.xml), and the frameworks as XCFrameworks; for Linux
+# an AppImage; for Windows an installer, WorkflowKit-<version>-win64.msi,
+# wf-serve in its runtime; and on each the extension's package (.udcx) with
+# the feed UDCode updates it from, and UDCode with the extension in it
+# (UDCode-WorkflowKit: .github/release/udcode.conf). A v* tag (or a run
+# started by hand with one) also releases them, attached to the tag's
+# release (a pre-release when the tag has a '-'). What it builds on is in
+# .github/pins.env.
 on:
   push:
     branches: ['**']
@@ -49,7 +51,7 @@ jobs:
     uses: ashalkhakov/gnustep-release-actions/.github/workflows/macos.yml@v1
     with:
       tag: ${{ inputs.tag }}
-      apps: WorkflowDesk=WorkflowDesk WorkflowDesigner=WorkflowDesigner
+      apps: WorkflowDesk=WorkflowDesk
       library: true
     secrets: inherit
 

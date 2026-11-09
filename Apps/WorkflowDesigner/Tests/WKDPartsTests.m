@@ -1,7 +1,10 @@
 #import <XCTest/XCTest.h>
 #import <AppKit/AppKit.h>
-#import "WKDDocument.h"
-#import "WKDWindowController.h"
+#import "WKDCanvasViewController.h"
+#import "WKDOutlineViewController.h"
+#import "WKDPaletteViewController.h"
+#import "WKDInspectorViewController.h"
+#import "WKDProcessCommands.h"
 #import "WKDFixtures.h"
 
 /* What the commands told their host. */
@@ -22,7 +25,7 @@
 @end
 
 /* The designer's parts, each from its XIB and connected, following the
- * process editor they share; and the window that puts them in place. */
+ * process editor they share. */
 @interface WKDPartsTests : XCTestCase
 @end
 
@@ -94,10 +97,6 @@ WKDTitles(NSMenu *menu)
 	XCTAssertEqual((id)palette.palette, (id)palette.view);
 	XCTAssertEqual((id)palette.palette.delegate, (id)palette);
 
-	WKDProblemsViewController *problems = [[WKDProblemsViewController alloc] initWithProcessEditor:editor];
-	XCTAssertNotNil(problems.view);
-	XCTAssertNotNil(problems.tableView);
-	XCTAssertEqual([problems.tableView numberOfRows], (NSInteger)MAX([editor.problems count], (NSUInteger)1));
 }
 
 - (void)testTheCanvasAndTheOutlineFollowTheSelection
@@ -171,30 +170,6 @@ WKDTitles(NSMenu *menu)
 	[commands addPool:nil];
 	XCTAssertNotNil(editor.editor.model.pool);
 	XCTAssertEqualObjects(editor.selection.selectedIds, @[ editor.editor.model.pool.elementId ], @"the pool made, selected");
-}
-
-- (void)testTheWindowPutsThePartsInPlace
-{
-	WKDDocument *document = [[WKDDocument alloc] init];
-	NSError *error = nil;
-	XCTAssertTrue([document readFromData:[WKDModellerFile dataUsingEncoding:NSUTF8StringEncoding] ofType:@"BPMN"
-	                               error:&error], @"%@", error);
-	[document makeWindowControllers];
-	WKDWindowController *controller = [[document windowControllers] firstObject];
-	XCTAssertNotNil([controller window], @"DesignerWindow.xib");
-	for (NSView *host in @[ controller.canvasHost, controller.outlineHost, controller.paletteHost, controller.problemsHost,
-	                        controller.inspectorHost, controller.processHost ]) {
-		XCTAssertGreaterThan([[host subviews] count], (NSUInteger)0, @"a part in its host");
-	}
-	XCTAssertEqual([controller.canvasController.view superview], controller.canvasHost);
-	XCTAssertEqual([controller nextResponder], controller.commands, @"the Editor menu's commands in its chain");
-	XCTAssertNotNil(controller.split.delegate);
-	XCTAssertEqual([controller.leftTabView numberOfTabViewItems], (NSInteger)3);
-	XCTAssertEqual([controller.rightTabView numberOfTabViewItems], (NSInteger)2);
-	document.processEditor.selection.selectedIds = @[ @"review" ];
-	XCTAssertEqualObjects(controller.canvasController.canvas.selection, [NSSet setWithObject:@"review"]);
-	XCTAssertGreaterThan([controller.status length], (NSUInteger)0);
-	[document close];
 }
 
 @end
