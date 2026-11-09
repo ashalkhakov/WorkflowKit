@@ -11,13 +11,13 @@
 
 /* The shapes of the ids that have bounds and are not inside or on another
  * of them, in the order given. */
-- (NSArray<WKDShape *> *)arrangedShapes:(NSArray<NSString *> *)elementIds
+- (NSArray<WKDNode *> *)arrangedShapes:(NSArray<NSString *> *)elementIds
 {
 	NSMutableArray *shapes = [NSMutableArray array];
 	for (NSString *elementId in elementIds) {
-		WKDShape *shape = [self.diagram shapeWithId:elementId];
+		WKDNode *shape = [self.model nodeWithId:elementId];
 		BOOL carried = NO;
-		for (WKDShape *up = shape.host ?: shape.parent; up != nil && !carried; up = up.host ?: up.parent) {
+		for (WKDNode *up = shape.host ?: shape.parent; up != nil && !carried; up = up.host ?: up.parent) {
 			carried = [elementIds containsObject:up.elementId];
 		}
 		if (shape.hasBounds && !carried && ![shapes containsObject:shape]) {
@@ -30,7 +30,7 @@
 - (void)nudgeElements:(NSArray<NSString *> *)elementIds by:(NSSize)offset
 {
 	NSMutableDictionary *offsets = [NSMutableDictionary dictionary];
-	for (WKDShape *shape in [self arrangedShapes:elementIds]) {
+	for (WKDNode *shape in [self arrangedShapes:elementIds]) {
 		[offsets setObject:[NSValue valueWithSize:offset] forKey:shape.elementId];
 	}
 	[self moveShapes:offsets action:@"Nudge" coalescing:YES];
@@ -44,7 +44,7 @@
 	}
 	NSRect anchor = [[shapes firstObject] bounds];
 	NSMutableDictionary *offsets = [NSMutableDictionary dictionary];
-	for (WKDShape *shape in [shapes subarrayWithRange:NSMakeRange(1, [shapes count] - 1)]) {
+	for (WKDNode *shape in [shapes subarrayWithRange:NSMakeRange(1, [shapes count] - 1)]) {
 		NSRect r = shape.bounds;
 		NSSize by = NSZeroSize;
 		switch (alignment) {
@@ -82,20 +82,20 @@
 	}
 	/* In order along the axis, the outermost two staying where they are
 	 * and the gaps between neighbours made equal. */
-	shapes = [shapes sortedArrayUsingComparator:^NSComparisonResult(WKDShape *a, WKDShape *b) {
+	shapes = [shapes sortedArrayUsingComparator:^NSComparisonResult(WKDNode *a, WKDNode *b) {
 		double x = vertically ? NSMinY(a.bounds) : NSMinX(a.bounds), y = vertically ? NSMinY(b.bounds) : NSMinX(b.bounds);
 		return x < y ? NSOrderedAscending : x > y ? NSOrderedDescending : NSOrderedSame;
 	}];
 	double start = vertically ? NSMinY([[shapes firstObject] bounds]) : NSMinX([[shapes firstObject] bounds]);
 	double end = vertically ? NSMaxY([[shapes lastObject] bounds]) : NSMaxX([[shapes lastObject] bounds]);
 	double sizes = 0;
-	for (WKDShape *shape in shapes) {
+	for (WKDNode *shape in shapes) {
 		sizes += vertically ? NSHeight(shape.bounds) : NSWidth(shape.bounds);
 	}
 	double gap = (end - start - sizes) / ([shapes count] - 1);
 	NSMutableDictionary *offsets = [NSMutableDictionary dictionary];
 	double at = start;
-	for (WKDShape *shape in shapes) {
+	for (WKDNode *shape in shapes) {
 		double now = vertically ? NSMinY(shape.bounds) : NSMinX(shape.bounds);
 		double by = round(at - now);
 		[offsets setObject:[NSValue valueWithSize:vertically ? NSMakeSize(0, by) : NSMakeSize(by, 0)]

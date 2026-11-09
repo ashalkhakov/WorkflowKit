@@ -16,6 +16,40 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 	return box != nil ? WKDReadBounds(box) : NSZeroRect;
 }
 
+/* What a node's own element says of it, besides its id, type and links. */
+static void
+WKDReadNodeValues(WKDNode *node)
+{
+	NSXMLElement *element = node.element;
+	node.name = [node.type isEqualToString:@"textAnnotation"]
+		? [WKDChild(element, WKDBpmnNamespace, @"text") stringValue]
+		: WKDAttribute(element, @"name");
+	node.eventDefinition = nil;
+	for (NSXMLElement *inner in WKDChildren(element, WKDBpmnNamespace, nil)) {
+		if ([[inner localName] hasSuffix:@"EventDefinition"]) {
+			node.eventDefinition = [inner localName];
+			break;
+		}
+	}
+	NSString *interrupting = WKDAttribute(element, @"cancelActivity") ?: WKDAttribute(element, @"isInterrupting");
+	node.interrupting = ![interrupting isEqualToString:@"false"];
+	node.eventSubProcess = [WKDAttribute(element, @"triggeredByEvent") isEqualToString:@"true"];
+	NSXMLElement *loop = WKDChild(element, WKDBpmnNamespace, @"multiInstanceLoopCharacteristics");
+	node.loop = nil;
+	if (loop != nil) {
+		node.loop = [WKDAttribute(loop, @"isSequential") isEqualToString:@"true"] ? @"sequential" : @"parallel";
+	} else if (WKDChild(element, WKDBpmnNamespace, @"standardLoopCharacteristics") != nil) {
+		node.loop = @"standard";
+	}
+}
+
+static void
+WKDReadFlowValues(WKDFlow *flow)
+{
+	flow.name = WKDAttribute(flow.element, @"name");
+	flow.hasCondition = WKDChild(flow.element, WKDBpmnNamespace, @"conditionExpression") != nil;
+}
+
 @implementation WKDModel (WKDReading)
 
 - (BOOL)readDocument:(NSXMLDocument *)document
@@ -110,9 +144,6 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 		node.elementId = elementId;
 		node.type = type;
 		node.kind = kind;
-		node.name = [type isEqualToString:@"textAnnotation"]
-			? [WKDChild(element, WKDBpmnNamespace, @"text") stringValue]
-			: WKDAttribute(element, @"name");
 		node.parent = parent;
 		NSXMLElement *shape = [shown objectForKey:elementId];
 		if (shape != nil && WKDIs(shape, WKDBpmnDINamespace, @"BPMNShape")) {
@@ -122,21 +153,7 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 			node.bounds = box != nil ? WKDReadBounds(box) : NSZeroRect;
 			node.labelBounds = WKDReadLabelBounds(shape);
 		}
-		for (NSXMLElement *inner in WKDChildren(element, WKDBpmnNamespace, nil)) {
-			if ([[inner localName] hasSuffix:@"EventDefinition"]) {
-				node.eventDefinition = [inner localName];
-				break;
-			}
-		}
-		NSString *interrupting = WKDAttribute(element, @"cancelActivity") ?: WKDAttribute(element, @"isInterrupting");
-		node.interrupting = ![interrupting isEqualToString:@"false"];
-		node.eventSubProcess = [WKDAttribute(element, @"triggeredByEvent") isEqualToString:@"true"];
-		NSXMLElement *loop = WKDChild(element, WKDBpmnNamespace, @"multiInstanceLoopCharacteristics");
-		if (loop != nil) {
-			node.loop = [WKDAttribute(loop, @"isSequential") isEqualToString:@"true"] ? @"sequential" : @"parallel";
-		} else if (WKDChild(element, WKDBpmnNamespace, @"standardLoopCharacteristics") != nil) {
-			node.loop = @"standard";
-		}
+		WKDReadNodeValues(node);
 		[self.nodeList addObject:node];
 		[self.nodesById setObject:node forKey:elementId];
 		/* Boundary events are their activity's, not their container's
@@ -162,9 +179,8 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 	flow.model = self;
 	flow.element = element;
 	flow.elementId = elementId;
-	flow.name = WKDAttribute(element, @"name");
 	flow.isAssociation = [[element localName] isEqualToString:@"association"];
-	flow.hasCondition = WKDChild(element, WKDBpmnNamespace, @"conditionExpression") != nil;
+	WKDReadFlowValues(flow);
 	flow.source = source;
 	flow.target = target;
 	[source.outgoingList addObject:flow];
@@ -183,9 +199,9 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 	[self.flowsById setObject:flow forKey:elementId];
 }
 
-- (WKDSwimlane *)laneFor:(NSXMLElement *)element pool:(BOOL)pool parent:(WKDSwimlane *)parent shown:(NSDictionary *)shown
+- (WKDLane *)laneFor:(NSXMLElement *)element pool:(BOOL)pool parent:(WKDLane *)parent shown:(NSDictionary *)shown
 {
-	WKDSwimlane *lane = [[WKDSwimlane alloc] init];
+	WKDLane *lane = [[WKDLane alloc] init];
 	lane.model = self;
 	lane.element = element;
 	lane.elementId = WKDAttribute(element, @"id") ?: @"";
@@ -222,12 +238,12 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 }
 
 /* A laneSet's lanes, each followed by those dividing it. */
-- (NSArray<WKDSwimlane *> *)lanesIn:(NSXMLElement *)laneSet parent:(WKDSwimlane *)parent shown:(NSDictionary *)shown
+- (NSArray<WKDLane *> *)lanesIn:(NSXMLElement *)laneSet parent:(WKDLane *)parent shown:(NSDictionary *)shown
                             all:(NSMutableArray *)all
 {
 	NSMutableArray *lanes = [NSMutableArray array];
 	for (NSXMLElement *element in WKDChildren(laneSet, WKDBpmnNamespace, @"lane")) {
-		WKDSwimlane *lane = [self laneFor:element pool:NO parent:parent shown:shown];
+		WKDLane *lane = [self laneFor:element pool:NO parent:parent shown:shown];
 		[lanes addObject:lane];
 		[all addObject:lane];
 		NSXMLElement *childSet = WKDChild(element, WKDBpmnNamespace, @"childLaneSet");
@@ -242,7 +258,7 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 	NSMutableArray *others = [NSMutableArray array];
 	for (NSXMLElement *collaboration in WKDChildren(root, WKDBpmnNamespace, @"collaboration")) {
 		for (NSXMLElement *participant in WKDChildren(collaboration, WKDBpmnNamespace, @"participant")) {
-			WKDSwimlane *pool = [self laneFor:participant pool:YES parent:nil shown:shown];
+			WKDLane *pool = [self laneFor:participant pool:YES parent:nil shown:shown];
 			if (self.pool == nil && processId != nil && [WKDAttribute(participant, @"processRef") isEqualToString:processId]) {
 				self.pool = pool;
 			} else {
@@ -257,7 +273,7 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 	self.pool.children = top;
 	self.lanes = all;
 	/* Each node's innermost lane: lanes come before those dividing them. */
-	for (WKDSwimlane *lane in all) {
+	for (WKDLane *lane in all) {
 		for (WKDNode *node in lane.nodeList) {
 			if (node.lane == nil || lane.depth >= node.lane.depth) {
 				node.lane = lane;
@@ -269,6 +285,21 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 @end
 
 @implementation WKDModel (WKDReadingAgain)
+
+- (void)readValuesAgain:(WKDModelElement *)element
+{
+	[self.journal willChange:element];
+	if ([element isKindOfClass:[WKDNode class]]) {
+		WKDNode *node = (WKDNode *)element;
+		WKDReadNodeValues(node);
+		WKDFlow *preferred = [self flowWithId:WKDAttribute(node.element, @"default")];
+		node.defaultFlow = preferred.source == node ? preferred : nil;
+	} else if ([element isKindOfClass:[WKDFlow class]]) {
+		WKDReadFlowValues((WKDFlow *)element);
+	} else {
+		element.name = WKDAttribute(element.element, @"name");
+	}
+}
 
 /* The document read again into these objects: an element whose id is still
  * there is the same object, its values and links those read now; one no
@@ -297,8 +328,8 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 	if (fresh.pool != nil) {
 		[freshLanes addObject:fresh.pool];
 	}
-	for (WKDSwimlane *lane in freshLanes) {
-		WKDSwimlane *kept = ([lane.elementId length] > 0 ? [self.lanesById objectForKey:lane.elementId] : nil) ?: lane;
+	for (WKDLane *lane in freshLanes) {
+		WKDLane *kept = ([lane.elementId length] > 0 ? [self.lanesById objectForKey:lane.elementId] : nil) ?: lane;
 		if (kept.isPool != lane.isPool) {
 			kept = lane;
 		}
@@ -354,8 +385,8 @@ WKDReadLabelBounds(NSXMLElement *diagramElement)
 		kept.source = map(flow.source);
 		kept.target = map(flow.target);
 	}
-	for (WKDSwimlane *lane in freshLanes) {
-		WKDSwimlane *kept = map(lane);
+	for (WKDLane *lane in freshLanes) {
+		WKDLane *kept = map(lane);
 		kept.model = self;
 		kept.element = lane.element;
 		kept.diagramElement = lane.diagramElement;

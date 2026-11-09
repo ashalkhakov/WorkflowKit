@@ -2,7 +2,7 @@
 
 /*
  * A DMN file's decisions, as the decision editor shows them: read from the
- * XML after every change, as WKDDiagram is from a process's.
+ * XML after every change.
  */
 
 /* A decision table's column. An input is the expression whose value the

@@ -56,9 +56,9 @@ WKDReferences(NSXMLElement *node, NSString *local)
 - (void)testANewProcessIsAStartEvent
 {
 	WKDEditor *editor = [[WKDEditor alloc] initWithDocument:[WKDEditor newProcessDocument] undoManager:nil];
-	XCTAssertEqual([editor.diagram.shapes count], (NSUInteger)1);
-	XCTAssertTrue([editor.diagram.shapes.firstObject hasBounds]);
-	XCTAssertTrue(WKDAttribute(editor.diagram.process, @"isExecutable") != nil);
+	XCTAssertEqual([editor.model.nodes count], (NSUInteger)1);
+	XCTAssertTrue([editor.model.nodes.firstObject hasBounds]);
+	XCTAssertTrue(WKDAttribute(editor.model.process, @"isExecutable") != nil);
 	/* Not yet one the engine runs: what the designer's check reports. */
 	NSError *error = nil;
 	XCTAssertNil([WFBpmnReader definitionFromXMLString:[editor.document XMLString] error:&error]);
@@ -69,23 +69,23 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	WKDEditor *editor = [self editorOf:WKDUndrawnFile];
 	[editor completeDiagram];
-	WKDDiagram *diagram = editor.diagram;
+	WKDModel *diagram = editor.model;
 	XCTAssertFalse(diagram.needsLayout);
-	for (WKDShape *a in diagram.shapes) {
-		for (WKDShape *b in diagram.shapes) {
+	for (WKDNode *a in diagram.nodes) {
+		for (WKDNode *b in diagram.nodes) {
 			XCTAssertTrue(a == b || !NSIntersectsRect(a.bounds, b.bounds), @"%@ overlaps %@", a, b);
 		}
 	}
 	/* Left to right, along the flows -- the loop back aside. */
-	for (WKDConnection *connection in diagram.connections) {
+	for (WKDFlow *connection in diagram.flows) {
 		XCTAssertGreaterThanOrEqual([connection.waypoints count], (NSUInteger)2, @"%@", connection.elementId);
 		if (![connection.elementId isEqualToString:@"back"]) {
 			XCTAssertLessThan(NSMidX(connection.source.bounds), NSMidX(connection.target.bounds), @"%@", connection.elementId);
 		}
 	}
-	XCTAssertEqual(NSMidY([diagram shapeWithId:@"request"].bounds), NSMidY([diagram shapeWithId:@"approve"].bounds),
+	XCTAssertEqual(NSMidY([diagram nodeWithId:@"request"].bounds), NSMidY([diagram nodeWithId:@"approve"].bounds),
 	               @"a chain is a straight line");
-	XCTAssertEqualObjects(WKDAttribute([diagram shapeWithId:@"approve"].element, @"camunda:candidateGroups"), @"managers");
+	XCTAssertEqualObjects(WKDAttribute([diagram nodeWithId:@"approve"].element, @"camunda:candidateGroups"), @"managers");
 	[self engineRead:editor];
 }
 
@@ -97,16 +97,16 @@ WKDReferences(NSXMLElement *node, NSString *local)
 		taskId = [editor insertNodeOfType:@"userTask" eventDefinition:nil at:NSMakePoint(400, 200) error:NULL];
 	}];
 	XCTAssertTrue([taskId hasPrefix:@"Activity_"]);
-	WKDShape *task = [editor.diagram shapeWithId:taskId];
+	WKDNode *task = [editor.model nodeWithId:taskId];
 	XCTAssertTrue(NSEqualRects(task.bounds, NSMakeRect(350, 160, 100, 80)), @"%@", task);
 	[self step:^{
 		flowId = [editor connect:@"StartEvent_1" to:taskId error:NULL];
 	}];
 	XCTAssertNotNil(flowId);
-	WKDDiagram *diagram = editor.diagram;
-	XCTAssertEqualObjects(WKDReferences([diagram shapeWithId:@"StartEvent_1"].element, @"outgoing"), @[ flowId ]);
-	XCTAssertEqualObjects(WKDReferences([diagram shapeWithId:taskId].element, @"incoming"), @[ flowId ]);
-	WKDConnection *flow = [diagram connectionWithId:flowId];
+	WKDModel *diagram = editor.model;
+	XCTAssertEqualObjects(WKDReferences([diagram nodeWithId:@"StartEvent_1"].element, @"outgoing"), @[ flowId ]);
+	XCTAssertEqualObjects(WKDReferences([diagram nodeWithId:taskId].element, @"incoming"), @[ flowId ]);
+	WKDFlow *flow = [diagram flowWithId:flowId];
 	XCTAssertTrue(NSEqualPoints([[flow.waypoints firstObject] pointValue], NSMakePoint(NSMaxX(flow.source.bounds), NSMidY(flow.source.bounds))));
 	/* Level with the task: straight across into its side. */
 	XCTAssertEqual([flow.waypoints count], (NSUInteger)2, @"%@", flow.waypoints);
@@ -141,14 +141,14 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	WKDEditor *editor = [self editorOf:WKDModellerFile];
 	[editor moveElements:@[ @"review" ] by:NSMakeSize(0, 100)];
-	WKDDiagram *diagram = editor.diagram;
-	XCTAssertTrue(NSEqualRects([diagram shapeWithId:@"review"].bounds, NSMakeRect(200, 178, 100, 80)));
-	XCTAssertTrue(NSEqualRects([diagram shapeWithId:@"late"].bounds, NSMakeRect(232, 240, 36, 36)),
+	WKDModel *diagram = editor.model;
+	XCTAssertTrue(NSEqualRects([diagram nodeWithId:@"review"].bounds, NSMakeRect(200, 178, 100, 80)));
+	XCTAssertTrue(NSEqualRects([diagram nodeWithId:@"late"].bounds, NSMakeRect(232, 240, 36, 36)),
 	              @"its boundary event goes with it");
-	NSArray *f2 = [diagram connectionWithId:@"f2"].waypoints;
+	NSArray *f2 = [diagram flowWithId:@"f2"].waypoints;
 	XCTAssertTrue(NSEqualPoints([[f2 firstObject] pointValue], NSMakePoint(300, 218)), @"%@", f2);
 	XCTAssertTrue(NSEqualPoints([[f2 lastObject] pointValue], NSMakePoint(385, 143)), @"%@", f2);
-	XCTAssertTrue(NSEqualPoints([[[diagram connectionWithId:@"f6"].waypoints firstObject] pointValue], NSMakePoint(820, 118)),
+	XCTAssertTrue(NSEqualPoints([[[diagram flowWithId:@"f6"].waypoints firstObject] pointValue], NSMakePoint(820, 118)),
 	              @"a flow between shapes that did not move keeps its route");
 }
 
@@ -156,9 +156,9 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	WKDEditor *editor = [self editorOf:WKDModellerFile];
 	[editor moveElements:@[ @"ship" ] by:NSMakeSize(10, 20)];
-	WKDDiagram *diagram = editor.diagram;
-	XCTAssertTrue(NSEqualRects([diagram shapeWithId:@"pack"].bounds, NSMakeRect(600, 98, 100, 80)));
-	XCTAssertTrue(NSEqualPoints([[[diagram connectionWithId:@"s1"].waypoints firstObject] pointValue], NSMakePoint(546, 138)),
+	WKDModel *diagram = editor.model;
+	XCTAssertTrue(NSEqualRects([diagram nodeWithId:@"pack"].bounds, NSMakeRect(600, 98, 100, 80)));
+	XCTAssertTrue(NSEqualPoints([[[diagram flowWithId:@"s1"].waypoints firstObject] pointValue], NSMakePoint(546, 138)),
 	              @"a flow inside goes with it as it was");
 }
 
@@ -166,7 +166,7 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	WKDEditor *editor = [self editorOf:WKDModellerFile];
 	[editor moveElements:@[ @"late" ] by:NSMakeSize(30, 200)];
-	NSRect late = [editor.diagram shapeWithId:@"late"].bounds;
+	NSRect late = [editor.model nodeWithId:@"late"].bounds;
 	XCTAssertEqual(NSMidY(late), 158.0, @"on the bottom edge: %@", NSStringFromRect(late));
 	XCTAssertEqual(NSMidX(late), 280.0);
 	NSString *reason = nil;
@@ -174,8 +174,8 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	                                   at:NSMakePoint(1000, 1000) error:&reason]);
 	NSString *added = [editor insertNodeOfType:@"boundaryEvent" eventDefinition:@"messageEventDefinition"
 	                                        at:NSMakePoint(305, 100) error:&reason];
-	WKDShape *message = [editor.diagram shapeWithId:added];
-	XCTAssertEqual(message.host, [editor.diagram shapeWithId:@"review"], @"%@", reason);
+	WKDNode *message = [editor.model nodeWithId:added];
+	XCTAssertEqual(message.host, [editor.model nodeWithId:@"review"], @"%@", reason);
 	XCTAssertEqual(NSMidX(message.bounds), 300.0, @"on the right edge");
 	XCTAssertEqualObjects(message.eventDefinition, @"messageEventDefinition");
 }
@@ -184,7 +184,7 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	WKDEditor *editor = [self editorOf:WKDModellerFile];
 	NSString *added = [editor insertNodeOfType:@"serviceTask" eventDefinition:nil at:NSMakePoint(640, 190) error:NULL];
-	XCTAssertEqual([editor.diagram shapeWithId:added].parent, [editor.diagram shapeWithId:@"ship"]);
+	XCTAssertEqual([editor.model nodeWithId:added].parent, [editor.model nodeWithId:@"ship"]);
 	XCTAssertNotNil([editor connect:@"pack" to:added error:NULL]);
 }
 
@@ -192,10 +192,10 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	WKDEditor *editor = [self editorOf:WKDModellerFile];
 	[editor deleteElements:@[ @"refused" ]];
-	WKDDiagram *diagram = editor.diagram;
-	XCTAssertNil([diagram shapeWithId:@"refused"]);
-	XCTAssertNil([diagram connectionWithId:@"f4"]);
-	NSXMLElement *gateway = [diagram shapeWithId:@"ok"].element;
+	WKDModel *diagram = editor.model;
+	XCTAssertNil([diagram nodeWithId:@"refused"]);
+	XCTAssertNil([diagram flowWithId:@"f4"]);
+	NSXMLElement *gateway = [diagram nodeWithId:@"ok"].element;
 	XCTAssertEqualObjects(WKDReferences(gateway, @"outgoing"), @[ @"f3" ]);
 	XCTAssertNil(WKDAttribute(gateway, @"default"), @"its default went with it");
 	NSString *xml = [editor.document XMLString];
@@ -208,8 +208,8 @@ WKDReferences(NSXMLElement *node, NSString *local)
 		XCTAssertTrue([xml rangeOfString:gone].location == NSNotFound, @"%@ left", gone);
 	}
 	[editor deleteElements:@[ @"review" ]];
-	XCTAssertNil([editor.diagram shapeWithId:@"late"], @"its boundary event went with it");
-	XCTAssertNil([editor.diagram connectionWithId:@"f5"]);
+	XCTAssertNil([editor.model nodeWithId:@"late"], @"its boundary event went with it");
+	XCTAssertNil([editor.model flowWithId:@"f5"]);
 }
 
 - (void)testWhatTheDesignerDoesNotDrawIsKept
@@ -244,7 +244,7 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	XCTAssertEqualObjects([editor.document XMLString], moved);
 	[_undo undo];
 	XCTAssertEqualObjects([editor.document XMLString], before);
-	XCTAssertNotNil([editor.diagram shapeWithId:@"ok"]);
+	XCTAssertNotNil([editor.model nodeWithId:@"ok"]);
 	[_undo redo];
 	XCTAssertEqualObjects([editor.document XMLString], moved);
 	XCTAssertEqual(changes, (NSUInteger)5, @"two changes, two undos, a redo");
@@ -254,14 +254,14 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	WKDEditor *editor = [self editorOf:WKDModellerFile];
 	[editor arrange];
-	WKDDiagram *diagram = editor.diagram;
-	NSRect ship = [diagram shapeWithId:@"ship"].bounds;
+	WKDModel *diagram = editor.model;
+	NSRect ship = [diagram nodeWithId:@"ship"].bounds;
 	for (NSString *inside in @[ @"shipStart", @"pack", @"shipEnd" ]) {
-		XCTAssertTrue(NSContainsRect(ship, [diagram shapeWithId:inside].bounds), @"%@ outside its subprocess", inside);
+		XCTAssertTrue(NSContainsRect(ship, [diagram nodeWithId:inside].bounds), @"%@ outside its subprocess", inside);
 	}
-	XCTAssertLessThan(NSMaxX([diagram shapeWithId:@"ok"].bounds), NSMinX(ship));
-	NSRect review = [diagram shapeWithId:@"review"].bounds;
-	XCTAssertEqual(NSMidY([diagram shapeWithId:@"late"].bounds), NSMaxY(review), @"on its activity's edge");
+	XCTAssertLessThan(NSMaxX([diagram nodeWithId:@"ok"].bounds), NSMinX(ship));
+	NSRect review = [diagram nodeWithId:@"review"].bounds;
+	XCTAssertEqual(NSMidY([diagram nodeWithId:@"late"].bounds), NSMaxY(review), @"on its activity's edge");
 	[self engineRead:editor];
 }
 

@@ -7,7 +7,7 @@ BUNDLE_NAME = WorkflowDesignerTests
 
 WorkflowDesignerTests_OBJC_FILES = \
 	../../Shared/WKDXML.m \
-	../../Shared/WKDDiagram.m \
+	../../Shared/WKDNotation.m \
 	../../Shared/WKDModel.m \
 	../../Shared/WKDBpmnReader.m \
 	../../Shared/WKDBpmnWriter.m \
@@ -24,6 +24,7 @@ WorkflowDesignerTests_OBJC_FILES = \
 	../WKDDecisions.m \
 	WKDDiagramTests.m \
 	WKDModelTests.m \
+	WKDTimingTests.m \
 	WKDEditorTests.m \
 	WKDCanvasEditsTests.m \
 	WKDClipboardTests.m \

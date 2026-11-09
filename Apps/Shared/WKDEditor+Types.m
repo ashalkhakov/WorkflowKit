@@ -126,7 +126,7 @@ WKDOwnExtensions(void)
 
 - (NSArray<WKDNodeType *> *)typesFor:(NSString *)elementId
 {
-	WKDShape *shape = [self.diagram shapeWithId:elementId];
+	WKDNode *shape = [self.model nodeWithId:elementId];
 	if (shape == nil) {
 		return @[];
 	}
@@ -147,7 +147,7 @@ WKDOwnExtensions(void)
 		                    @"compensateEventDefinition" ]);
 	}
 	BOOL incoming = NO, outgoing = NO;
-	for (WKDConnection *connection in [self.diagram connectionsOf:shape]) {
+	for (WKDFlow *connection in [self.model flowsOf:shape]) {
 		if (connection.isAssociation) {
 			continue;
 		}
@@ -197,7 +197,7 @@ WKDRemoveOwnAttribute(WKDJournal *journal, NSXMLElement *element, NSString *name
 
 - (BOOL)changeType:(NSString *)elementId to:(WKDNodeType *)type error:(NSString **)reason
 {
-	WKDShape *shape = [self.diagram shapeWithId:elementId];
+	WKDNode *shape = [self.model nodeWithId:elementId];
 	WKDNodeType *now = shape != nil ? [WKDNodeType type:shape.type eventDefinition:shape.eventDefinition title:nil] : nil;
 	if (shape == nil || type == nil || ![[self typesFor:elementId] containsObject:type]) {
 		if (reason != NULL) {

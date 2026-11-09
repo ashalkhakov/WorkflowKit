@@ -1,5 +1,5 @@
 #import "WKDRenderer.h"
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 
 @implementation WKDLook
 

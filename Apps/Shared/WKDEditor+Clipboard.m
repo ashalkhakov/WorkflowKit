@@ -41,12 +41,12 @@ WKDSelfAndBelow(NSXMLElement *element)
 
 - (NSXMLDocument *)fragmentOfElements:(NSArray<NSString *> *)elementIds
 {
-	WKDDiagram *diagram = self.diagram;
+	WKDModel *diagram = self.model;
 	/* The nodes with what they hold and what is attached to them; a
 	 * boundary event without its activity has nothing to sit on. */
 	NSMutableSet *nodes = [NSMutableSet set];
 	for (NSString *elementId in elementIds) {
-		WKDShape *shape = [diagram shapeWithId:elementId];
+		WKDNode *shape = [diagram nodeWithId:elementId];
 		if (shape != nil && (shape.host == nil || [elementIds containsObject:shape.host.elementId])) {
 			[self collect:shape into:nodes];
 		}
@@ -58,12 +58,12 @@ WKDSelfAndBelow(NSXMLElement *element)
 	 * one, and the flows between copied nodes that are not either. */
 	NSMutableArray *top = [NSMutableArray array];
 	NSMutableSet *flows = [NSMutableSet set];
-	for (WKDShape *shape in diagram.shapes) {
+	for (WKDNode *shape in diagram.nodes) {
 		if ([nodes containsObject:shape.elementId] && ![nodes containsObject:shape.parent.elementId ?: @""]) {
 			[top addObject:shape.element];
 		}
 	}
-	for (WKDConnection *connection in diagram.connections) {
+	for (WKDFlow *connection in diagram.flows) {
 		if ([nodes containsObject:connection.source.elementId] && [nodes containsObject:connection.target.elementId]) {
 			[flows addObject:connection.elementId];
 			if (![nodes containsObject:connection.target.parent.elementId ?: @""]) {
@@ -153,9 +153,9 @@ WKDCopyPrefix(NSXMLElement *element)
 {
 	NSXMLElement *from = WKDChild([fragment rootElement], WKDBpmnNamespace, @"process");
 	NSArray *top = from != nil ? WKDChildren(from, WKDBpmnNamespace, nil) : @[];
-	if ([top count] == 0 || self.diagram.process == nil) {
+	if ([top count] == 0 || self.model.process == nil) {
 		if (reason != NULL) {
-			*reason = self.diagram.process == nil ? @"The document has no process." : @"There is nothing to paste.";
+			*reason = self.model.process == nil ? @"The document has no process." : @"There is nothing to paste.";
 		}
 		return nil;
 	}
@@ -175,7 +175,7 @@ WKDCopyPrefix(NSXMLElement *element)
 			if ([[definition localName] isEqualToString:@"process"] || definitionId == nil) {
 				continue;
 			}
-			NSXMLElement *existing = WKDElementWithId(document, definitionId);
+			NSXMLElement *existing = [self elementWithId:definitionId];
 			if (existing != nil && [[existing localName] isEqualToString:[definition localName]]) {
 				continue;
 			}
@@ -223,8 +223,8 @@ WKDCopyPrefix(NSXMLElement *element)
 					WKDLogText(self.model.journal, below, [ids objectForKey:[below stringValue]]);
 				}
 			}
-			NSXMLElement *adopted = WKDAdoptInto(document, copy, fragment, self.diagram.process,
-			                                     [self.diagram.process childCount]);
+			NSXMLElement *adopted = WKDAdoptInto(document, copy, fragment, self.model.process,
+			                                     [self.model.process childCount]);
 			[self.model.journal didInsert:adopted into:(NSXMLElement *)[adopted parent] at:[adopted index]];
 			[added addObject:WKDAttribute(adopted, @"id")];
 		}

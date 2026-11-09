@@ -23,7 +23,7 @@
 	NSError *parseError = nil;
 	NSXMLDocument *document = [[NSXMLDocument alloc] initWithData:data options:0 error:&parseError];
 	WKDEditor *editor = document != nil ? [[WKDEditor alloc] initWithDocument:document undoManager:[self undoManager]] : nil;
-	if (editor.diagram.process == nil) {
+	if (editor.model.process == nil) {
 		if (error != NULL) {
 			*error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadCorruptFileError userInfo:@{
 				NSLocalizedDescriptionKey: @"The file is not a BPMN process.",
@@ -33,7 +33,7 @@
 		return NO;
 	}
 	/* A file without a diagram is laid out: a change, to save. */
-	BOOL drawn = !editor.diagram.needsLayout;
+	BOOL drawn = !editor.model.needsLayout;
 	[editor completeDiagram];
 	_editor = editor;
 	[self check];

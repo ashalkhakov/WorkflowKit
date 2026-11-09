@@ -44,7 +44,7 @@
 @property (nonatomic, readwrite, weak) WKDNode *parent;
 @property (nonatomic, readwrite, weak) WKDNode *host;
 @property (nonatomic, readwrite, weak) WKDFlow *defaultFlow;
-@property (nonatomic, readwrite, weak) WKDSwimlane *lane;
+@property (nonatomic, readwrite, weak) WKDLane *lane;
 @property (nonatomic, strong) NSMutableArray<WKDNode *> *childList;
 @property (nonatomic, strong) NSMutableArray<WKDNode *> *attachedList;
 @property (nonatomic, strong) NSMutableArray<WKDFlow *> *incomingList;
@@ -63,14 +63,14 @@
 @property (nonatomic, readwrite) NSRect labelBounds;
 @end
 
-@interface WKDSwimlane ()
+@interface WKDLane ()
 @property (nonatomic, readwrite) NSRect bounds;
 @property (nonatomic, readwrite) BOOL hasBounds;
 @property (nonatomic, readwrite) BOOL isPool;
 @property (nonatomic, readwrite) BOOL horizontal;
-@property (nonatomic, readwrite, weak) WKDSwimlane *parent;
+@property (nonatomic, readwrite, weak) WKDLane *parent;
 @property (nonatomic, readwrite) NSUInteger depth;
-@property (nonatomic, readwrite, copy) NSArray<WKDSwimlane *> *children;
+@property (nonatomic, readwrite, copy) NSArray<WKDLane *> *children;
 @property (nonatomic, strong) NSMutableArray<WKDNode *> *nodeList;
 /* What it lists that is not a node of the process, kept as read. */
 @property (nonatomic, copy) NSArray<NSString *> *otherIds;
@@ -80,14 +80,14 @@
 @property (nonatomic, readwrite, strong) NSXMLDocument *document;
 @property (nonatomic, readwrite, strong) NSXMLElement *process;
 @property (nonatomic, readwrite, strong) NSXMLElement *plane;
-@property (nonatomic, readwrite, strong) WKDSwimlane *pool;
-@property (nonatomic, readwrite, copy) NSArray<WKDSwimlane *> *lanes;
-@property (nonatomic, readwrite, copy) NSArray<WKDSwimlane *> *otherPools;
+@property (nonatomic, readwrite, strong) WKDLane *pool;
+@property (nonatomic, readwrite, copy) NSArray<WKDLane *> *lanes;
+@property (nonatomic, readwrite, copy) NSArray<WKDLane *> *otherPools;
 @property (nonatomic, strong) NSMutableArray<WKDNode *> *nodeList;
 @property (nonatomic, strong) NSMutableArray<WKDFlow *> *flowList;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WKDNode *> *nodesById;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WKDFlow *> *flowsById;
-@property (nonatomic, strong) NSMutableDictionary<NSString *, WKDSwimlane *> *lanesById;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, WKDLane *> *lanesById;
 /* Elements to write: changed or made since the last write, and deleted. */
 @property (nonatomic, strong) NSHashTable<WKDModelElement *> *changedElements;
 @property (nonatomic, strong) NSMutableArray<WKDModelElement *> *deletedElements;
@@ -107,7 +107,8 @@
 /* Whether the element is in the model now. */
 - (BOOL)containsElement:(WKDModelElement *)element;
 /* The XML elements the model's elements are read from and drawn by. */
-- (NSSet<NSXMLElement *> *)carrierElements;
+/* Whether the node is a model element's carrier or diagram element. */
+- (BOOL)carries:(NSXMLNode *)node;
 
 /* Elements made and removed. A node of the type in the container (nil: the
  * process), with no carrier element until the writer makes it; a flow
@@ -117,6 +118,8 @@
 - (WKDFlow *)makeFlowFrom:(WKDNode *)source to:(WKDNode *)target elementId:(NSString *)elementId
               association:(BOOL)association;
 - (void)removeNode:(WKDNode *)node;
+/* The element under another id, which no element has. */
+- (void)renameElement:(WKDModelElement *)element to:(NSString *)elementId;
 - (void)removeFlow:(WKDFlow *)flow;
 
 /* Links, both ways. */
@@ -133,6 +136,9 @@
 
 @interface WKDModel (WKDReadingAgain)
 - (void)readDocumentAgain:(NSXMLDocument *)document;
+/* What the element's own XML says of its values read again, journalled:
+ * after an edit of that XML alone. Its links stay, its default flow aside. */
+- (void)readValuesAgain:(WKDModelElement *)element;
 @end
 
 /* WKDModelCheck.m: how the model differs from another, read afresh: nil
@@ -143,6 +149,8 @@
 
 /* WKDBpmnWriter.m: the model's changes written into the carrier. */
 @interface WKDModel (WKDWriting)
+/* The plane that shows the process, made when the document has none. */
+- (NSXMLElement *)ensurePlane;
 - (void)writeChanges;
 /* Only the element's place in the diagram -- a shape's bounds, an edge's
  * waypoints, a label's bounds -- written now, the rest of it left to the

@@ -1,5 +1,5 @@
 #import <Foundation/Foundation.h>
-#import "WKDDiagram.h"
+#import "WKDNotation.h"
 
 /*
  * The process a BPMN document holds, as objects: its flow nodes, the flows
@@ -17,7 +17,7 @@
  * Outside the designer the model is read-only.
  */
 
-@class WKDModel, WKDNode, WKDFlow, WKDSwimlane;
+@class WKDModel, WKDNode, WKDFlow, WKDLane;
 
 @interface WKDModelElement : NSObject
 @property (nonatomic, readonly, weak) WKDModel *model;
@@ -56,7 +56,7 @@
 /* Its default flow: a gateway's or an activity's default attribute. */
 @property (nonatomic, readonly, weak) WKDFlow *defaultFlow;
 /* The innermost lane listing it; nil when none does. */
-@property (nonatomic, readonly, weak) WKDSwimlane *lane;
+@property (nonatomic, readonly, weak) WKDLane *lane;
 @end
 
 @interface WKDFlow : WKDModelElement
@@ -73,7 +73,7 @@
 @property (nonatomic, readonly) NSRect labelBounds;
 @end
 
-@interface WKDSwimlane : WKDModelElement
+@interface WKDLane : WKDModelElement
 @property (nonatomic, readonly) NSRect bounds;
 @property (nonatomic, readonly) BOOL hasBounds;
 /* A participant rather than a lane. */
@@ -81,9 +81,9 @@
 /* Its name down its left side; NO: along its top. */
 @property (nonatomic, readonly) BOOL horizontal;
 /* The lane it divides; nil for a pool and the lanes dividing it. */
-@property (nonatomic, readonly, weak) WKDSwimlane *parent;
+@property (nonatomic, readonly, weak) WKDLane *parent;
 @property (nonatomic, readonly) NSUInteger depth;
-@property (nonatomic, readonly, copy) NSArray<WKDSwimlane *> *children;
+@property (nonatomic, readonly, copy) NSArray<WKDLane *> *children;
 /* The nodes it lists (flowNodeRef), in its order; and their ids, those it
  * lists that are not nodes of the process included. */
 @property (nonatomic, readonly, copy) NSArray<WKDNode *> *nodes;
@@ -109,15 +109,23 @@
 @property (nonatomic, readonly, copy) NSArray<WKDNode *> *topNodes;
 - (WKDNode *)nodeWithId:(NSString *)elementId;
 - (WKDFlow *)flowWithId:(NSString *)elementId;
+/* The flows into and out of the node. */
+- (NSArray<WKDFlow *> *)flowsOf:(WKDNode *)node;
+/* The nodes directly in the container (nil: the process), boundary events
+ * aside. */
+- (NSArray<WKDNode *> *)nodesIn:(WKDNode *)container;
 
 /* The process's pool; nil when no collaboration names it. */
-@property (nonatomic, readonly, strong) WKDSwimlane *pool;
+@property (nonatomic, readonly, strong) WKDLane *pool;
 /* The process's lanes, each before those dividing it, in document order. */
-@property (nonatomic, readonly, copy) NSArray<WKDSwimlane *> *lanes;
-@property (nonatomic, readonly, copy) NSArray<WKDSwimlane *> *leafLanes;
+@property (nonatomic, readonly, copy) NSArray<WKDLane *> *lanes;
+@property (nonatomic, readonly, copy) NSArray<WKDLane *> *leafLanes;
 /* The collaboration's other participants: drawn, not edited. */
-@property (nonatomic, readonly, copy) NSArray<WKDSwimlane *> *otherPools;
-- (WKDSwimlane *)laneWithId:(NSString *)elementId;
+@property (nonatomic, readonly, copy) NSArray<WKDLane *> *otherPools;
+/* A lane or a pool, the process's or another's, by its id. */
+- (WKDLane *)laneWithId:(NSString *)elementId;
+/* The innermost lane listing the node; nil when none does. */
+- (WKDLane *)laneOf:(WKDNode *)node;
 
 /* A node without a shape. */
 @property (nonatomic, readonly) BOOL needsLayout;

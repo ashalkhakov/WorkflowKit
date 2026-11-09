@@ -39,7 +39,9 @@ WKDSame(id a, id b)
 		else if (!WKDSame(node.parent.elementId, read.parent.elementId)) differs = @"parent";
 		else if (!WKDSame(node.host.elementId, read.host.elementId)) differs = @"host";
 		else if (!WKDSame(node.defaultFlow.elementId, read.defaultFlow.elementId)) differs = @"default flow";
-		else if (!WKDSame(node.lane.elementId, read.lane.elementId)) differs = @"lane";
+		else if (!WKDSame(node.lane.elementId, read.lane.elementId)) {
+			differs = [NSString stringWithFormat:@"lane %@, read %@", node.lane.elementId, read.lane.elementId];
+		}
 		else if (!WKDSame(WKDIds(node.childList), WKDIds(read.childList))) differs = @"children";
 		else if (![[NSSet setWithArray:WKDIds(node.attachedList)] isEqualToSet:[NSSet setWithArray:WKDIds(read.attachedList)]]) differs = @"attached";
 		else if (![[NSSet setWithArray:WKDIds(node.incomingList)] isEqualToSet:[NSSet setWithArray:WKDIds(read.incomingList)]]) differs = @"incoming";
@@ -87,7 +89,7 @@ WKDSame(id a, id b)
 		return [NSString stringWithFormat:@"lanes %@, read afresh %@", WKDIds(lanes), WKDIds(read)];
 	}
 	for (NSUInteger i = 0; i < [lanes count]; i++) {
-		WKDSwimlane *lane = [lanes objectAtIndex:i], *again = [read objectAtIndex:i];
+		WKDLane *lane = [lanes objectAtIndex:i], *again = [read objectAtIndex:i];
 		NSString *differs = nil;
 		if (!WKDSame(lane.name, again.name)) differs = @"name";
 		else if (lane.hasBounds != again.hasBounds || !NSEqualRects(lane.bounds, again.bounds)) differs = @"bounds";

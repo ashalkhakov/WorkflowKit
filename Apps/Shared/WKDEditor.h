@@ -1,5 +1,5 @@
 #import <Foundation/Foundation.h>
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 #import "WKDModel.h"
 
 /* A type a node can have: its BPMN name, its event's definition (nil for
@@ -14,10 +14,11 @@
 /*
  * Every change to a BPMN document goes through here: elements and their
  * references -- a flow's ends, the nodes' incoming and outgoing, a
- * gateway's default -- and the diagram that shows them change together.
- * Each change is one step on the undo manager, which keeps the document
- * as it was before: restoring a snapshot is right whatever the change was,
- * and a process's XML is small.
+ * gateway's default -- and the diagram that shows them change together,
+ * in the model first and then in its document where they differ. Each
+ * change is one step on the undo manager: the journal's record of the
+ * elements it touched and the XML it edited, so that undoing it costs what
+ * the change did, not the size of the process.
  */
 @interface WKDEditor : NSObject
 
@@ -26,10 +27,8 @@
 
 - (instancetype)initWithDocument:(NSXMLDocument *)document undoManager:(NSUndoManager *)undoManager;
 
-/* The document as it is now: undo and redo replace it. */
+/* The model's carrier: changes, undo and redo edit it in place. */
 @property (nonatomic, readonly, strong) NSXMLDocument *document;
-/* Read again after every change. */
-@property (nonatomic, readonly, strong) WKDDiagram *diagram;
 /* The process as objects: one model for the editor's life, its elements
  * the same objects from one change to the next. */
 @property (nonatomic, readonly, strong) WKDModel *model;

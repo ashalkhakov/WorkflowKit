@@ -1,5 +1,5 @@
 #import "WKDProperties.h"
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 #import "WKDEditor.h"
 #import "WKDXML.h"
 

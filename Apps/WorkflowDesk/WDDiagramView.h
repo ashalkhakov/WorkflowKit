@@ -1,7 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <DiagramKitUI/DKCanvasView.h>
 
-@class WKDDiagram;
+@class WKDModel;
 
 /*
  * A process's diagram as the operations window shows it: drawn as the
@@ -25,7 +25,7 @@
  */
 @interface WDDiagramView : DKCanvasView <DKCanvasDataSource, DKCanvasDelegate>
 
-@property (nonatomic, strong) WKDDiagram *diagram;
+@property (nonatomic, strong) WKDModel *model;
 /* Tokens on each activity now, by its id. */
 @property (nonatomic, copy) NSCountedSet<NSString *> *active;
 /* The activities run and finished. */

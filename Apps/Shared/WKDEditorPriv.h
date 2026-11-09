@@ -11,14 +11,16 @@
  */
 @interface WKDEditor ()
 @property (nonatomic, readwrite, strong) NSXMLDocument *document;
-@property (nonatomic, readwrite, strong) WKDDiagram *diagram;
 
 /* An operation that edited what the model holds in the XML itself -- the
  * lanes, a type, a paste, an id, the inspector's edits -- asks for the model
  * to be read again before its step ends, the reading recorded for undo. */
 @property (nonatomic) BOOL needsSync;
+/* The model read again from the document, journalled: after an operation's
+ * own edits of what the model holds, until it makes them in the model. */
+- (void)syncModel;
 /* One undoable step named for the change: what it changed in the model and
- * the XML is what undo takes back, and the diagram is read again after it. */
+ * the XML is what undo takes back. */
 - (void)change:(NSString *)name with:(void (^)(void))change;
 /* The same, joining the last step when it was a change of the same name
  * made within a second, with nothing undone since. */
@@ -28,7 +30,6 @@
  * without its activity slides along the activity's edge. */
 - (void)moveShapes:(NSDictionary<NSString *, NSValue *> *)offsets action:(NSString *)action coalescing:(BOOL)coalescing;
 /* Every id in the document. */
-- (NSMutableSet *)usedIds;
 /* An id of the prefix no element has. */
 - (NSString *)freshId:(NSString *)prefix;
 /* The plane that shows the process, made when the document has no diagram. */
@@ -40,16 +41,16 @@
 /* The BPMNLabel's bounds of the element's shape or edge. */
 - (void)setLabelBounds:(NSRect)bounds of:(NSString *)elementId;
 /* The router's way for the flow, round the shapes in the way. */
-- (NSArray<NSValue *> *)routeFor:(WKDConnection *)connection;
-- (void)reroute:(WKDConnection *)connection;
+- (NSArray<NSValue *> *)routeFor:(WKDFlow *)connection;
+- (void)reroute:(WKDFlow *)connection;
 /* The shape, what it contains, and what is attached to any of them. */
-- (void)collect:(WKDShape *)shape into:(NSMutableSet *)ids;
+- (void)collect:(WKDNode *)shape into:(NSMutableSet *)ids;
 /* An incoming or outgoing reference to the flow in the node, where BPMN
  * orders them. */
 - (void)addReference:(NSString *)local to:(NSString *)flowId in:(NSXMLElement *)node;
 /* Why a sequence flow cannot join the two -- a flow other than `except`
  * joining them already is one reason -- or nil when it can. */
-- (NSString *)refusalToConnect:(WKDShape *)source to:(WKDShape *)target except:(NSString *)flowId;
+- (NSString *)refusalToConnect:(WKDNode *)source to:(WKDNode *)target except:(NSString *)flowId;
 @end
 
 /* What the lanes category does for the rest of the editor. */

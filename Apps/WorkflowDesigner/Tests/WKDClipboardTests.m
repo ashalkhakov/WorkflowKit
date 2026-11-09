@@ -37,15 +37,15 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	WKDEditor *editor = [self editorOf:WKDModellerFile undo:nil];
 	NSXMLDocument *fragment = [editor fragmentOfElements:@[ @"review", @"ok", @"late" ]];
 	XCTAssertNotNil(fragment);
-	WKDDiagram *copied = [WKDDiagram diagramOfDocument:fragment];
-	XCTAssertEqualObjects([[copied.shapes valueForKey:@"elementId"] sortedArrayUsingSelector:@selector(compare:)],
+	WKDModel *copied = [WKDModel modelOfDocument:fragment];
+	XCTAssertEqualObjects([[copied.nodes valueForKey:@"elementId"] sortedArrayUsingSelector:@selector(compare:)],
 	                      (@[ @"late", @"ok", @"review" ]));
-	XCTAssertEqualObjects([copied.connections valueForKey:@"elementId"], @[ @"f2" ], @"only the flow between them");
-	NSXMLElement *review = [[copied shapeWithId:@"review"] element];
+	XCTAssertEqualObjects([copied.flows valueForKey:@"elementId"], @[ @"f2" ], @"only the flow between them");
+	NSXMLElement *review = [[copied nodeWithId:@"review"] element];
 	XCTAssertEqualObjects(WKDReferences(review, @"incoming"), @[], @"f1 was not copied");
 	XCTAssertEqualObjects(WKDReferences(review, @"outgoing"), @[ @"f2" ]);
-	XCTAssertNil(WKDAttribute([[copied shapeWithId:@"ok"] element], @"default"), @"f4 was not copied");
-	XCTAssertTrue([copied shapeWithId:@"review"].hasBounds, @"with its diagram");
+	XCTAssertNil(WKDAttribute([[copied nodeWithId:@"ok"] element], @"default"), @"f4 was not copied");
+	XCTAssertTrue([copied nodeWithId:@"review"].hasBounds, @"with its diagram");
 
 	/* A boundary event needs its activity. */
 	XCTAssertNil([editor fragmentOfElements:@[ @"late" ]]);
@@ -56,28 +56,28 @@ WKDReferences(NSXMLElement *node, NSString *local)
 {
 	NSUndoManager *undo = [[NSUndoManager alloc] init];
 	WKDEditor *editor = [self editorOf:WKDModellerFile undo:undo];
-	NSUInteger nodes = [editor.diagram.shapes count], flows = [editor.diagram.connections count];
+	NSUInteger nodes = [editor.model.nodes count], flows = [editor.model.flows count];
 	NSString *reason = nil;
 	NSArray *added = [editor paste:[editor fragmentOfElements:@[ @"review", @"ok" ]] offset:NSMakeSize(0, 300)
 	                         error:&reason];
 	XCTAssertEqual([added count], (NSUInteger)4, @"review, late, ok and f2: %@ %@", added, reason);
-	XCTAssertEqual([editor.diagram.shapes count], nodes + 3);
-	XCTAssertEqual([editor.diagram.connections count], flows + 1);
-	WKDConnection *flow = nil;
+	XCTAssertEqual([editor.model.nodes count], nodes + 3);
+	XCTAssertEqual([editor.model.flows count], flows + 1);
+	WKDFlow *flow = nil;
 	NSArray *originals = @[ @"review", @"late", @"ok", @"f2" ];
 	for (NSString *elementId in added) {
 		XCTAssertFalse([originals containsObject:elementId]);
-		flow = flow ?: [editor.diagram connectionWithId:elementId];
+		flow = flow ?: [editor.model flowWithId:elementId];
 	}
 	XCTAssertEqualObjects(flow.source.name, @"Review", @"the copy's flow joins the copies");
 	XCTAssertEqualObjects(flow.target.name, @"OK?");
-	XCTAssertTrue(flow.source != [editor.diagram shapeWithId:@"review"]);
+	XCTAssertTrue(flow.source != [editor.model nodeWithId:@"review"]);
 	XCTAssertEqualObjects(WKDReferences(flow.source.element, @"outgoing"), @[ flow.elementId ]);
 	XCTAssertEqualObjects(WKDReferences(flow.target.element, @"incoming"), @[ flow.elementId ]);
-	XCTAssertTrue(NSEqualRects(flow.source.bounds, NSOffsetRect([editor.diagram shapeWithId:@"review"].bounds, 0, 300)),
+	XCTAssertTrue(NSEqualRects(flow.source.bounds, NSOffsetRect([editor.model nodeWithId:@"review"].bounds, 0, 300)),
 	              @"moved by the offset");
-	WKDShape *timer = nil;
-	for (WKDShape *shape in editor.diagram.shapes) {
+	WKDNode *timer = nil;
+	for (WKDNode *shape in editor.model.nodes) {
 		if (shape.host == flow.source) {
 			timer = shape;
 		}
@@ -92,7 +92,7 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	XCTAssertFalse([again firstObjectCommonWithArray:added] != nil);
 	[undo undo];
 	[undo undo];
-	XCTAssertEqual([editor.diagram.shapes count], nodes, @"each paste one step");
+	XCTAssertEqual([editor.model.nodes count], nodes, @"each paste one step");
 }
 
 - (void)testASubprocessComesWithWhatItHolds
@@ -100,11 +100,11 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	WKDEditor *editor = [self editorOf:WKDModellerFile undo:nil];
 	NSArray *added = [editor paste:[editor fragmentOfElements:@[ @"ship" ]] offset:NSMakeSize(0, 300) error:NULL];
 	XCTAssertEqual([added count], (NSUInteger)1, @"%@", added);
-	WKDShape *copy = [editor.diagram shapeWithId:[added firstObject]];
-	NSArray *inside = [editor.diagram shapesIn:copy];
+	WKDNode *copy = [editor.model nodeWithId:[added firstObject]];
+	NSArray *inside = [editor.model nodesIn:copy];
 	XCTAssertEqual([inside count], (NSUInteger)3);
 	NSUInteger innerFlows = 0;
-	for (WKDConnection *connection in editor.diagram.connections) {
+	for (WKDFlow *connection in editor.model.flows) {
 		if (connection.source.parent == copy) {
 			innerFlows++;
 			XCTAssertTrue(connection.target.parent == copy);
@@ -135,8 +135,8 @@ WKDReferences(NSXMLElement *node, NSString *local)
 	XCTAssertTrue([xml rangeOfString:@"bpmn:"].location == NSNotFound, @"none of the copy's: %@", xml);
 	XCTAssertTrue([xml rangeOfString:@"xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\""].location != NSNotFound,
 	              @"camunda's namespace declared where it was not: %@", xml);
-	WKDShape *review = nil, *wait = nil;
-	for (WKDShape *shape in target.diagram.shapes) {
+	WKDNode *review = nil, *wait = nil;
+	for (WKDNode *shape in target.model.nodes) {
 		review = [shape.name isEqualToString:@"Review"] ? shape : review;
 		wait = [shape.type isEqualToString:@"receiveTask"] ? shape : wait;
 	}

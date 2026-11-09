@@ -195,13 +195,13 @@ WKDSelectTab(id sender, NSTabView *tabView)
 
 - (NSString *)processId
 {
-	return WKDAttribute([self editor].diagram.process, @"id");
+	return WKDAttribute([self editor].model.process, @"id");
 }
 
 - (void)showDocument
 {
-	WKDDiagram *diagram = [self editor].diagram;
-	self.canvas.diagram = diagram;
+	WKDModel *diagram = [self editor].model;
+	self.canvas.model = diagram;
 	[_outline showDiagram:diagram];
 	_processInspector.elementId = [self processId];
 	[self selectionDidChange];
@@ -216,7 +216,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	NSString *shown = _inspector.elementId;
 	if (shown != nil && [self.canvas.selection count] == 1 && ![self.canvas.selection containsObject:shown]
 	    && [[self editor] elementWithId:shown] != nil) {
-		self.canvas.diagram = [self editor].diagram;
+		self.canvas.model = [self editor].model;
 		self.canvas.selection = [NSSet setWithObject:shown];
 	}
 	[self showDocument];
@@ -348,12 +348,12 @@ WKDSelectTab(id sender, NSTabView *tabView)
 	NSString *selected = [self selectedId];
 	if (selected != nil) {
 		[[menu addItemWithTitle:@"Rename" action:@selector(rename:) keyEquivalent:@""] setTarget:self];
-		if ([[self editor].diagram laneWithId:selected] != nil) {
+		if ([[self editor].model laneWithId:selected] != nil) {
 			[[menu addItemWithTitle:@"Add Lane" action:@selector(addLane:) keyEquivalent:@""] setTarget:self];
 		}
 		NSArray *types = [[self editor] typesFor:selected];
 		if ([types count] > 0) {
-			WKDShape *shape = [[self editor].diagram shapeWithId:selected];
+			WKDNode *shape = [[self editor].model nodeWithId:selected];
 			NSMenu *submenu = [[NSMenu alloc] initWithTitle:@"Change Type"];
 			[submenu setAutoenablesItems:NO];
 			for (WKDNodeType *type in types) {
@@ -484,7 +484,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 {
 	NSMutableArray *shapes = [NSMutableArray array];
 	for (NSString *elementId in self.canvas.orderedSelection) {
-		if ([[self editor].diagram shapeWithId:elementId] != nil) {
+		if ([[self editor].model nodeWithId:elementId] != nil) {
 			[shapes addObject:elementId];
 		}
 	}
@@ -628,7 +628,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 {
 	/* After the lane selected, else at the bottom of the pool. */
 	NSString *selected = [self selectedId];
-	NSString *after = [[self editor].diagram laneWithId:selected] != nil ? selected : nil;
+	NSString *after = [[self editor].model laneWithId:selected] != nil ? selected : nil;
 	NSString *lane = [[self editor] addLaneAfter:after];
 	if (lane != nil) {
 		self.canvas.selection = [NSSet setWithObject:lane];
@@ -669,7 +669,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 		             [missing componentsJoinedByString:@", "]]];
 		return;
 	}
-	NSString *name = WKDAttribute([self editor].diagram.process, @"name");
+	NSString *name = WKDAttribute([self editor].model.process, @"name");
 	[[WKDAppDelegate shared] withSession:^(WDSession *session) {
 		[self deploy:resources named:[name length] > 0 ? name : processId key:processId on:session];
 	}];
@@ -873,7 +873,7 @@ WKDSelectTab(id sender, NSTabView *tabView)
 		return [self decisionElement] != nil;
 	}
 	if ([item action] == @selector(addPool:)) {
-		return [self editor].diagram.pool == nil;
+		return [self editor].model.pool == nil;
 	}
 	if ([item action] == @selector(deploy:)) {
 		return [self designerDocument].problem == nil;

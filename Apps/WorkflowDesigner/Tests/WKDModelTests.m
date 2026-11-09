@@ -1,6 +1,6 @@
 #import <XCTest/XCTest.h>
 #import "WKDModelPriv.h"
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 #import "WKDXML.h"
 #import "WKDFixtures.h"
 #import "WKDEditor.h"
@@ -16,7 +16,7 @@ WKDCheckAgreementInTests(void)
 
 /*
  * The model read from every fixture and example process: it agrees with
- * the diagram the designer draws from (WKDDiagram) element for element, an
+ * the diagram the designer draws from (WKDModel) element for element, an
  * unchanged model writes nothing, and every element written from the model
  * leaves the carrier as it was read -- the writer says everything the model
  * holds as the file says it.
@@ -83,11 +83,11 @@ WKDFirstDifference(NSString *a, NSString *b)
 	for (NSString *name in documents) {
 		NSString *text = [documents objectForKey:name];
 		NSXMLDocument *document = [self parse:text];
-		WKDDiagram *diagram = [WKDDiagram diagramOfDocument:document];
+		WKDModel *diagram = [WKDModel modelOfDocument:document];
 		WKDModel *model = [WKDModel modelOfDocument:document];
 		XCTAssertNotNil(model, @"%@", name);
-		XCTAssertEqualObjects([model.nodes valueForKey:@"elementId"], [diagram.shapes valueForKey:@"elementId"], @"%@", name);
-		for (WKDShape *shape in diagram.shapes) {
+		XCTAssertEqualObjects([model.nodes valueForKey:@"elementId"], [diagram.nodes valueForKey:@"elementId"], @"%@", name);
+		for (WKDNode *shape in diagram.nodes) {
 			WKDNode *node = [model nodeWithId:shape.elementId];
 			XCTAssertEqualObjects(node.type, shape.type, @"%@ %@", name, shape.elementId);
 			XCTAssertEqual(node.kind, shape.kind, @"%@ %@", name, shape.elementId);
@@ -103,12 +103,12 @@ WKDFirstDifference(NSString *a, NSString *b)
 			XCTAssertEqualObjects(node.loop, shape.loop, @"%@ %@", name, shape.elementId);
 			XCTAssertEqualObjects(node.lane.elementId, [diagram laneOf:shape].elementId, @"%@ %@", name, shape.elementId);
 			XCTAssertEqualObjects([node.children valueForKey:@"elementId"],
-			                      [[diagram shapesIn:shape] valueForKey:@"elementId"], @"%@ %@", name, shape.elementId);
+			                      [[diagram nodesIn:shape] valueForKey:@"elementId"], @"%@ %@", name, shape.elementId);
 		}
 		XCTAssertEqualObjects([model.topNodes valueForKey:@"elementId"],
-		                      [[diagram shapesIn:nil] valueForKey:@"elementId"], @"%@", name);
-		XCTAssertEqualObjects([model.flows valueForKey:@"elementId"], [diagram.connections valueForKey:@"elementId"], @"%@", name);
-		for (WKDConnection *connection in diagram.connections) {
+		                      [[diagram nodesIn:nil] valueForKey:@"elementId"], @"%@", name);
+		XCTAssertEqualObjects([model.flows valueForKey:@"elementId"], [diagram.flows valueForKey:@"elementId"], @"%@", name);
+		for (WKDFlow *connection in diagram.flows) {
 			WKDFlow *flow = [model flowWithId:connection.elementId];
 			XCTAssertEqualObjects(flow.source.elementId, connection.source.elementId, @"%@ %@", name, connection.elementId);
 			XCTAssertEqualObjects(flow.target.elementId, connection.target.elementId, @"%@ %@", name, connection.elementId);
@@ -130,7 +130,7 @@ WKDFirstDifference(NSString *a, NSString *b)
 		XCTAssertEqualObjects([model.leafLanes valueForKey:@"elementId"], [diagram.leafLanes valueForKey:@"elementId"], @"%@", name);
 		XCTAssertEqualObjects([model.otherPools valueForKey:@"elementId"], [diagram.otherPools valueForKey:@"elementId"], @"%@", name);
 		for (WKDLane *lane in diagram.lanes) {
-			WKDSwimlane *modelLane = [model laneWithId:lane.elementId];
+			WKDLane *modelLane = [model laneWithId:lane.elementId];
 			XCTAssertEqualObjects(modelLane.flowNodeIds, lane.flowNodeIds, @"%@ %@", name, lane.elementId);
 			XCTAssertTrue(NSEqualRects(modelLane.bounds, lane.bounds), @"%@ %@", name, lane.elementId);
 			XCTAssertEqual(modelLane.horizontal, lane.horizontal, @"%@ %@", name, lane.elementId);

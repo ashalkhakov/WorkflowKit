@@ -42,6 +42,13 @@
 - (void)willEditXML:(NSXMLElement *)element;
 - (void)didEditXML:(NSXMLElement *)element;
 
+/* The document's element of the id, from an index kept as edits are made
+ * and undone; nil when there is none. */
+- (NSXMLElement *)elementWithId:(NSString *)elementId;
+/* What the index has wrong, against a walk of the document; nil when
+ * nothing: for tests. */
+- (NSString *)indexDisagreement;
+
 /* The step undone -- the model and the XML as they were before it -- and
  * the step that redoes it. */
 - (WKDJournalStep *)undo:(WKDJournalStep *)step;

@@ -1,4 +1,5 @@
 #import "WKDModelPriv.h"
+#import "WKDXML.h"
 
 @implementation WKDModelElement
 
@@ -100,7 +101,7 @@
 
 @end
 
-@implementation WKDSwimlane
+@implementation WKDLane
 
 - (instancetype)init
 {
@@ -178,15 +179,30 @@
 	return elementId != nil ? [_flowsById objectForKey:elementId] : nil;
 }
 
-- (WKDSwimlane *)laneWithId:(NSString *)elementId
+- (WKDLane *)laneWithId:(NSString *)elementId
 {
 	return elementId != nil ? [_lanesById objectForKey:elementId] : nil;
 }
 
-- (NSArray<WKDSwimlane *> *)leafLanes
+- (NSArray<WKDFlow *> *)flowsOf:(WKDNode *)node
+{
+	return [node.incomingList arrayByAddingObjectsFromArray:node.outgoingList] ?: @[];
+}
+
+- (NSArray<WKDNode *> *)nodesIn:(WKDNode *)container
+{
+	return container != nil ? container.children : self.topNodes;
+}
+
+- (WKDLane *)laneOf:(WKDNode *)node
+{
+	return node.lane;
+}
+
+- (NSArray<WKDLane *> *)leafLanes
 {
 	NSMutableArray *leaves = [NSMutableArray array];
-	for (WKDSwimlane *lane in _lanes) {
+	for (WKDLane *lane in _lanes) {
 		if ([lane.children count] == 0) {
 			[leaves addObject:lane];
 		}
@@ -217,7 +233,7 @@
 		[bands addObject:_pool];
 	}
 	[bands addObjectsFromArray:_otherPools];
-	for (WKDSwimlane *lane in bands) {
+	for (WKDLane *lane in bands) {
 		if (lane.hasBounds) {
 			bounds = NSIsEmptyRect(bounds) ? lane.bounds : NSUnionRect(bounds, lane.bounds);
 		}
@@ -247,7 +263,7 @@
 	for (WKDFlow *flow in _flowList) {
 		[_changedElements addObject:flow];
 	}
-	for (WKDSwimlane *lane in _lanes) {
+	for (WKDLane *lane in _lanes) {
 		[_changedElements addObject:lane];
 	}
 	if (_pool != nil) {
@@ -263,6 +279,7 @@
 		@"nodeList": [self.nodeList copy], @"flowList": [self.flowList copy],
 		@"nodesById": [self.nodesById copy], @"flowsById": [self.flowsById copy], @"lanesById": [self.lanesById copy],
 		@"pool": self.pool ?: [NSNull null], @"lanes": self.lanes, @"otherPools": self.otherPools,
+		@"plane": self.plane ?: [NSNull null],
 	};
 }
 
@@ -277,6 +294,8 @@
 	self.pool = pool != [NSNull null] ? pool : nil;
 	self.lanes = [state objectForKey:@"lanes"];
 	self.otherPools = [state objectForKey:@"otherPools"];
+	id plane = [state objectForKey:@"plane"];
+	self.plane = plane != [NSNull null] ? plane : nil;
 }
 
 - (BOOL)containsElement:(WKDModelElement *)element
@@ -287,29 +306,37 @@
 	if ([element isKindOfClass:[WKDFlow class]]) {
 		return [self.flowsById objectForKey:element.elementId] == element;
 	}
-	return [element isKindOfClass:[WKDSwimlane class]]
+	return [element isKindOfClass:[WKDLane class]]
 		&& ([self.lanesById objectForKey:element.elementId] == element || self.pool == element);
 }
 
-- (NSSet<NSXMLElement *> *)carrierElements
+/* By the id the node names, then by identity: a node with an element's
+ * id is not its carrier unless it is the very one. */
+- (BOOL)carries:(NSXMLNode *)node
 {
-	NSMutableSet *carriers = [NSMutableSet set];
-	NSMutableArray *elements = [NSMutableArray arrayWithArray:self.nodeList];
-	[elements addObjectsFromArray:self.flowList];
-	[elements addObjectsFromArray:self.lanes];
-	[elements addObjectsFromArray:self.otherPools];
+	if ([node kind] != NSXMLElementKind) {
+		return NO;
+	}
+	NSXMLElement *element = (NSXMLElement *)node;
+	NSMutableArray *candidates = [NSMutableArray arrayWithCapacity:2];
+	for (NSString *name in @[ @"bpmnElement", @"id" ]) {
+		NSString *elementId = WKDAttribute(element, name);
+		WKDModelElement *found = elementId == nil ? nil : [self.nodesById objectForKey:elementId]
+			?: [self.flowsById objectForKey:elementId] ?: (WKDModelElement *)[self.lanesById objectForKey:elementId];
+		if (found != nil) {
+			[candidates addObject:found];
+		}
+	}
 	if (self.pool != nil) {
-		[elements addObject:self.pool];
+		[candidates addObject:self.pool];
 	}
-	for (WKDModelElement *element in elements) {
-		if (element.element != nil) {
-			[carriers addObject:element.element];
-		}
-		if (element.diagramElement != nil) {
-			[carriers addObject:element.diagramElement];
+	[candidates addObjectsFromArray:self.otherPools];
+	for (WKDModelElement *candidate in candidates) {
+		if (candidate.element == element || candidate.diagramElement == element) {
+			return YES;
 		}
 	}
-	return carriers;
+	return NO;
 }
 
 #pragma mark Making and removing
@@ -369,6 +396,24 @@
 	[self.flowList addObject:flow];
 	[self.flowsById setObject:flow forKey:elementId];
 	return flow;
+}
+
+- (void)renameElement:(WKDModelElement *)element to:(NSString *)elementId
+{
+	NSMutableDictionary *byId = self.lanesById;
+	if ([element isKindOfClass:[WKDNode class]]) {
+		byId = self.nodesById;
+	} else if ([element isKindOfClass:[WKDFlow class]]) {
+		byId = self.flowsById;
+	}
+	if ([byId objectForKey:element.elementId] != element) {
+		return;
+	}
+	[self.journal willChangeModel];
+	[element willChange];
+	[byId removeObjectForKey:element.elementId];
+	element.elementId = elementId;
+	[byId setObject:element forKey:elementId];
 }
 
 - (void)removeFlow:(WKDFlow *)flow

@@ -24,7 +24,7 @@ WorkflowDesk_OBJC_FILES = \
 	../Shared/WDConnectWindowController.m \
 	WDDiagramView.m \
 	../Shared/WKDXML.m \
-	../Shared/WKDDiagram.m \
+	../Shared/WKDNotation.m \
 	../Shared/WKDModel.m \
 	../Shared/WKDBpmnReader.m \
 	../Shared/WKDBpmnWriter.m \

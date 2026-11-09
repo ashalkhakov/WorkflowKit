@@ -24,7 +24,7 @@ main(int argc, const char *argv[])
 			NSData *data = [NSData dataWithContentsOfFile:path];
 			NSXMLDocument *document = data != nil ? [[NSXMLDocument alloc] initWithData:data options:0 error:&error] : nil;
 			WKDEditor *editor = document != nil ? [[WKDEditor alloc] initWithDocument:document undoManager:nil] : nil;
-			if (editor.diagram.process == nil) {
+			if (editor.model.process == nil) {
 				fprintf(stderr, "wkd-arrange: %s is not a BPMN process%s%s\n", argv[i],
 				        error != nil ? ": " : "", error != nil ? [[error localizedDescription] UTF8String] : "");
 				status = 1;

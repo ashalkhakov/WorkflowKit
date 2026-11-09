@@ -101,8 +101,8 @@ static NSInteger WKDByDepthThenIndex(id a, id b, void *context);
 			node.flowsChanged = NO;
 		} else if ([element isKindOfClass:[WKDFlow class]]) {
 			[self writeFlow:(WKDFlow *)element];
-		} else if ([element isKindOfClass:[WKDSwimlane class]]) {
-			[self writeLane:(WKDSwimlane *)element];
+		} else if ([element isKindOfClass:[WKDLane class]]) {
+			[self writeLane:(WKDLane *)element];
 		}
 	}
 	[self.changedElements removeAllObjects];
@@ -388,7 +388,7 @@ WKDByDiagramIndex(id a, id b, void *context)
 
 #pragma mark Lanes
 
-- (void)writeLane:(WKDSwimlane *)lane
+- (void)writeLane:(WKDLane *)lane
 {
 	WKDWriteAttribute(self.journal, lane.element, @"name", lane.name);
 	if (!lane.isPool) {
@@ -425,8 +425,8 @@ WKDByDiagramIndex(id a, id b, void *context)
 	if ([element isKindOfClass:[WKDNode class]]) {
 		WKDNode *node = (WKDNode *)element;
 		[self writeShapeOf:node bounds:node.bounds hasBounds:node.hasBounds labelBounds:node.labelBounds];
-	} else if ([element isKindOfClass:[WKDSwimlane class]]) {
-		WKDSwimlane *lane = (WKDSwimlane *)element;
+	} else if ([element isKindOfClass:[WKDLane class]]) {
+		WKDLane *lane = (WKDLane *)element;
 		[self writeShapeOf:lane bounds:lane.bounds hasBounds:lane.hasBounds labelBounds:NSZeroRect];
 	} else if ([element isKindOfClass:[WKDFlow class]]) {
 		[self writeEdgeOf:(WKDFlow *)element];
@@ -476,9 +476,7 @@ WKDByDiagramIndex(id a, id b, void *context)
 	WKDWriteBounds(self.journal, box, rect);
 }
 
-/* A BPMNShape or BPMNEdge for the element, at the end of the plane, which
- * is made when the document has no diagram. */
-- (NSXMLElement *)newDiagramElement:(NSString *)local for:(WKDModelElement *)element
+- (NSXMLElement *)ensurePlane
 {
 	if (self.plane == nil) {
 		NSString *processId = WKDAttribute(self.process, @"id");
@@ -488,9 +486,18 @@ WKDByDiagramIndex(id a, id b, void *context)
 		WKDSetAttribute(plane, @"id", [NSString stringWithFormat:@"BPMNPlane_%@", processId]);
 		WKDSetAttribute(plane, @"bpmnElement", processId);
 		[diagram addChild:plane];
+		[self.journal willChangeModel];
 		WKDLogAdd(self.journal, [self.document rootElement], diagram);
 		self.plane = plane;
 	}
+	return self.plane;
+}
+
+/* A BPMNShape or BPMNEdge for the element, at the end of the plane, which
+ * is made when the document has no diagram. */
+- (NSXMLElement *)newDiagramElement:(NSString *)local for:(WKDModelElement *)element
+{
+	[self ensurePlane];
 	NSXMLElement *diagramElement = WKDNewElement(self.document, WKDBpmnDINamespace, local);
 	NSString *suffix = [local isEqualToString:@"BPMNShape"] ? @"Shape" : @"Edge";
 	WKDSetAttribute(diagramElement, @"id", [NSString stringWithFormat:@"%@_%@", element.elementId, suffix]);

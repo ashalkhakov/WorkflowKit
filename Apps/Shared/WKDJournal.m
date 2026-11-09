@@ -181,6 +181,8 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 	__weak WKDModel *_model;
 	WKDJournalStep *_step;
 	NSMapTable<NSXMLElement *, WKDXMLEdit *> *_pending;
+	/* Built when first asked, then kept. */
+	NSMutableDictionary<NSString *, NSXMLElement *> *_ids;
 }
 
 - (instancetype)initWithModel:(WKDModel *)model
@@ -246,6 +248,9 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 
 - (void)didSetAttribute:(NSString *)name of:(NSXMLElement *)element from:(NSString *)before to:(NSString *)after
 {
+	if ([name isEqualToString:@"id"]) {
+		[self reindex:element from:before to:after];
+	}
 	WKDXMLEdit *edit = [[WKDXMLEdit alloc] init];
 	edit.kind = WKDEditAttribute;
 	edit.node = element;
@@ -257,6 +262,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 
 - (void)didInsert:(NSXMLNode *)child into:(NSXMLElement *)parent at:(NSUInteger)index
 {
+	[self index:child adding:YES];
 	WKDXMLEdit *edit = [[WKDXMLEdit alloc] init];
 	edit.kind = WKDEditInsert;
 	edit.node = child;
@@ -267,6 +273,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 
 - (void)didDetach:(NSXMLNode *)child from:(NSXMLElement *)parent at:(NSUInteger)index
 {
+	[self index:child adding:NO];
 	WKDXMLEdit *edit = [[WKDXMLEdit alloc] init];
 	edit.kind = WKDEditDetach;
 	edit.node = child;
@@ -289,25 +296,24 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
  * themselves and the rest copied. */
 - (WKDXMLState *)stateOfXML:(NSXMLElement *)element
 {
-	NSSet *carriers = [_model carrierElements];
 	WKDXMLState *state = [[WKDXMLState alloc] init];
 	state.attributes = [[NSArray alloc] initWithArray:[element attributes] ?: @[] copyItems:YES];
 	state.namespaces = [[NSArray alloc] initWithArray:[element namespaces] ?: @[] copyItems:YES];
 	NSMutableArray *children = [NSMutableArray array];
 	for (NSXMLNode *child in [element children]) {
-		[children addObject:[self holdsCarrier:child among:carriers] ? child : [child copy]];
+		[children addObject:[self holdsCarrier:child] ? child : [child copy]];
 	}
 	state.children = children;
 	return state;
 }
 
-- (BOOL)holdsCarrier:(NSXMLNode *)node among:(NSSet *)carriers
+- (BOOL)holdsCarrier:(NSXMLNode *)node
 {
-	if ([carriers containsObject:node]) {
+	if ([_model carries:node]) {
 		return YES;
 	}
 	for (NSXMLNode *child in [node children]) {
-		if ([child kind] == NSXMLElementKind && [self holdsCarrier:child among:carriers]) {
+		if ([child kind] == NSXMLElementKind && [self holdsCarrier:child]) {
 			return YES;
 		}
 	}
@@ -323,6 +329,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 		_pending = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality | NSPointerFunctionsStrongMemory
 		                                 valueOptions:NSPointerFunctionsStrongMemory];
 	}
+	[self indexShallow:element adding:NO];
 	if ([_pending objectForKey:element] == nil) {
 		/* In the step where the edit began: what is logged inside it is
 		 * undone before the element is put back, and redone after. */
@@ -337,6 +344,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 
 - (void)didEditXML:(NSXMLElement *)element
 {
+	[self indexShallow:element adding:YES];
 	WKDXMLEdit *edit = element != nil ? [_pending objectForKey:element] : nil;
 	if (_step == nil || edit == nil) {
 		return;
@@ -367,7 +375,7 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 {
 	WKDJournalStep *inverse = [step inverse];
 	for (WKDXMLEdit *edit in inverse.edits) {
-		[edit apply];
+		[self apply:edit];
 	}
 	if (inverse.modelAfter != nil) {
 		[_model restoreJournalState:inverse.modelAfter];
@@ -379,6 +387,149 @@ WKDRestoreNamespaces(NSXMLElement *element, NSArray<NSXMLNode *> *namespaces)
 	[_model.changedElements removeAllObjects];
 	[_model.deletedElements removeAllObjects];
 	return inverse;
+}
+
+#pragma mark The index of ids
+
+/* An edit undone or redone, and the index kept with it. */
+- (void)apply:(WKDXMLEdit *)edit
+{
+	switch (edit.kind) {
+	case WKDEditAttribute:
+		[edit apply];
+		if ([edit.name isEqualToString:@"id"]) {
+			[self reindex:(NSXMLElement *)edit.node from:edit.before to:edit.after];
+		}
+		break;
+	case WKDEditInsert:
+		[edit apply];
+		[self index:edit.node adding:YES];
+		break;
+	case WKDEditDetach:
+		[edit apply];
+		[self index:edit.node adding:NO];
+		break;
+	case WKDEditWhole:
+		[self indexShallow:(NSXMLElement *)edit.node adding:NO];
+		[edit apply];
+		[self indexShallow:(NSXMLElement *)edit.node adding:YES];
+		break;
+	default:
+		[edit apply];
+	}
+}
+
+- (NSMutableDictionary *)idsOfDocument
+{
+	NSMutableDictionary *ids = [NSMutableDictionary dictionary];
+	NSMutableArray *pending = [NSMutableArray arrayWithObject:[_model.document rootElement] ?: @[]];
+	while ([pending count] > 0) {
+		id element = [pending lastObject];
+		[pending removeLastObject];
+		if (![element isKindOfClass:[NSXMLElement class]]) {
+			continue;
+		}
+		NSString *elementId = WKDAttribute(element, @"id");
+		if (elementId != nil && [ids objectForKey:elementId] == nil) {
+			[ids setObject:element forKey:elementId];
+		}
+		for (NSXMLNode *child in [[element children] reverseObjectEnumerator]) {
+			if ([child kind] == NSXMLElementKind) {
+				[pending addObject:child];
+			}
+		}
+	}
+	return ids;
+}
+
+- (NSXMLElement *)elementWithId:(NSString *)elementId
+{
+	if (elementId == nil) {
+		return nil;
+	}
+	if (_ids == nil) {
+		_ids = [self idsOfDocument];
+	}
+	return [_ids objectForKey:elementId];
+}
+
+- (NSString *)indexDisagreement
+{
+	if (_ids == nil) {
+		return nil;
+	}
+	NSDictionary *walked = [self idsOfDocument];
+	for (NSString *elementId in walked) {
+		if ([_ids objectForKey:elementId] != [walked objectForKey:elementId]) {
+			return [NSString stringWithFormat:@"the index of ids has %@ wrong", elementId];
+		}
+	}
+	for (NSString *elementId in _ids) {
+		if ([walked objectForKey:elementId] == nil) {
+			return [NSString stringWithFormat:@"the index of ids has %@, which the document has not", elementId];
+		}
+	}
+	return nil;
+}
+
+- (BOOL)inDocument:(NSXMLNode *)node
+{
+	return node != nil && [node rootDocument] == _model.document;
+}
+
+- (void)reindex:(NSXMLElement *)element from:(NSString *)before to:(NSString *)after
+{
+	if (_ids == nil) {
+		return;
+	}
+	if (before != nil && [_ids objectForKey:before] == element) {
+		[_ids removeObjectForKey:before];
+	}
+	if (after != nil && [self inDocument:element] && [_ids objectForKey:after] == nil) {
+		[_ids setObject:element forKey:after];
+	}
+}
+
+/* The node and all it holds: put in, after it went into the document, or
+ * taken out. */
+- (void)index:(NSXMLNode *)node adding:(BOOL)adding
+{
+	if (_ids == nil || [node kind] != NSXMLElementKind || (adding && ![self inDocument:node])) {
+		return;
+	}
+	NSMutableArray *pending = [NSMutableArray arrayWithObject:node];
+	while ([pending count] > 0) {
+		NSXMLElement *element = [pending lastObject];
+		[pending removeLastObject];
+		NSString *elementId = WKDAttribute(element, @"id");
+		if (elementId != nil) {
+			if (adding && [_ids objectForKey:elementId] == nil) {
+				[_ids setObject:element forKey:elementId];
+			} else if (!adding && [_ids objectForKey:elementId] == element) {
+				[_ids removeObjectForKey:elementId];
+			}
+		}
+		for (NSXMLNode *child in [element children]) {
+			if ([child kind] == NSXMLElementKind) {
+				[pending addObject:child];
+			}
+		}
+	}
+}
+
+/* Around a whole-element edit: the element's own id, and what it holds
+ * but where model elements are, which the edit keeps as they were. */
+- (void)indexShallow:(NSXMLElement *)element adding:(BOOL)adding
+{
+	if (_ids == nil || element == nil) {
+		return;
+	}
+	[self reindex:element from:adding ? nil : WKDAttribute(element, @"id") to:adding ? WKDAttribute(element, @"id") : nil];
+	for (NSXMLNode *child in [element children]) {
+		if ([child kind] == NSXMLElementKind && ![self holdsCarrier:child]) {
+			[self index:child adding:adding];
+		}
+	}
 }
 
 @end

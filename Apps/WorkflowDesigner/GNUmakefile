@@ -56,7 +56,7 @@ WorkflowDesigner_OBJC_FILES = \
 	../Shared/WKDEditor+Types.m \
 	../Shared/WKDEditor+Alignment.m \
 	../Shared/WKDEditor+Lanes.m \
-	../Shared/WKDDiagram.m \
+	../Shared/WKDNotation.m \
 	../Shared/WKDModel.m \
 	../Shared/WKDBpmnReader.m \
 	../Shared/WKDBpmnWriter.m \

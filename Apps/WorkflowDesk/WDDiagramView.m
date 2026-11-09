@@ -1,5 +1,5 @@
 #import "WDDiagramView.h"
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 #import "WKDRenderer.h"
 #import "WKDXML.h"
 
@@ -72,15 +72,15 @@ WDIncidentColor(void)
 {
 	NSSize now = [[self enclosingScrollView] contentSize];
 	/* A scroller shown or hidden is not a new area. */
-	if (self.diagram != nil && !_fitting
+	if (self.model != nil && !_fitting
 	    && (fabs(now.width - _fittedTo.width) > 20 || fabs(now.height - _fittedTo.height) > 20)) {
 		[self zoomToFit];
 	}
 }
 
-- (void)setDiagram:(WKDDiagram *)diagram
+- (void)setModel:(WKDModel *)diagram
 {
-	_diagram = diagram;
+	_model = diagram;
 	[self reloadData];
 	[self zoomToFit];
 }
@@ -114,13 +114,13 @@ WDIncidentColor(void)
 
 - (NSRect)diagramBoundsForCanvas:(DKCanvasView *)canvas
 {
-	NSRect content = self.diagram.contentBounds;
+	NSRect content = self.model.contentBounds;
 	return NSIsEmptyRect(content) ? NSZeroRect : NSInsetRect(content, -30, -30);
 }
 
-- (WKDShape *)shapeAt:(NSPoint)point
+- (WKDNode *)shapeAt:(NSPoint)point
 {
-	for (WKDShape *shape in [self.diagram.shapes reverseObjectEnumerator]) {
+	for (WKDNode *shape in [self.model.nodes reverseObjectEnumerator]) {
 		if (shape.hasBounds && NSPointInRect(point, NSInsetRect(shape.bounds, -3, -3))) {
 			return shape;
 		}
@@ -136,7 +136,7 @@ WDIncidentColor(void)
 - (NSArray *)canvas:(DKCanvasView *)canvas itemsInRect:(NSRect)rect
 {
 	NSMutableArray *items = [NSMutableArray array];
-	for (WKDShape *shape in self.diagram.shapes) {
+	for (WKDNode *shape in self.model.nodes) {
 		if (shape.hasBounds && NSIntersectsRect(shape.bounds, rect)) {
 			[items addObject:shape.elementId];
 		}
@@ -146,7 +146,7 @@ WDIncidentColor(void)
 
 - (NSRect)canvas:(DKCanvasView *)canvas frameOfItem:(id)item
 {
-	return [self.diagram shapeWithId:item].bounds;
+	return [self.model nodeWithId:item].bounds;
 }
 
 - (BOOL)canvas:(DKCanvasView *)canvas canMoveItem:(id)item
@@ -154,7 +154,7 @@ WDIncidentColor(void)
 	return NO;
 }
 
-- (WKDLook *)lookOf:(WKDShape *)shape
+- (WKDLook *)lookOf:(WKDNode *)shape
 {
 	WKDLook *look = [WKDLook lookOfType:shape.type eventDefinition:shape.eventDefinition];
 	look.interrupting = shape.interrupting;
@@ -192,7 +192,7 @@ WDBadge(id<DKSurface> surface, NSPoint centre, NSUInteger count, DKColor colour)
 
 - (void)drawDiagramInRect:(NSRect)dirty surface:(id<DKSurface>)surface
 {
-	if (self.diagram == nil) {
+	if (self.model == nil) {
 		NSRect visible = [self visibleRect];
 		[surface drawText:self.placeholder ?: @"" centeredAt:NSMakePoint(NSMidX(visible), NSMidY(visible))
 		             font:[DKFont systemFontOfSize:12 bold:NO] color:DKColorMake(0.5, 0.5, 0.5, 1)
@@ -200,18 +200,18 @@ WDBadge(id<DKSurface> surface, NSPoint centre, NSUInteger count, DKColor colour)
 		return;
 	}
 	/* Pools and lanes under everything. */
-	NSMutableArray<WKDLane *> *bands = [NSMutableArray arrayWithArray:self.diagram.otherPools];
-	if (self.diagram.pool != nil) {
-		[bands addObject:self.diagram.pool];
+	NSMutableArray<WKDLane *> *bands = [NSMutableArray arrayWithArray:self.model.otherPools];
+	if (self.model.pool != nil) {
+		[bands addObject:self.model.pool];
 	}
-	[bands addObjectsFromArray:self.diagram.lanes];
+	[bands addObjectsFromArray:self.model.lanes];
 	for (WKDLane *band in bands) {
 		if (band.hasBounds) {
 			WKDDrawLane(surface, band.bounds, band.name, band.horizontal);
 		}
 	}
 	/* The way taken first, under the shapes. */
-	for (WKDConnection *connection in self.diagram.connections) {
+	for (WKDFlow *connection in self.model.flows) {
 		BOOL taken = [self.finished containsObject:connection.source.elementId]
 			&& ([self.finished containsObject:connection.target.elementId]
 			    || [self.active containsObject:connection.target.elementId]);
@@ -228,7 +228,7 @@ WDBadge(id<DKSurface> surface, NSPoint centre, NSUInteger count, DKColor colour)
 			                                  ? WKDFlowLabelRect(connection.waypoints) : connection.labelBounds);
 		}
 	}
-	for (WKDShape *shape in self.diagram.shapes) {
+	for (WKDNode *shape in self.model.nodes) {
 		if (!shape.hasBounds || !NSIntersectsRect(NSInsetRect(shape.bounds, -60, -40), dirty)) {
 			continue;
 		}
