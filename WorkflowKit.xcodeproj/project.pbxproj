@@ -281,6 +281,7 @@
 		B01C61BC17C96B65B865C136 /* WorkflowKit.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 6A854FC09A6643484EE20420 /* WorkflowKit.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		B2A30F2EA6BCDA65B1F20340 /* WKDDecisionEditor.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 6C3FB1210E5F2F5D91CCC0CE /* WKDDecisionEditor.m */; };
 		B2C65B752D355BF70FA73BD7 /* WDAppDelegate.m in WorkflowDesk */ = { isa = PBXBuildFile; fileRef = 87B97A6D8F35B48ABF6277B7 /* WDAppDelegate.m */; };
+		B4E8754224362CE17B83EAB5 /* LSPKit.framework in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = CDE4B85AD8B40D63AD13133B /* LSPKit.framework */; };
 		B50DB206BE50D8BF4BE9675A /* WFRepositoryService.h in WorkflowKit */ = { isa = PBXBuildFile; fileRef = 59630E0E416E1E31E471B6E2 /* WFRepositoryService.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		B5BE00733CC6DD2A005BE31E /* DiagramKitUI.framework in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 8D6B561B67E4725D27B04160 /* DiagramKitUI.framework */; };
 		B5EF948E31E972D23CA6FEAE /* WKDJournal.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 455C62C50C7257D3CD42038B /* WKDJournal.m */; };
@@ -383,6 +384,7 @@
 		ECBF7902E6256C34F5D2814E /* WKDInspectorTests.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = CC432668104370B770F5C740 /* WKDInspectorTests.m */; };
 		ECE85F4DFCB1A36DEBF61D63 /* WKDRowButton.xib in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = 74528D2071A4A85C140B739B /* WKDRowButton.xib */; };
 		EE3DDAADB8B80006467BBF74 /* WKDRowTable.xib in WKUTests */ = { isa = PBXBuildFile; fileRef = 1F8F96C24069B2C825350CFE /* WKDRowTable.xib */; };
+		F075D76F1C8E3337FF7DDAE6 /* LSPKit.framework in WKUTests */ = { isa = PBXBuildFile; fileRef = CDE4B85AD8B40D63AD13133B /* LSPKit.framework */; };
 		F083120F0F557B362261C63F /* WKDDmnModelCheck.m in WorkflowDesignerTests */ = { isa = PBXBuildFile; fileRef = 912A9427198EF5133995155F /* WKDDmnModelCheck.m */; };
 		F416088620E26E1CFEFB72F3 /* WorkflowKit.xcdatamodeld in WorkflowKit */ = { isa = PBXBuildFile; fileRef = EBA0AA6EBDB0FF2CB12DC371 /* WorkflowKit.xcdatamodeld */; };
 		F44365E5D09B43DAE9E14077 /* WKDEditor+Clipboard.m in WorkflowDesigner */ = { isa = PBXBuildFile; fileRef = A2885CA43D32F55CA8C20B40 /* WKDEditor+Clipboard.m */; };
@@ -779,6 +781,7 @@
 		CBE1964EC7C952FAAAB29680 /* WKUDecisionEditor.xib */ = { isa = PBXFileReference; lastKnownFileType = file.xib; path = WKUDecisionEditor.xib; sourceTree = "<group>"; };
 		CC432668104370B770F5C740 /* WKDInspectorTests.m */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WKDInspectorTests.m; sourceTree = "<group>"; };
 		CD19C21238BB86030D8FFF20 /* WKDModel.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WKDModel.h; sourceTree = "<group>"; };
+		CDE4B85AD8B40D63AD13133B /* LSPKit.xcframework */ = { isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = LSPKit.xcframework; path = .deps/LSPKit.xcframework; sourceTree = SOURCE_ROOT; };
 		CF5D7D1827B0471A570B6A4A /* WorkflowDesk.app */ = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorkflowDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CFB33F7F65B6BE11E4984035 /* WFODataService.h */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WFODataService.h; sourceTree = "<group>"; };
 		D07C8B4779BECC110E3278A7 /* WFOperationsTests.inc */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WFOperationsTests.inc; sourceTree = "<group>"; };
@@ -919,6 +922,7 @@
 				AD5EB79F264D181E6E9E6124 /* DiagramKitUI.framework in WKUTests */,
 				6B2210782737E94F872C9A60 /* UDCodeKit.framework in WKUTests */,
 				7E3BBDA98273D9FD71AA8F7E /* UDPieceTable.framework in WKUTests */,
+				F075D76F1C8E3337FF7DDAE6 /* LSPKit.framework in WKUTests */,
 				598BA34244E99B291ABFDA1C /* AppKit.framework in WKUTests */,
 				193BD870CEC7BA2A2A7CB5FC /* CoreData.framework in WKUTests */,
 			);
@@ -964,6 +968,7 @@
 				4F796A9E5BE90B65291A708C /* DiagramKitUI.framework in WorkflowDesigner */,
 				534A7C0A3EB78D9F82730DB0 /* UDCodeKit.framework in WorkflowDesigner */,
 				5087BDEFB8108BDE1D02A4A7 /* UDPieceTable.framework in WorkflowDesigner */,
+				B4E8754224362CE17B83EAB5 /* LSPKit.framework in WorkflowDesigner */,
 				6FA1F526878980190D54CF26 /* AppKit.framework in WorkflowDesigner */,
 				6A951FEE2E90418DA5944299 /* CoreData.framework in WorkflowDesigner */,
 			);
@@ -1236,6 +1241,7 @@
 				8D6B561B67E4725D27B04160 /* DiagramKitUI.xcframework */,
 				77924A88C766BF58CB8505FA /* UDCodeKit.xcframework */,
 				6F4011F6B2DD71E1673F5FD9 /* UDPieceTable.xcframework */,
+				CDE4B85AD8B40D63AD13133B /* LSPKit.xcframework */,
 				9797951BE8EE90940A189977 /* Sparkle.xcframework */,
 			);
 			name = Frameworks;

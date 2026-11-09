@@ -213,6 +213,8 @@ diagramkitui = built_framework("DiagramKitUI")
 # UDCode's SDK: what the extension is built against, and its tests run on.
 udcodekit = built_framework("UDCodeKit")
 udpiecetable = built_framework("UDPieceTable")
+# What UDCodeKit's headers import.
+lspkit = built_framework("LSPKit")
 sparkle = add(oid("deps", "Sparkle"), "Sparkle.xcframework", [
     ("isa", "PBXFileReference"),
     ("lastKnownFileType", "wrapper.xcframework"),
@@ -448,7 +450,8 @@ gt_resources = phase("PBXResourcesBuildPhase", "WorkflowDesignerTests", "Resourc
 
 # The extension: UDCode's own frameworks (UDCodeKit, DiagramKit) are the
 # running UDCode's; the engine's goes inside the bundle.
-EXTENSION_FRAMEWORKS = DESIGNER_FRAMEWORKS + [(udcodekit, "UDCodeKit.framework"), (udpiecetable, "UDPieceTable.framework")]
+EXTENSION_FRAMEWORKS = DESIGNER_FRAMEWORKS + [(udcodekit, "UDCodeKit.framework"), (udpiecetable, "UDPieceTable.framework"),
+                                              (lspkit, "LSPKit.framework")]
 
 
 def extension_phases(target, own_sources):
@@ -533,7 +536,7 @@ g_products = group("Products", "Products", [p_fw, p_odata, p_tests, p_demo, p_se
                                             p_desk_tests, p_designer_tests, p_extension, p_extension_tests])
 g_frameworks = group("Frameworks", "Frameworks", [foundation, coredata, appkit, odatakit, odataservice, odatastore,
                                                   httpserverkit, otelkit, xformskit, diagramkit, diagramkitui,
-                                                  udcodekit, udpiecetable, sparkle])
+                                                  udcodekit, udpiecetable, lspkit, sparkle])
 g_main = group("main", "WorkflowKit", [doc_refs[d] for d in DOCS] +
                [g_headers, g_source, g_odata, g_model, g_tests, g_examples, g_server, g_tools, g_apps, g_extension,
                 g_configs,
