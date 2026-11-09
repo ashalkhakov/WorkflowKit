@@ -61,6 +61,7 @@ WorkflowDesigner_OBJC_FILES = \
 	../Shared/WKDBpmnReader.m \
 	../Shared/WKDBpmnWriter.m \
 	../Shared/WKDModelCheck.m \
+	../Shared/WKDJournal.m \
 	../Shared/WKDRenderer.m \
 	../Shared/WDConnectWindowController.m \
 	../Shared/WDEntities.m \

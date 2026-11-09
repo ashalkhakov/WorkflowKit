@@ -29,6 +29,7 @@ WorkflowDesk_OBJC_FILES = \
 	../Shared/WKDBpmnReader.m \
 	../Shared/WKDBpmnWriter.m \
 	../Shared/WKDModelCheck.m \
+	../Shared/WKDJournal.m \
 	../Shared/WKDRenderer.m \
 	../Shared/WKDEditor.m \
 	../Shared/WKDEditor+Canvas.m \

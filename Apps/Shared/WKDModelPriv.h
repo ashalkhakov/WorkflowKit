@@ -1,4 +1,5 @@
 #import "WKDModel.h"
+#import "WKDJournal.h"
 
 /*
  * The model as the reader, the writer and the editors see it: values set
@@ -14,8 +15,20 @@
 /* The diagram element that shows it: a BPMNShape or a BPMNEdge; nil when
  * the diagram has none. */
 @property (nonatomic, strong) NSXMLElement *diagramElement;
+/* Where its carrier element and its diagram element were when it left the
+ * model, for undo to put them back. */
+@property (nonatomic, weak) NSXMLElement *carrierParent;
+@property (nonatomic) NSUInteger carrierIndex;
+@property (nonatomic, weak) NSXMLElement *diagramParent;
+@property (nonatomic) NSUInteger diagramIndex;
 /* Marked for the writer: its values are written at the next -write. */
 - (void)changed;
+/* Before its values or links change: recorded in the model's journal when
+ * a step is being recorded, and marked for the writer. */
+- (void)willChange;
+/* Its values and links, for the journal; and put back. */
+- (NSDictionary *)journalState;
+- (void)restoreJournalState:(NSDictionary *)state;
 @end
 
 @interface WKDNode ()
@@ -36,6 +49,9 @@
 @property (nonatomic, strong) NSMutableArray<WKDNode *> *attachedList;
 @property (nonatomic, strong) NSMutableArray<WKDFlow *> *incomingList;
 @property (nonatomic, strong) NSMutableArray<WKDFlow *> *outgoingList;
+/* Its flows changed since the last write: its incoming and outgoing are
+ * written even in a document that lists none. */
+@property (nonatomic) BOOL flowsChanged;
 @end
 
 @interface WKDFlow ()
@@ -75,10 +91,31 @@
 /* Elements to write: changed or made since the last write, and deleted. */
 @property (nonatomic, strong) NSHashTable<WKDModelElement *> *changedElements;
 @property (nonatomic, strong) NSMutableArray<WKDModelElement *> *deletedElements;
+/* While writing: the ids of what leaves the carrier now. References to
+ * them go too; references to ids the model never knew stay. */
+@property (nonatomic, strong) NSSet<NSString *> *leavingIds;
 
 /* Every element marked changed: for the check that writing what the model
  * holds changes nothing in a carrier it was read from. */
 - (void)markEverythingChanged;
+
+/* The model's journal: an editor operation's steps for undo. */
+@property (nonatomic, readonly, strong) WKDJournal *journal;
+/* The model's lists, for the journal; and put back. */
+- (NSDictionary *)journalState;
+- (void)restoreJournalState:(NSDictionary *)state;
+/* Whether the element is in the model now. */
+- (BOOL)containsElement:(WKDModelElement *)element;
+
+/* Elements made and removed. A node of the type in the container (nil: the
+ * process), with no carrier element until the writer makes it; a flow
+ * between two nodes; an element removed with its links -- a node's flows
+ * and boundary events go with it, as do what it contains. */
+- (WKDNode *)makeNodeOfType:(NSString *)type elementId:(NSString *)elementId in:(WKDNode *)container;
+- (WKDFlow *)makeFlowFrom:(WKDNode *)source to:(WKDNode *)target elementId:(NSString *)elementId
+              association:(BOOL)association;
+- (void)removeNode:(WKDNode *)node;
+- (void)removeFlow:(WKDFlow *)flow;
 
 /* Links, both ways. */
 - (void)setSource:(WKDNode *)source ofFlow:(WKDFlow *)flow;

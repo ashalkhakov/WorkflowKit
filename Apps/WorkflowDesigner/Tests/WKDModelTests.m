@@ -4,6 +4,7 @@
 #import "WKDXML.h"
 #import "WKDFixtures.h"
 #import "WKDEditor.h"
+#import "WKDJournal.h"
 
 /* Every editor in the test bundle checks its model against its document
  * after each change, undo and redo. */
@@ -20,6 +21,25 @@ WKDCheckAgreementInTests(void)
  * leaves the carrier as it was read -- the writer says everything the model
  * holds as the file says it.
  */
+
+/* Where two texts first differ, with a little of each around it: for a
+ * failure's message. */
+static NSString *
+WKDFirstDifference(NSString *a, NSString *b)
+{
+	NSUInteger length = MIN([a length], [b length]), i = 0;
+	while (i < length && [a characterAtIndex:i] == [b characterAtIndex:i]) {
+		i++;
+	}
+	if (i == length && [a length] == [b length]) {
+		return @"the same";
+	}
+	NSUInteger from = i > 80 ? i - 80 : 0;
+	return [NSString stringWithFormat:@"at %lu:\n  %@\nnot\n  %@", (unsigned long)i,
+		[a substringWithRange:NSMakeRange(from, MIN([a length], i + 160) - from)],
+		[b substringWithRange:NSMakeRange(from, MIN([b length], i + 160) - from)]];
+}
+
 @interface WKDModelTests : XCTestCase
 @end
 
@@ -233,6 +253,60 @@ WKDCheckAgreementInTests(void)
 	[undo endUndoGrouping];
 	XCTAssertNil([model nodeWithId:@"review"]);
 	XCTAssertNil([model nodeWithId:@"late"].host);
+}
+
+/* A journalled step on the model, undone and redone: undo gives back the
+ * exact XML, redo the XML after the step, and the model agrees with the
+ * document read afresh each time. */
+- (void)checkStep:(void (^)(WKDModel *model))step on:(NSString *)text name:(NSString *)name
+{
+	NSXMLDocument *document = [self parse:text];
+	WKDModel *model = [WKDModel modelOfDocument:document];
+	NSString *before = [document XMLString];
+	[model.journal begin];
+	step(model);
+	[model write];
+	WKDJournalStep *done = [model.journal end];
+	NSString *after = [document XMLString];
+	XCTAssertNotEqualObjects(after, before, @"%@ changed the document", name);
+	XCTAssertNil([model disagreementWith:[WKDModel modelOfDocument:[self parse:after]]], @"%@", name);
+	WKDJournalStep *redo = [model.journal undo:done];
+	XCTAssertEqualObjects([document XMLString], before, @"%@ undone: %@", name, WKDFirstDifference([document XMLString], before));
+	XCTAssertNil([model disagreementWith:[WKDModel modelOfDocument:[self parse:[document XMLString]]]], @"%@ undone", name);
+	WKDJournalStep *again = [model.journal undo:redo];
+	XCTAssertEqualObjects([document XMLString], after, @"%@ redone: %@", name, WKDFirstDifference([document XMLString], after));
+	XCTAssertNil([model disagreementWith:[WKDModel modelOfDocument:[self parse:[document XMLString]]]], @"%@ redone", name);
+	[model.journal undo:again];
+	XCTAssertEqualObjects([document XMLString], before, @"%@ undone again: %@", name, WKDFirstDifference([document XMLString], before));
+}
+
+- (void)testJournalledStepsUndoToTheExactXML
+{
+	[self checkStep:^(WKDModel *model) {
+		WKDNode *review = [model nodeWithId:@"review"];
+		[review willChange];
+		review.bounds = NSOffsetRect(review.bounds, 25, 5);
+		[review willChange];
+		review.name = @"Check";
+	} on:WKDModellerFile name:@"a move and a rename"];
+	[self checkStep:^(WKDModel *model) {
+		[model removeNode:[model nodeWithId:@"review"]];
+	} on:WKDModellerFile name:@"a node removed with its flows and boundary event"];
+	[self checkStep:^(WKDModel *model) {
+		[model removeNode:[model nodeWithId:@"ship"]];
+	} on:WKDModellerFile name:@"a subprocess removed with what it holds"];
+	[self checkStep:^(WKDModel *model) {
+		WKDNode *task = [model makeNodeOfType:@"userTask" elementId:@"Activity_new" in:nil];
+		task.bounds = NSMakeRect(500, 300, 100, 80);
+		task.hasBounds = YES;
+		WKDFlow *flow = [model makeFlowFrom:[model nodeWithId:@"start"] to:task elementId:@"Flow_new" association:NO];
+		flow.waypoints = @[ [NSValue valueWithPoint:NSMakePoint(200, 120)], [NSValue valueWithPoint:NSMakePoint(500, 340)] ];
+	} on:WKDModellerFile name:@"a node and a flow made"];
+	[self checkStep:^(WKDModel *model) {
+		WKDFlow *f2 = [model flowWithId:@"f2"];
+		[model setTarget:[model nodeWithId:@"done"] ofFlow:f2];
+		[model setDefaultFlow:[model flowWithId:@"f3"] ofNode:[model nodeWithId:@"ok"]];
+	} on:WKDModellerFile name:@"a flow reconnected and a default changed"];
 }
 
 @end

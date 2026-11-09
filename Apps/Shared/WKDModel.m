@@ -7,6 +7,48 @@
 	[self.model.changedElements addObject:self];
 }
 
+- (void)willChange
+{
+	[self.model.journal willChange:self];
+	[self changed];
+}
+
+/* The keys of its state, for the journal. */
++ (NSArray<NSString *> *)journalKeys
+{
+	/* Its carrier and diagram elements, and where they were, are the
+	 * writer's to keep, not the element's state. */
+	return @[ @"elementId", @"name" ];
+}
+
+- (NSDictionary *)journalState
+{
+	NSMutableDictionary *state = [NSMutableDictionary dictionary];
+	for (NSString *key in [[self class] journalKeys]) {
+		id value = [self valueForKey:key];
+		/* Lists by their contents as they are now. */
+		if ([value isKindOfClass:[NSMutableArray class]]) {
+			value = [value copy];
+		}
+		[state setObject:value ?: [NSNull null] forKey:key];
+	}
+	return state;
+}
+
+- (void)restoreJournalState:(NSDictionary *)state
+{
+	for (NSString *key in [[self class] journalKeys]) {
+		id value = [state objectForKey:key];
+		if (value == [NSNull null]) {
+			value = nil;
+		}
+		if ([key hasSuffix:@"List"]) {
+			value = [value mutableCopy] ?: [NSMutableArray array];
+		}
+		[self setValue:value forKey:key];
+	}
+}
+
 - (NSString *)description
 {
 	return [NSString stringWithFormat:@"<%@ %@>", NSStringFromClass([self class]), self.elementId];
@@ -28,6 +70,14 @@
 	return self;
 }
 
++ (NSArray<NSString *> *)journalKeys
+{
+	return [[super journalKeys] arrayByAddingObjectsFromArray:@[
+		@"type", @"kind", @"bounds", @"hasBounds", @"labelBounds", @"eventDefinition", @"interrupting",
+		@"eventSubProcess", @"loop", @"parent", @"host", @"defaultFlow", @"lane",
+		@"childList", @"attachedList", @"incomingList", @"outgoingList" ]];
+}
+
 - (NSArray<WKDNode *> *)children { return [_childList copy]; }
 - (NSArray<WKDNode *> *)attached { return [_attachedList copy]; }
 - (NSArray<WKDFlow *> *)incoming { return [_incomingList copy]; }
@@ -36,6 +86,12 @@
 @end
 
 @implementation WKDFlow
+
++ (NSArray<NSString *> *)journalKeys
+{
+	return [[super journalKeys] arrayByAddingObjectsFromArray:@[
+		@"source", @"target", @"isAssociation", @"hasCondition", @"waypoints", @"labelBounds" ]];
+}
 
 - (BOOL)isDefault
 {
@@ -54,6 +110,12 @@
 		_otherIds = @[];
 	}
 	return self;
+}
+
++ (NSArray<NSString *> *)journalKeys
+{
+	return [[super journalKeys] arrayByAddingObjectsFromArray:@[
+		@"bounds", @"hasBounds", @"isPool", @"horizontal", @"parent", @"depth", @"children", @"nodeList", @"otherIds" ]];
 }
 
 - (NSArray<WKDNode *> *)nodes { return [_nodeList copy]; }
@@ -87,6 +149,7 @@
 		_deletedElements = [NSMutableArray array];
 		_lanes = @[];
 		_otherPools = @[];
+		_journal = [[WKDJournal alloc] initWithModel:self];
 	}
 	return self;
 }
@@ -192,6 +255,155 @@
 	}
 }
 
+#pragma mark The journal
+
+- (NSDictionary *)journalState
+{
+	return @{
+		@"nodeList": [self.nodeList copy], @"flowList": [self.flowList copy],
+		@"nodesById": [self.nodesById copy], @"flowsById": [self.flowsById copy], @"lanesById": [self.lanesById copy],
+		@"pool": self.pool ?: [NSNull null], @"lanes": self.lanes, @"otherPools": self.otherPools,
+	};
+}
+
+- (void)restoreJournalState:(NSDictionary *)state
+{
+	self.nodeList = [[state objectForKey:@"nodeList"] mutableCopy];
+	self.flowList = [[state objectForKey:@"flowList"] mutableCopy];
+	self.nodesById = [[state objectForKey:@"nodesById"] mutableCopy];
+	self.flowsById = [[state objectForKey:@"flowsById"] mutableCopy];
+	self.lanesById = [[state objectForKey:@"lanesById"] mutableCopy];
+	id pool = [state objectForKey:@"pool"];
+	self.pool = pool != [NSNull null] ? pool : nil;
+	self.lanes = [state objectForKey:@"lanes"];
+	self.otherPools = [state objectForKey:@"otherPools"];
+}
+
+- (BOOL)containsElement:(WKDModelElement *)element
+{
+	if ([element isKindOfClass:[WKDNode class]]) {
+		return [self.nodesById objectForKey:element.elementId] == element;
+	}
+	if ([element isKindOfClass:[WKDFlow class]]) {
+		return [self.flowsById objectForKey:element.elementId] == element;
+	}
+	return [element isKindOfClass:[WKDSwimlane class]]
+		&& ([self.lanesById objectForKey:element.elementId] == element || self.pool == element);
+}
+
+#pragma mark Making and removing
+
+- (WKDNode *)makeNodeOfType:(NSString *)type elementId:(NSString *)elementId in:(WKDNode *)container
+{
+	[self.journal willChangeModel];
+	BOOL flowNode = NO;
+	WKDNode *node = [[WKDNode alloc] init];
+	node.model = self;
+	node.elementId = elementId;
+	node.type = type;
+	node.kind = WKDKindOfType(type, &flowNode);
+	[node willChange];
+	if (container != nil) {
+		[container willChange];
+		[container.childList addObject:node];
+		node.parent = container;
+	}
+	/* Containers before what they contain: after the container's last
+	 * descendant, else at the end. */
+	NSUInteger index = [self.nodeList count];
+	if (container != nil) {
+		NSUInteger at = [self.nodeList indexOfObjectIdenticalTo:container];
+		index = at + 1;
+		while (index < [self.nodeList count] && [self node:[self.nodeList objectAtIndex:index] isIn:container]) {
+			index++;
+		}
+	}
+	[self.nodeList insertObject:node atIndex:index];
+	[self.nodesById setObject:node forKey:elementId];
+	return node;
+}
+
+- (BOOL)node:(WKDNode *)node isIn:(WKDNode *)container
+{
+	for (WKDNode *up = node.parent ?: node.host.parent; up != nil; up = up.parent) {
+		if (up == container) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+- (WKDFlow *)makeFlowFrom:(WKDNode *)source to:(WKDNode *)target elementId:(NSString *)elementId
+              association:(BOOL)association
+{
+	[self.journal willChangeModel];
+	WKDFlow *flow = [[WKDFlow alloc] init];
+	flow.model = self;
+	flow.elementId = elementId;
+	flow.isAssociation = association;
+	flow.waypoints = @[];
+	[flow willChange];
+	[self setSource:source ofFlow:flow];
+	[self setTarget:target ofFlow:flow];
+	[self.flowList addObject:flow];
+	[self.flowsById setObject:flow forKey:elementId];
+	return flow;
+}
+
+- (void)removeFlow:(WKDFlow *)flow
+{
+	if (![self containsElement:flow]) {
+		return;
+	}
+	[self.journal willChangeModel];
+	[flow willChange];
+	if (flow.source.defaultFlow == flow) {
+		[self setDefaultFlow:nil ofNode:flow.source];
+	}
+	[flow.source willChange];
+	[flow.source.outgoingList removeObjectIdenticalTo:flow];
+	flow.source.flowsChanged = YES;
+	[flow.target willChange];
+	[flow.target.incomingList removeObjectIdenticalTo:flow];
+	flow.target.flowsChanged = YES;
+	[self.flowList removeObjectIdenticalTo:flow];
+	[self.flowsById removeObjectForKey:flow.elementId];
+	[self.deletedElements addObject:flow];
+}
+
+- (void)removeNode:(WKDNode *)node
+{
+	if (![self containsElement:node]) {
+		return;
+	}
+	for (WKDNode *child in [node.childList copy]) {
+		[self removeNode:child];
+	}
+	for (WKDNode *attached in [node.attachedList copy]) {
+		[self removeNode:attached];
+	}
+	for (WKDFlow *flow in [node.incomingList arrayByAddingObjectsFromArray:node.outgoingList]) {
+		[self removeFlow:flow];
+	}
+	[self.journal willChangeModel];
+	[node willChange];
+	if (node.parent != nil) {
+		[node.parent willChange];
+		[node.parent.childList removeObjectIdenticalTo:node];
+	}
+	if (node.host != nil) {
+		[node.host willChange];
+		[node.host.attachedList removeObjectIdenticalTo:node];
+	}
+	if (node.lane != nil) {
+		[node.lane willChange];
+		[node.lane.nodeList removeObjectIdenticalTo:node];
+	}
+	[self.nodeList removeObjectIdenticalTo:node];
+	[self.nodesById removeObjectForKey:node.elementId];
+	[self.deletedElements addObject:node];
+}
+
 #pragma mark Links
 
 - (void)setSource:(WKDNode *)source ofFlow:(WKDFlow *)flow
@@ -199,14 +411,14 @@
 	if (flow.source == source) {
 		return;
 	}
+	[flow willChange];
+	[flow.source willChange];
+	[source willChange];
 	[flow.source.outgoingList removeObjectIdenticalTo:flow];
-	if (flow.source != nil) {
-		[flow.source changed];
-	}
+	flow.source.flowsChanged = YES;
 	flow.source = source;
 	[source.outgoingList addObject:flow];
-	[source changed];
-	[flow changed];
+	source.flowsChanged = YES;
 }
 
 - (void)setTarget:(WKDNode *)target ofFlow:(WKDFlow *)flow
@@ -214,14 +426,14 @@
 	if (flow.target == target) {
 		return;
 	}
+	[flow willChange];
+	[flow.target willChange];
+	[target willChange];
 	[flow.target.incomingList removeObjectIdenticalTo:flow];
-	if (flow.target != nil) {
-		[flow.target changed];
-	}
+	flow.target.flowsChanged = YES;
 	flow.target = target;
 	[target.incomingList addObject:flow];
-	[target changed];
-	[flow changed];
+	target.flowsChanged = YES;
 }
 
 - (void)setHost:(WKDNode *)host ofNode:(WKDNode *)node
@@ -229,10 +441,12 @@
 	if (node.host == host) {
 		return;
 	}
+	[node willChange];
+	[node.host willChange];
+	[host willChange];
 	[node.host.attachedList removeObjectIdenticalTo:node];
 	node.host = host;
 	[host.attachedList addObject:node];
-	[node changed];
 }
 
 - (void)setDefaultFlow:(WKDFlow *)flow ofNode:(WKDNode *)node
@@ -240,8 +454,8 @@
 	if (node.defaultFlow == flow) {
 		return;
 	}
+	[node willChange];
 	node.defaultFlow = flow;
-	[node changed];
 }
 
 @end
