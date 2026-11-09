@@ -1,5 +1,7 @@
 #import "WKDEditorPriv.h"
 #import "WKDXML.h"
+#import "WKDModelPriv.h"
+#import "WKDJournal.h"
 
 @implementation WKDNodeType
 
@@ -181,12 +183,15 @@ WKDOwnExtensions(void)
 /* The attribute's name as the document writes it: camunda:x by the
  * prefix it gives camunda's namespace. */
 static void
-WKDRemoveOwnAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *name)
+WKDRemoveOwnAttribute(WKDJournal *journal, NSXMLElement *element, NSString *name)
 {
 	if ([name hasPrefix:@"camunda:"]) {
-		WKDSetQualifiedAttribute(document, element, WKDCamundaNamespace, [name substringFromIndex:8], nil);
+		NSXMLNode *attribute = [element attributeForLocalName:[name substringFromIndex:8] URI:WKDCamundaNamespace];
+		if (attribute != nil) {
+			WKDLogAttribute(journal, element, [attribute name], nil);
+		}
 	} else {
-		WKDSetAttribute(element, name, nil);
+		WKDLogAttribute(journal, element, name, nil);
 	}
 }
 
@@ -205,6 +210,7 @@ WKDRemoveOwnAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *
 	}
 	NSString *oldType = shape.type;
 	[self change:@"Change Type" with:^{
+		self.needsSync = YES;
 		NSXMLDocument *document = self.document;
 		NSXMLElement *element = shape.element;
 		/* What only the old type had. */
@@ -212,7 +218,7 @@ WKDRemoveOwnAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *
 		NSArray *kept = [attributes objectForKey:type.type] ?: @[];
 		for (NSString *name in [attributes objectForKey:oldType] ?: @[]) {
 			if (![kept containsObject:name]) {
-				WKDRemoveOwnAttribute(document, element, name);
+				WKDRemoveOwnAttribute(self.model.journal, element, name);
 			}
 		}
 		NSArray *keptExtensions = [extensions objectForKey:type.type] ?: @[];
@@ -220,16 +226,16 @@ WKDRemoveOwnAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *
 		for (NSString *local in [extensions objectForKey:oldType] ?: @[]) {
 			if (![keptExtensions containsObject:local]) {
 				for (NSXMLElement *extension in WKDChildren(extensionElements, WKDCamundaNamespace, local)) {
-					[extension detach];
+					WKDLogDetach(self.model.journal, extension);
 				}
 			}
 		}
 		if (extensionElements != nil && [extensionElements childCount] == 0) {
-			[extensionElements detach];
+			WKDLogDetach(self.model.journal, extensionElements);
 		}
 		if ([oldType isEqualToString:@"scriptTask"]) {
 			for (NSXMLElement *script in WKDChildren(element, WKDBpmnNamespace, @"script")) {
-				[script detach];
+				WKDLogDetach(self.model.journal, script);
 			}
 		}
 		/* The new name, in the namespace and prefix it had. */
@@ -239,13 +245,13 @@ WKDRemoveOwnAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *
 		if (![shape.eventDefinition ?: @"" isEqualToString:type.eventDefinition ?: @""]) {
 			for (NSXMLElement *child in WKDChildren(element, WKDBpmnNamespace, nil)) {
 				if ([[child localName] hasSuffix:@"EventDefinition"]) {
-					[child detach];
+					WKDLogDetach(self.model.journal, child);
 				}
 			}
 			if (type.eventDefinition != nil) {
 				NSXMLElement *definition = WKDNewElement(document, WKDBpmnNamespace, type.eventDefinition);
 				NSString *local = type.eventDefinition;
-				WKDSetAttribute(definition, @"id", [self freshId:[[[local substringToIndex:1] uppercaseString]
+				WKDLogAttribute(self.model.journal, definition, @"id", [self freshId:[[[local substringToIndex:1] uppercaseString]
 				                                                     stringByAppendingString:[local substringFromIndex:1]]]);
 				/* After documentation, extensions, incoming and outgoing. */
 				NSUInteger index = 0;
@@ -258,7 +264,7 @@ WKDRemoveOwnAttribute(NSXMLDocument *document, NSXMLElement *element, NSString *
 						index = i + 1;
 					}
 				}
-				[element insertChild:definition atIndex:index];
+				WKDLogInsert(self.model.journal, element, definition, index);
 			}
 		}
 	}];

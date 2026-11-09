@@ -291,6 +291,27 @@
 		&& ([self.lanesById objectForKey:element.elementId] == element || self.pool == element);
 }
 
+- (NSSet<NSXMLElement *> *)carrierElements
+{
+	NSMutableSet *carriers = [NSMutableSet set];
+	NSMutableArray *elements = [NSMutableArray arrayWithArray:self.nodeList];
+	[elements addObjectsFromArray:self.flowList];
+	[elements addObjectsFromArray:self.lanes];
+	[elements addObjectsFromArray:self.otherPools];
+	if (self.pool != nil) {
+		[elements addObject:self.pool];
+	}
+	for (WKDModelElement *element in elements) {
+		if (element.element != nil) {
+			[carriers addObject:element.element];
+		}
+		if (element.diagramElement != nil) {
+			[carriers addObject:element.diagramElement];
+		}
+	}
+	return carriers;
+}
+
 #pragma mark Making and removing
 
 - (WKDNode *)makeNodeOfType:(NSString *)type elementId:(NSString *)elementId in:(WKDNode *)container

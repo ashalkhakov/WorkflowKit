@@ -35,8 +35,28 @@
 - (void)didDetach:(NSXMLNode *)child from:(NSXMLElement *)parent at:(NSUInteger)index;
 - (void)didSetText:(NSXMLNode *)node from:(NSString *)before to:(NSString *)after;
 
+/* An edit of an element's own XML done by code that changes it through any
+ * helper: its attributes, namespaces and children before and after, the
+ * children that carry model elements kept as the same objects. Around an
+ * inspector's edit of an element, or of the document's root. */
+- (void)willEditXML:(NSXMLElement *)element;
+- (void)didEditXML:(NSXMLElement *)element;
+
 /* The step undone -- the model and the XML as they were before it -- and
  * the step that redoes it. */
 - (WKDJournalStep *)undo:(WKDJournalStep *)step;
 
+/* The later step's changes made part of the earlier: for a burst of nudges
+ * undone at once. */
+- (void)merge:(WKDJournalStep *)later into:(WKDJournalStep *)earlier;
+
 @end
+
+/* Edits of the XML, recorded in the journal (nil: not recorded) so that
+ * undo takes them back exactly. Every edit made inside a step goes through
+ * these or the model's writer. */
+void WKDLogAttribute(WKDJournal *journal, NSXMLElement *element, NSString *name, NSString *value);
+void WKDLogInsert(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child, NSUInteger index);
+void WKDLogAdd(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child);
+void WKDLogDetach(WKDJournal *journal, NSXMLNode *child);
+void WKDLogText(WKDJournal *journal, NSXMLNode *node, NSString *text);

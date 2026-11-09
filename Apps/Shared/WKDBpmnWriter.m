@@ -10,41 +10,6 @@ WKDSameNumber(NSXMLElement *element, NSString *name, double value)
 	return WKDAttribute(element, name) != nil && fabs(WKDNumber(element, name) - value) < 1e-9;
 }
 
-/* The writer's edits of the XML, each recorded in the journal so that undo
- * takes it back exactly. */
-static void
-WKDLogAttribute(WKDJournal *journal, NSXMLElement *element, NSString *name, NSString *value)
-{
-	NSString *before = WKDAttribute(element, name);
-	WKDSetAttribute(element, name, value);
-	[journal didSetAttribute:name of:element from:before to:value];
-}
-
-static void
-WKDLogInsert(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child, NSUInteger index)
-{
-	[parent insertChild:child atIndex:index];
-	[journal didInsert:child into:parent at:index];
-}
-
-static void
-WKDLogAdd(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child)
-{
-	WKDLogInsert(journal, parent, child, [[parent children] count]);
-}
-
-static void
-WKDLogDetach(WKDJournal *journal, NSXMLNode *child)
-{
-	NSXMLElement *parent = (NSXMLElement *)[child parent];
-	if (parent == nil) {
-		return;
-	}
-	NSUInteger index = [child index];
-	[child detach];
-	[journal didDetach:child from:parent at:index];
-}
-
 /* Numbers are compared as read, so the digits a file was written with
  * stay where the value has not changed. */
 static void

@@ -1,6 +1,7 @@
 #import "WKDEditorPriv.h"
 #import <DiagramKit/DKLayeredLayout.h>
 #import "WKDXML.h"
+#import "WKDJournal.h"
 #import "WKDModelPriv.h"
 
 /* Inside a subprocess, around what it holds. */
@@ -11,6 +12,8 @@ static const double WKDMargin = 80;
 @implementation WKDEditor
 {
 	NSUndoManager *_undoManager;
+	/* The step a coalescing change may join. */
+	WKDJournalStep *_lastStep;
 	/* The change the next coalescing one may join, and when it was. */
 	NSString *_coalescedName;
 	NSDate *_coalescedAt;
@@ -71,9 +74,7 @@ static BOOL WKDChecksAgreement = NO;
 - (void)reread
 {
 	_diagram = [WKDDiagram diagramOfDocument:_document];
-	if (_model != nil) {
-		[_model readDocumentAgain:_document];
-	} else {
+	if (_model == nil) {
 		_model = [WKDModel modelOfDocument:_document];
 	}
 	if (WKDChecksAgreement && _model != nil) {
@@ -87,9 +88,7 @@ static BOOL WKDChecksAgreement = NO;
 	}
 }
 
-/* One undoable step: the document as it was is what undo restores. The
- * diagram it starts from is held for the change: its shapes' links to one
- * another are weak, and a change reads the document afresh as it goes. */
+/* One undoable step: what it changes is what undo takes back. */
 - (void)change:(NSString *)name with:(void (^)(void))change
 {
 	[self change:name coalescing:NO with:change];
@@ -102,25 +101,61 @@ static BOOL WKDChecksAgreement = NO;
 {
 	__attribute__((objc_precise_lifetime)) WKDDiagram *start = _diagram;
 	NSDate *now = [NSDate date];
-	BOOL joins = coalescing && _undoManager != nil && [_coalescedName isEqualToString:name]
+	BOOL joins = coalescing && _undoManager != nil && _lastStep != nil && [_coalescedName isEqualToString:name]
 		&& [now timeIntervalSinceDate:_coalescedAt] < 1.0 && ![_undoManager canRedo]
 		&& [[_undoManager undoActionName] isEqualToString:name];
-	NSXMLDocument *before = joins ? nil : WKDCopyDocument(_document);
+	WKDJournal *journal = _model.journal;
+	[journal begin];
+	self.needsSync = NO;
 	change();
+	[_model write];
 	[self keepLanes];
-	if (!joins) {
-		[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:before];
-		[_undoManager setActionName:name];
+	if (self.needsSync) {
+		[self syncModel];
+	}
+	WKDJournalStep *step = [journal end];
+	if (step != nil) {
+		if (joins) {
+			[journal merge:step into:_lastStep];
+		} else {
+			[_undoManager registerUndoWithTarget:self selector:@selector(undoStep:) object:step];
+			[_undoManager setActionName:name];
+			_lastStep = step;
+		}
 	}
 	_coalescedName = coalescing ? name : nil;
 	_coalescedAt = now;
 	[self reread];
 }
 
-- (void)restore:(NSXMLDocument *)snapshot
+/* The model read again from the document, every element's state and the
+ * model's lists recorded first, so that undo puts them back. */
+- (void)syncModel
 {
-	[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:WKDCopyDocument(_document)];
-	_document = snapshot;
+	WKDJournal *journal = _model.journal;
+	[journal willChangeModel];
+	for (WKDNode *node in _model.nodes) {
+		[journal willChange:node];
+	}
+	for (WKDFlow *flow in _model.flows) {
+		[journal willChange:flow];
+	}
+	for (WKDSwimlane *lane in _model.lanes) {
+		[journal willChange:lane];
+	}
+	for (WKDSwimlane *pool in _model.otherPools) {
+		[journal willChange:pool];
+	}
+	[journal willChange:_model.pool];
+	[_model readDocumentAgain:_document];
+	self.needsSync = NO;
+}
+
+- (void)undoStep:(WKDJournalStep *)step
+{
+	WKDJournalStep *inverse = [_model.journal undo:step];
+	[_undoManager registerUndoWithTarget:self selector:@selector(undoStep:) object:inverse];
+	_lastStep = nil;
 	[self reread];
 }
 
@@ -204,11 +239,11 @@ WKDIdPrefix(NSString *type)
 		return _diagram.plane;
 	}
 	NSXMLElement *diagram = WKDNewElement(_document, WKDBpmnDINamespace, @"BPMNDiagram");
-	WKDSetAttribute(diagram, @"id", [self freshId:@"BPMNDiagram"]);
+	WKDLogAttribute(self.model.journal, diagram, @"id", [self freshId:@"BPMNDiagram"]);
 	NSXMLElement *plane = WKDNewElement(_document, WKDBpmnDINamespace, @"BPMNPlane");
-	WKDSetAttribute(plane, @"id", [self freshId:@"BPMNPlane"]);
-	WKDSetAttribute(plane, @"bpmnElement", WKDAttribute(_diagram.process, @"id"));
-	[diagram addChild:plane];
+	WKDLogAttribute(self.model.journal, plane, @"id", [self freshId:@"BPMNPlane"]);
+	WKDLogAttribute(self.model.journal, plane, @"bpmnElement", WKDAttribute(_diagram.process, @"id"));
+	WKDLogAdd(self.model.journal, diagram, plane);
 	[[_document rootElement] addChild:diagram];
 	_diagram = [WKDDiagram diagramOfDocument:_document];
 	return plane;
@@ -228,9 +263,9 @@ WKDIdPrefix(NSString *type)
 	}
 	NSXMLElement *element = WKDNewElement(_document, WKDBpmnDINamespace, local);
 	NSString *prefix = [local isEqualToString:@"BPMNShape"] ? @"Shape" : @"Edge";
-	WKDSetAttribute(element, @"id", [NSString stringWithFormat:@"%@_%@", elementId, prefix]);
-	WKDSetAttribute(element, @"bpmnElement", elementId);
-	[plane addChild:element];
+	WKDLogAttribute(self.model.journal, element, @"id", [NSString stringWithFormat:@"%@_%@", elementId, prefix]);
+	WKDLogAttribute(self.model.journal, element, @"bpmnElement", elementId);
+	WKDLogAdd(self.model.journal, plane, element);
 	return element;
 }
 
@@ -249,10 +284,29 @@ WKDIdPrefix(NSString *type)
 	return element;
 }
 
+/* Diagrams are written in whole points: the model holds what is written. */
+static NSRect
+WKDWholeRect(NSRect rect)
+{
+	return NSMakeRect(round(rect.origin.x), round(rect.origin.y), round(rect.size.width), round(rect.size.height));
+}
+
+static NSArray<NSValue *> *
+WKDWholePoints(NSArray<NSValue *> *points)
+{
+	NSMutableArray *whole = [NSMutableArray arrayWithCapacity:[points count]];
+	for (NSValue *value in points) {
+		NSPoint point = [value pointValue];
+		[whole addObject:[NSValue valueWithPoint:NSMakePoint(round(point.x), round(point.y))]];
+	}
+	return whole;
+}
+
 /* The geometry is the model's: set there and written at once, so what the
  * rest of a change reads of the XML is what it set. */
 - (void)setBounds:(NSRect)bounds of:(NSString *)elementId
 {
+	bounds = WKDWholeRect(bounds);
 	WKDModelElement *element = [self modelElement:elementId];
 	if (element == nil) {
 		/* An element not yet in the document (a lane being made): its shape
@@ -261,12 +315,12 @@ WKDIdPrefix(NSString *type)
 		NSXMLElement *box = WKDChild(shape, WKDDCNamespace, @"Bounds");
 		if (box == nil) {
 			box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
-			[shape insertChild:box atIndex:0];
+			WKDLogInsert(self.model.journal, shape, box, 0);
 		}
-		WKDSetAttribute(box, @"x", WKDFormat(bounds.origin.x));
-		WKDSetAttribute(box, @"y", WKDFormat(bounds.origin.y));
-		WKDSetAttribute(box, @"width", WKDFormat(bounds.size.width));
-		WKDSetAttribute(box, @"height", WKDFormat(bounds.size.height));
+		WKDLogAttribute(self.model.journal, box, @"x", WKDFormat(bounds.origin.x));
+		WKDLogAttribute(self.model.journal, box, @"y", WKDFormat(bounds.origin.y));
+		WKDLogAttribute(self.model.journal, box, @"width", WKDFormat(bounds.size.width));
+		WKDLogAttribute(self.model.journal, box, @"height", WKDFormat(bounds.size.height));
 		return;
 	}
 	if ([element isKindOfClass:[WKDFlow class]]) {
@@ -290,7 +344,7 @@ WKDIdPrefix(NSString *type)
 		return;
 	}
 	[_model.journal willChange:flow];
-	flow.waypoints = points;
+	flow.waypoints = WKDWholePoints(points);
 	[_model writeGeometryOf:flow];
 }
 
@@ -304,6 +358,7 @@ WKDIdPrefix(NSString *type)
 		return;
 	}
 	[_model.journal willChange:element];
+	bounds = WKDWholeRect(bounds);
 	if (flow != nil) {
 		flow.labelBounds = bounds;
 	} else {
@@ -720,7 +775,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 - (void)addReference:(NSString *)local to:(NSString *)flowId in:(NSXMLElement *)node
 {
 	NSXMLElement *reference = WKDNewElement(_document, WKDBpmnNamespace, local);
-	[reference setStringValue:flowId];
+	WKDLogText(self.model.journal, reference, flowId);
 	NSArray *before = [local isEqualToString:@"incoming"]
 		? @[ @"documentation", @"extensionElements", @"incoming" ]
 		: @[ @"documentation", @"extensionElements", @"incoming", @"outgoing" ];
@@ -732,7 +787,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 			index = i + 1;
 		}
 	}
-	[node insertChild:reference atIndex:index];
+	WKDLogInsert(self.model.journal, node, reference, index);
 }
 
 - (NSString *)insertNodeOfType:(NSString *)type
@@ -1014,7 +1069,19 @@ WKDOnEdge(NSRect host, NSPoint point)
 		return NO;
 	}
 	[self change:action with:^{
-		edit([self elementWithId:elementId], self->_document);
+		NSXMLElement *element = [self elementWithId:elementId];
+		NSXMLElement *root = [self->_document rootElement];
+		WKDJournal *journal = self->_model.journal;
+		[journal willEditXML:element];
+		if (root != element) {
+			[journal willEditXML:root];
+		}
+		edit(element, self->_document);
+		[journal didEditXML:element];
+		if (root != element) {
+			[journal didEditXML:root];
+		}
+		self.needsSync = YES;
 	}];
 	return YES;
 }
@@ -1031,10 +1098,10 @@ WKDOnEdge(NSRect host, NSPoint point)
 	prefix = [prefix stringByAppendingString:[local substringFromIndex:1]];
 	NSXMLElement *definition = WKDNewElement(_document, WKDBpmnNamespace, local);
 	NSString *definitionId = [self freshId:prefix];
-	WKDSetAttribute(definition, @"id", definitionId);
-	WKDSetAttribute(definition, @"name", value);
+	WKDLogAttribute(self.model.journal, definition, @"id", definitionId);
+	WKDLogAttribute(self.model.journal, definition, @"name", value);
 	if (![key isEqualToString:@"name"]) {
-		WKDSetAttribute(definition, key, value);
+		WKDLogAttribute(self.model.journal, definition, key, value);
 	}
 	/* Before the processes, as modellers put them. */
 	NSUInteger index = 0;
@@ -1046,7 +1113,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 		}
 		index = i + 1;
 	}
-	[root insertChild:definition atIndex:index];
+	WKDLogInsert(self.model.journal, root, definition, index);
 	return definitionId;
 }
 
@@ -1071,6 +1138,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 		return NO;
 	}
 	[self change:@"Rename" with:^{
+		self.needsSync = YES;
 		NSArray *references = @[ @"sourceRef", @"targetRef", @"attachedToRef", @"default", @"bpmnElement",
 		                         @"processRef", @"activityRef" ];
 		NSMutableArray *pending = [NSMutableArray arrayWithObject:[self->_document rootElement]];
@@ -1078,16 +1146,16 @@ WKDOnEdge(NSRect host, NSPoint point)
 			NSXMLElement *element = [pending lastObject];
 			[pending removeLastObject];
 			if ([WKDAttribute(element, @"id") isEqualToString:elementId]) {
-				WKDSetAttribute(element, @"id", newId);
+				WKDLogAttribute(self.model.journal, element, @"id", newId);
 			}
 			for (NSString *reference in references) {
 				if ([WKDAttribute(element, reference) isEqualToString:elementId]) {
-					WKDSetAttribute(element, reference, newId);
+					WKDLogAttribute(self.model.journal, element, reference, newId);
 				}
 			}
 			if ((WKDIs(element, WKDBpmnNamespace, @"incoming") || WKDIs(element, WKDBpmnNamespace, @"outgoing"))
 			    && [[element stringValue] isEqualToString:elementId]) {
-				[element setStringValue:newId];
+				WKDLogText(self.model.journal, element, newId);
 			}
 			for (NSXMLNode *child in [element children]) {
 				if ([child kind] == NSXMLElementKind) {

@@ -25,8 +25,13 @@ WKDSame(id a, id b)
 		if (!WKDSame(node.type, read.type)) differs = @"type";
 		else if (node.kind != read.kind) differs = @"kind";
 		else if (!WKDSame(node.name, read.name)) differs = @"name";
-		else if (node.hasBounds != read.hasBounds || !NSEqualRects(node.bounds, read.bounds)) differs = @"bounds";
-		else if (!NSEqualRects(node.labelBounds, read.labelBounds)) differs = @"label bounds";
+		else if (node.hasBounds != read.hasBounds || !NSEqualRects(node.bounds, read.bounds)) {
+			differs = [NSString stringWithFormat:@"bounds %@, read %@", NSStringFromRect(node.bounds), NSStringFromRect(read.bounds)];
+		}
+		else if (!NSEqualRects(node.labelBounds, read.labelBounds)) {
+			differs = [NSString stringWithFormat:@"label bounds %@, read %@", NSStringFromRect(node.labelBounds),
+				NSStringFromRect(read.labelBounds)];
+		}
 		else if (!WKDSame(node.eventDefinition, read.eventDefinition)) differs = @"event definition";
 		else if (node.interrupting != read.interrupting) differs = @"interrupting";
 		else if (node.eventSubProcess != read.eventSubProcess) differs = @"event subprocess";
@@ -43,7 +48,9 @@ WKDSame(id a, id b)
 			return [NSString stringWithFormat:@"node %@: its %@", node.elementId, differs];
 		}
 	}
-	if (!WKDSame(WKDIds(self.flowList), WKDIds(other.flowList))) {
+	/* The flows' order means nothing: a new one is at the end of the list,
+	 * wherever its container puts it in the document. */
+	if (![[NSSet setWithArray:WKDIds(self.flowList)] isEqualToSet:[NSSet setWithArray:WKDIds(other.flowList)]]) {
 		return [NSString stringWithFormat:@"flows %@, read afresh %@", WKDIds(self.flowList), WKDIds(other.flowList)];
 	}
 	for (WKDFlow *flow in self.flowList) {
@@ -54,8 +61,13 @@ WKDSame(id a, id b)
 		else if (!WKDSame(flow.target.elementId, read.target.elementId)) differs = @"target";
 		else if (flow.isAssociation != read.isAssociation) differs = @"kind";
 		else if (flow.hasCondition != read.hasCondition) differs = @"condition";
-		else if (!WKDSame(flow.waypoints, read.waypoints)) differs = @"waypoints";
-		else if (!NSEqualRects(flow.labelBounds, read.labelBounds)) differs = @"label bounds";
+		else if (!WKDSame(flow.waypoints, read.waypoints)) {
+			differs = [NSString stringWithFormat:@"waypoints %@, read %@", flow.waypoints, read.waypoints];
+		}
+		else if (!NSEqualRects(flow.labelBounds, read.labelBounds)) {
+			differs = [NSString stringWithFormat:@"label bounds %@, read %@", NSStringFromRect(flow.labelBounds),
+				NSStringFromRect(read.labelBounds)];
+		}
 		if (differs != nil) {
 			return [NSString stringWithFormat:@"flow %@: its %@", flow.elementId, differs];
 		}

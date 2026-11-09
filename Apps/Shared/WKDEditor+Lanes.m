@@ -1,5 +1,7 @@
 #import "WKDEditorPriv.h"
 #import "WKDXML.h"
+#import "WKDModelPriv.h"
+#import "WKDJournal.h"
 
 /* A new lane's height, the least a lane may have, and the room round what
  * a pool holds. */
@@ -72,17 +74,18 @@ WKDPointAt(double x, double y)
 /* The lane's flowNodeRefs, as the ids given. */
 - (void)setRefs:(NSArray<NSString *> *)ids of:(WKDLane *)lane
 {
+	self.needsSync = YES;
 	for (NSXMLElement *ref in WKDChildren(lane.element, WKDBpmnNamespace, @"flowNodeRef")) {
-		[ref detach];
+		WKDLogDetach(self.model.journal, ref);
 	}
 	NSXMLElement *childSet = WKDChild(lane.element, WKDBpmnNamespace, @"childLaneSet");
 	for (NSString *nodeId in ids) {
 		NSXMLElement *ref = WKDNewElement(self.document, WKDBpmnNamespace, @"flowNodeRef");
-		[ref setStringValue:nodeId];
+		WKDLogText(self.model.journal, ref, nodeId);
 		if (childSet != nil) {
-			[lane.element insertChild:ref atIndex:[childSet index]];
+			WKDLogInsert(self.model.journal, lane.element, ref, [childSet index]);
 		} else {
-			[lane.element addChild:ref];
+			WKDLogAdd(self.model.journal, lane.element, ref);
 		}
 	}
 }
@@ -91,23 +94,24 @@ WKDPointAt(double x, double y)
  * diagram's plane shows the collaboration then. Its id. */
 - (NSString *)makePool
 {
+	self.needsSync = YES;
 	NSXMLElement *root = [self.document rootElement];
 	NSXMLElement *process = self.diagram.process;
 	NSXMLElement *collaboration = WKDChild(root, WKDBpmnNamespace, @"collaboration");
 	if (collaboration == nil) {
 		collaboration = WKDNewElement(self.document, WKDBpmnNamespace, @"collaboration");
-		WKDSetAttribute(collaboration, @"id", [self freshId:@"Collaboration"]);
-		[root insertChild:collaboration atIndex:[process index]];
+		WKDLogAttribute(self.model.journal, collaboration, @"id", [self freshId:@"Collaboration"]);
+		WKDLogInsert(self.model.journal, root, collaboration, [process index]);
 	}
 	NSString *poolId = [self freshId:@"Participant"];
 	NSXMLElement *participant = WKDNewElement(self.document, WKDBpmnNamespace, @"participant");
-	WKDSetAttribute(participant, @"id", poolId);
-	WKDSetAttribute(participant, @"name", WKDAttribute(process, @"name"));
-	WKDSetAttribute(participant, @"processRef", WKDAttribute(process, @"id"));
-	[collaboration addChild:participant];
+	WKDLogAttribute(self.model.journal, participant, @"id", poolId);
+	WKDLogAttribute(self.model.journal, participant, @"name", WKDAttribute(process, @"name"));
+	WKDLogAttribute(self.model.journal, participant, @"processRef", WKDAttribute(process, @"id"));
+	WKDLogAdd(self.model.journal, collaboration, participant);
 	NSXMLElement *plane = [self plane];
 	if ([WKDAttribute(plane, @"bpmnElement") isEqualToString:WKDAttribute(process, @"id")]) {
-		WKDSetAttribute(plane, @"bpmnElement", WKDAttribute(collaboration, @"id"));
+		WKDLogAttribute(self.model.journal, plane, @"bpmnElement", WKDAttribute(collaboration, @"id"));
 	}
 	/* Round what the diagram shows, the process's lanes' band left of it. */
 	NSRect content = NSZeroRect;
@@ -131,7 +135,7 @@ WKDPointAt(double x, double y)
 	bounds.size.width = MAX(NSWidth(bounds), 600);
 	bounds.size.height = MAX(NSHeight(bounds), 250);
 	[self setBounds:bounds of:poolId];
-	WKDSetAttribute([self diagramElement:@"BPMNShape" of:poolId create:YES], @"isHorizontal", @"true");
+	WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:poolId create:YES], @"isHorizontal", @"true");
 	self.diagram = [WKDDiagram diagramOfDocument:self.document];
 	return poolId;
 }
@@ -139,11 +143,12 @@ WKDPointAt(double x, double y)
 /* A new lane element, with its shape. */
 - (NSXMLElement *)newLane:(NSRect)bounds
 {
+	self.needsSync = YES;
 	NSXMLElement *lane = WKDNewElement(self.document, WKDBpmnNamespace, @"lane");
 	NSString *laneId = [self freshId:@"Lane"];
-	WKDSetAttribute(lane, @"id", laneId);
+	WKDLogAttribute(self.model.journal, lane, @"id", laneId);
 	[self setBounds:bounds of:laneId];
-	WKDSetAttribute([self diagramElement:@"BPMNShape" of:laneId create:YES], @"isHorizontal", @"true");
+	WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:laneId create:YES], @"isHorizontal", @"true");
 	return lane;
 }
 
@@ -193,7 +198,7 @@ WKDPointAt(double x, double y)
 			for (NSXMLElement *waypoint in WKDChildren(edge, WKDDINamespace, @"waypoint")) {
 				double y = WKDNumber(waypoint, @"y");
 				if (y > line) {
-					WKDSetAttribute(waypoint, @"y", WKDFormat(y + dy));
+					WKDLogAttribute(self.model.journal, waypoint, @"y", WKDFormat(y + dy));
 				}
 			}
 		}
@@ -375,6 +380,7 @@ WKDPointAt(double x, double y)
  * participant. The nodes stay. */
 - (void)removeBands:(NSArray<NSString *> *)elementIds
 {
+	self.needsSync = YES;
 	NSMutableSet *gone = [NSMutableSet set];
 	WKDLane *pool = self.diagram.pool;
 	BOOL poolGoes = pool != nil && [elementIds containsObject:pool.elementId];
@@ -400,9 +406,9 @@ WKDPointAt(double x, double y)
 				}
 			}
 		}
-		[lane.element detach];
+		WKDLogDetach(self.model.journal, lane.element);
 		if ([WKDChildren(set, WKDBpmnNamespace, @"lane") count] == 0) {
-			[set detach];
+			WKDLogDetach(self.model.journal, set);
 		}
 	}
 	if (poolGoes) {
@@ -410,31 +416,31 @@ WKDPointAt(double x, double y)
 		for (WKDLane *lane in self.diagram.lanes) {
 			[gone addObject:lane.elementId];
 		}
-		[WKDChild(self.diagram.process, WKDBpmnNamespace, @"laneSet") detach];
+		WKDLogDetach(self.model.journal, WKDChild(self.diagram.process, WKDBpmnNamespace, @"laneSet"));
 		NSXMLElement *collaboration = (NSXMLElement *)[pool.element parent];
 		for (NSXMLElement *flow in WKDChildren(collaboration, WKDBpmnNamespace, @"messageFlow")) {
 			if ([WKDAttribute(flow, @"sourceRef") isEqualToString:pool.elementId]
 			    || [WKDAttribute(flow, @"targetRef") isEqualToString:pool.elementId]) {
 				[gone addObject:WKDAttribute(flow, @"id") ?: @""];
-				[flow detach];
+				WKDLogDetach(self.model.journal, flow);
 			}
 		}
-		[pool.element detach];
+		WKDLogDetach(self.model.journal, pool.element);
 		if ([WKDChildren(collaboration, WKDBpmnNamespace, @"participant") count] == 0) {
 			/* The plane shows the process again. */
 			NSString *collaborationId = WKDAttribute(collaboration, @"id");
 			for (NSXMLElement *plane in WKDDescendants([self.document rootElement], WKDBpmnDINamespace, @"BPMNPlane")) {
 				if ([WKDAttribute(plane, @"bpmnElement") isEqualToString:collaborationId]) {
-					WKDSetAttribute(plane, @"bpmnElement", WKDAttribute(self.diagram.process, @"id"));
+					WKDLogAttribute(self.model.journal, plane, @"bpmnElement", WKDAttribute(self.diagram.process, @"id"));
 				}
 			}
-			[collaboration detach];
+			WKDLogDetach(self.model.journal, collaboration);
 		}
 	}
 	for (NSXMLElement *plane in WKDDescendants([self.document rootElement], WKDBpmnDINamespace, @"BPMNPlane")) {
 		for (NSXMLElement *child in WKDChildren(plane, WKDBpmnDINamespace, nil)) {
 			if ([gone containsObject:WKDAttribute(child, @"bpmnElement") ?: @""]) {
-				[child detach];
+				WKDLogDetach(self.model.journal, child);
 			}
 		}
 	}
@@ -529,11 +535,11 @@ WKDPointAt(double x, double y)
 		[spans setObject:[NSValue valueWithRect:span] forKey:lane.elementId];
 		double x = left + band * (1 + lane.depth);
 		[self setBounds:NSMakeRect(x, NSMinY(span), right - x, NSHeight(span)) of:lane.elementId];
-		WKDSetAttribute([self diagramElement:@"BPMNShape" of:lane.elementId create:YES], @"isHorizontal", @"true");
+		WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:lane.elementId create:YES], @"isHorizontal", @"true");
 	}
 	if (pool != nil) {
 		[self setBounds:NSMakeRect(left, top, right - left, y - top) of:pool.elementId];
-		WKDSetAttribute([self diagramElement:@"BPMNShape" of:pool.elementId create:YES], @"isHorizontal", @"true");
+		WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:pool.elementId create:YES], @"isHorizontal", @"true");
 	}
 	self.diagram = [WKDDiagram diagramOfDocument:self.document];
 }
@@ -592,11 +598,11 @@ WKDPointAt(double x, double y)
 		if ([self.diagram.lanes count] == 0) {
 			/* A pool without lanes: one lane first, holding all it holds. */
 			NSXMLElement *laneSet = WKDEnsureChild(self.document, self.diagram.process, WKDBpmnNamespace, @"laneSet");
-			WKDSetAttribute(laneSet, @"id", [self freshId:@"LaneSet"]);
+			WKDLogAttribute(self.model.journal, laneSet, @"id", [self freshId:@"LaneSet"]);
 			NSRect r = pool.bounds;
 			NSXMLElement *first = [self newLane:NSMakeRect(NSMinX(r) + WKDLaneBandWidth, NSMinY(r),
 			                                                NSWidth(r) - WKDLaneBandWidth, NSHeight(r))];
-			[laneSet addChild:first];
+			WKDLogAdd(self.model.journal, laneSet, first);
 			self.diagram = [WKDDiagram diagramOfDocument:self.document];
 			[self keepLanes];
 			target = [self.diagram laneWithId:WKDAttribute(first, @"id")];
@@ -615,7 +621,7 @@ WKDPointAt(double x, double y)
 		[self setBounds:r of:target.elementId];
 		NSXMLElement *lane = [self newLane:NSMakeRect(NSMinX(r), NSMaxY(r), NSWidth(r), WKDLaneHeight)];
 		NSXMLElement *set = (NSXMLElement *)[target.element parent];
-		[set insertChild:lane atIndex:[target.element index] + 1];
+		WKDLogInsert(self.model.journal, set, lane, [target.element index] + 1);
 		made = WKDAttribute(lane, @"id");
 	}];
 	return made;

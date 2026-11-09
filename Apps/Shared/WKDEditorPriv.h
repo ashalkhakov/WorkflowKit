@@ -13,8 +13,12 @@
 @property (nonatomic, readwrite, strong) NSXMLDocument *document;
 @property (nonatomic, readwrite, strong) WKDDiagram *diagram;
 
-/* One undoable step named for the change: the document as it was is what
- * undo restores, and the diagram is read again after it. */
+/* An operation that edited what the model holds in the XML itself -- the
+ * lanes, a type, a paste, an id, the inspector's edits -- asks for the model
+ * to be read again before its step ends, the reading recorded for undo. */
+@property (nonatomic) BOOL needsSync;
+/* One undoable step named for the change: what it changed in the model and
+ * the XML is what undo takes back, and the diagram is read again after it. */
 - (void)change:(NSString *)name with:(void (^)(void))change;
 /* The same, joining the last step when it was a change of the same name
  * made within a second, with nothing undone since. */

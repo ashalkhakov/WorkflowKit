@@ -1,5 +1,6 @@
 #import "WKDEditorPriv.h"
 #import "WKDXML.h"
+#import "WKDJournal.h"
 #import "WKDModelPriv.h"
 
 /*
@@ -26,7 +27,7 @@
 		?: (WKDModelElement *)[self.model laneWithId:elementId];
 	if (modelled == nil) {
 		[self edit:elementId action:@"Rename" with:^(NSXMLElement *edited, NSXMLDocument *document) {
-			WKDSetAttribute(edited, @"name", value);
+			WKDLogAttribute(self.model.journal, edited, @"name", value);
 		}];
 		return;
 	}

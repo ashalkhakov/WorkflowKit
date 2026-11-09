@@ -1,5 +1,7 @@
 #import "WKDEditorPriv.h"
 #import "WKDXML.h"
+#import "WKDModelPriv.h"
+#import "WKDJournal.h"
 
 /*
  * Copying and pasting. What is copied is a BPMN document of its own -- a
@@ -75,13 +77,13 @@ WKDSelfAndBelow(NSXMLElement *element)
 	for (NSXMLNode *namespace in [root namespaces]) {
 		[definitions addNamespace:[namespace copy]];
 	}
-	WKDSetAttribute(definitions, @"id", @"Clipboard");
-	WKDSetAttribute(definitions, @"targetNamespace", WKDAttribute(root, @"targetNamespace") ?: @"http://bpmn.io/schema/bpmn");
+	WKDLogAttribute(self.model.journal, definitions, @"id", @"Clipboard");
+	WKDLogAttribute(self.model.journal, definitions, @"targetNamespace", WKDAttribute(root, @"targetNamespace") ?: @"http://bpmn.io/schema/bpmn");
 	NSXMLDocument *fragment = [[NSXMLDocument alloc] initWithRootElement:definitions];
 	[fragment setCharacterEncoding:@"UTF-8"];
 	NSXMLElement *process = WKDNewElement(fragment, WKDBpmnNamespace, @"process");
-	WKDSetAttribute(process, @"id", @"Clipboard_process");
-	WKDSetAttribute(process, @"isExecutable", @"true");
+	WKDLogAttribute(self.model.journal, process, @"id", @"Clipboard_process");
+	WKDLogAttribute(self.model.journal, process, @"isExecutable", @"true");
 
 	NSMutableSet *named = [NSMutableSet set];
 	NSMutableSet *copied = [NSMutableSet set];
@@ -91,11 +93,11 @@ WKDSelfAndBelow(NSXMLElement *element)
 			/* References to flows not copied go. */
 			if ((WKDIs(below, WKDBpmnNamespace, @"incoming") || WKDIs(below, WKDBpmnNamespace, @"outgoing"))
 			    && ![flows containsObject:[below stringValue]]) {
-				[below detach];
+				WKDLogDetach(self.model.journal, below);
 				continue;
 			}
 			if (WKDAttribute(below, @"default") != nil && ![flows containsObject:WKDAttribute(below, @"default")]) {
-				WKDSetAttribute(below, @"default", nil);
+				WKDLogAttribute(self.model.journal, below, @"default", nil);
 			}
 			for (NSString *reference in WKDDefinitionReferences()) {
 				if (WKDAttribute(below, reference) != nil) {
@@ -106,27 +108,27 @@ WKDSelfAndBelow(NSXMLElement *element)
 				[copied addObject:WKDAttribute(below, @"id")];
 			}
 		}
-		[process addChild:copy];
+		WKDLogAdd(self.model.journal, process, copy);
 	}
 	for (NSXMLElement *child in WKDChildren(root, WKDBpmnNamespace, nil)) {
 		if ([named containsObject:WKDAttribute(child, @"id") ?: @""]) {
 			[definitions addChild:[child copy]];
 		}
 	}
-	[definitions addChild:process];
+	WKDLogAdd(self.model.journal, definitions, process);
 
 	NSXMLElement *diagramElement = WKDNewElement(fragment, WKDBpmnDINamespace, @"BPMNDiagram");
-	WKDSetAttribute(diagramElement, @"id", @"Clipboard_diagram");
+	WKDLogAttribute(self.model.journal, diagramElement, @"id", @"Clipboard_diagram");
 	NSXMLElement *plane = WKDNewElement(fragment, WKDBpmnDINamespace, @"BPMNPlane");
-	WKDSetAttribute(plane, @"id", @"Clipboard_plane");
-	WKDSetAttribute(plane, @"bpmnElement", @"Clipboard_process");
+	WKDLogAttribute(self.model.journal, plane, @"id", @"Clipboard_plane");
+	WKDLogAttribute(self.model.journal, plane, @"bpmnElement", @"Clipboard_process");
 	for (NSXMLElement *source in WKDChildren(diagram.plane, WKDBpmnDINamespace, nil)) {
 		if ([copied containsObject:WKDAttribute(source, @"bpmnElement") ?: @""]) {
 			[plane addChild:[source copy]];
 		}
 	}
-	[diagramElement addChild:plane];
-	[definitions addChild:diagramElement];
+	WKDLogAdd(self.model.journal, diagramElement, plane);
+	WKDLogAdd(self.model.journal, definitions, diagramElement);
 	return fragment;
 }
 
@@ -160,6 +162,8 @@ WKDCopyPrefix(NSXMLElement *element)
 	NSXMLElement *fromPlane = [WKDDescendants([fragment rootElement], WKDBpmnDINamespace, @"BPMNPlane") firstObject];
 	NSMutableArray *added = [NSMutableArray array];
 	[self change:@"Paste" with:^{
+		NSXMLElement *rootElement = [self.document rootElement];
+		[self.model.journal willEditXML:rootElement];
 		NSXMLDocument *document = self.document;
 		NSXMLElement *root = [document rootElement];
 		/* The definitions they name: the one of that id here when there is
@@ -179,9 +183,10 @@ WKDCopyPrefix(NSXMLElement *element)
 			if (existing != nil) {
 				NSString *fresh = [self freshId:WKDCopyPrefix(definition)];
 				[ids setObject:fresh forKey:definitionId];
-				WKDSetAttribute(copy, @"id", fresh);
+				WKDLogAttribute(self.model.journal, copy, @"id", fresh);
 			}
 			WKDAdoptInto(document, copy, fragment, root, firstProcess != nil ? [firstProcess index] : [root childCount]);
+			/* The root's own XML is recorded round the whole paste. */
 		}
 		/* Everything pasted gets an id of its own. */
 		NSMutableArray *copies = [NSMutableArray array];
@@ -205,21 +210,22 @@ WKDCopyPrefix(NSXMLElement *element)
 			for (NSXMLElement *below in WKDSelfAndBelow(copy)) {
 				NSString *old = WKDAttribute(below, @"id");
 				if (old != nil && [ids objectForKey:old] != nil) {
-					WKDSetAttribute(below, @"id", [ids objectForKey:old]);
+					WKDLogAttribute(self.model.journal, below, @"id", [ids objectForKey:old]);
 				}
 				for (NSString *reference in [WKDReferences() arrayByAddingObjectsFromArray:WKDDefinitionReferences()]) {
 					NSString *value = WKDAttribute(below, reference);
 					if (value != nil && [ids objectForKey:value] != nil) {
-						WKDSetAttribute(below, reference, [ids objectForKey:value]);
+						WKDLogAttribute(self.model.journal, below, reference, [ids objectForKey:value]);
 					}
 				}
 				if ((WKDIs(below, WKDBpmnNamespace, @"incoming") || WKDIs(below, WKDBpmnNamespace, @"outgoing"))
 				    && [ids objectForKey:[below stringValue]] != nil) {
-					[below setStringValue:[ids objectForKey:[below stringValue]]];
+					WKDLogText(self.model.journal, below, [ids objectForKey:[below stringValue]]);
 				}
 			}
 			NSXMLElement *adopted = WKDAdoptInto(document, copy, fragment, self.diagram.process,
 			                                     [self.diagram.process childCount]);
+			[self.model.journal didInsert:adopted into:(NSXMLElement *)[adopted parent] at:[adopted index]];
 			[added addObject:WKDAttribute(adopted, @"id")];
 		}
 		/* Their shapes and edges, moved by the offset. */
@@ -229,17 +235,20 @@ WKDCopyPrefix(NSXMLElement *element)
 				continue;
 			}
 			NSXMLElement *copy = [source copy];
-			WKDSetAttribute(copy, @"bpmnElement", shown);
-			WKDSetAttribute(copy, @"id", [NSString stringWithFormat:@"%@_di", shown]);
+			WKDLogAttribute(self.model.journal, copy, @"bpmnElement", shown);
+			WKDLogAttribute(self.model.journal, copy, @"id", [NSString stringWithFormat:@"%@_di", shown]);
 			for (NSXMLElement *below in WKDSelfAndBelow(copy)) {
 				if (WKDIs(below, WKDDCNamespace, @"Bounds") || WKDIs(below, WKDDINamespace, @"waypoint")) {
-					WKDSetAttribute(below, @"x", WKDFormat(WKDNumber(below, @"x") + offset.width));
-					WKDSetAttribute(below, @"y", WKDFormat(WKDNumber(below, @"y") + offset.height));
+					WKDLogAttribute(self.model.journal, below, @"x", WKDFormat(WKDNumber(below, @"x") + offset.width));
+					WKDLogAttribute(self.model.journal, below, @"y", WKDFormat(WKDNumber(below, @"y") + offset.height));
 				}
 			}
 			NSXMLElement *plane = [self plane];
-			WKDAdoptInto(document, copy, fragment, plane, [plane childCount]);
+			NSXMLElement *adoptedShape = WKDAdoptInto(document, copy, fragment, plane, [plane childCount]);
+			[self.model.journal didInsert:adoptedShape into:plane at:[adoptedShape index]];
 		}
+		[self.model.journal didEditXML:rootElement];
+		self.needsSync = YES;
 	}];
 	return added;
 }

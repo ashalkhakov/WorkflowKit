@@ -106,6 +106,8 @@
 - (void)restoreJournalState:(NSDictionary *)state;
 /* Whether the element is in the model now. */
 - (BOOL)containsElement:(WKDModelElement *)element;
+/* The XML elements the model's elements are read from and drawn by. */
+- (NSSet<NSXMLElement *> *)carrierElements;
 
 /* Elements made and removed. A node of the type in the container (nil: the
  * process), with no carrier element until the writer makes it; a flow
