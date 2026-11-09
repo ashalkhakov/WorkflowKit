@@ -4,8 +4,7 @@
 
 /* Which server: its service root, and the client ID the app has at the
  * identity provider, for a server that asks for a sign-in. The fields
- * bind to the properties here, remembered in the user defaults. Shared by
- * WorkflowDesk and WorkflowDesigner. */
+ * bind to the properties here, remembered in the user defaults. */
 @interface WDConnectWindowController : NSWindowController
 
 /* Called on the main queue with the session open, signed in where the

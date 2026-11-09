@@ -145,24 +145,24 @@ Its windows are XIBs with Cocoa Bindings, and its forms are XFormsKit's.
   - it quits the app the moment the last window closes, even between
     one window and the next.
 
-`Apps/WorkflowDesigner` is the BPMN designer (see its README): a document
-app whose document is the BPMN XML, edited in place through `WKDEditor`,
-with the engine's `WFBpmnReader` saying after each change whether it runs.
-It edits DMN files the same way (`WKDDmnEditor`, checked by `WFDmnReader`),
-and forms in XFormsDesignKit's editor.
-It links the engine, and deploys to and opens from a `wf-serve` through
-the connection WorkflowDesk has: `Apps/Shared` holds what both apps
-compile -- the session, sign-in and connect window, and the BPMN document
-model, editor, layout and renderer (`WKD*`), with which WorkflowDesk's
-operations window draws a process and where its instances are -- so the
-designer builds with `ODATAKIT=...` too. Its forms open in a window of its own through
-XFormsKit's XFormsDesignKit, the XForms Designer's editor as a framework
-(`XFDDocument`, its second document type), so it builds with
-`XFORMSKIT=...` as well, after `make designkit` in that checkout; its tab
-bars are the DMTabBar that framework carries. Its document model and editor are Foundation only, and
-its tests (`make check`) need no display. A diagram's shapes link to one
-another weakly, so keep the diagram they came from while using them: Apple
-frees it at once, GNUstep later.
+`Apps/WorkflowDesigner` is the BPMN and DMN designer's parts (see its
+README): the process and DMN models, read once and written where they
+change (`WKDModel`, `WKDDmnModel`, in `../Shared` for the process), the
+session objects the parts share (`WKDProcessEditor`, `WKDDecisionEditor`),
+and the parts, each a view controller with its XIB. `designer.make` lists
+them once. There is no designer app: the parts are UDCode's BPMN and DMN
+extension (`UDCodeExtension/`, `docs/UDCODE.md`), whose tabs put them in
+UDCode's panes. The document is the text: each change is one edit of it,
+its undo the undo, and a change made some other way is read again
+(`-readData:error:`). Processes are not deployed from the editor; they
+follow the application's life cycle (`docs/deployments.md`: wf-build,
+`workflow-deployment.make`, deployed at launch). The parts' tests (`make -C
+Apps/WorkflowDesigner check`) open windows, under xvfb-run where there is
+no display; the extension's (`make -C UDCodeExtension check`) need UDCode's
+SDK installed (`UDCODEKIT_VERSION`), which the top GNUmakefile looks for.
+`Apps/Shared` holds what WorkflowDesk shares: the session, sign-in and
+connect window, and the process model, editor, layout and renderer
+(`WKD*`), with which its operations window draws a process.
 
 XFormsKit's frameworks carry no headers on either platform, so their users
 include them from `../XFormsKit/Sources` (and `Sources/XFormsDesignKit`). On GNUstep it needs libs-corebase
@@ -172,10 +172,12 @@ and libs-opal in the stack.
 
 `WorkflowKit.xcworkspace` holds `WorkflowKit.xcodeproj`: the `WorkflowKit`
 framework, the `WorkflowKitOData` framework, the `WorkflowKitTests` bundle
-(the OData API's tests included), the `PurchaseRequestDemo` and `wf-serve`
-tools, and the `WorkflowDesk` and `WorkflowDesigner` apps with their tests, with shared settings in
-`Xcode/Configs` (the same as ODataKit's). What they build on -- ODataKit's
-and XFormsKit's frameworks, and Sparkle -- are the XCFrameworks of the
+(the OData API's tests included), the `PurchaseRequestDemo`, `wf-serve` and
+`wf-build` tools, the `WorkflowDesk` app with its tests, the designer's
+parts' tests (`WorkflowDesignerTests`), and UDCode's extension
+(`WorkflowDesigner.bundle`) with its tests (`WKUTests`), with shared settings in
+`Xcode/Configs` (the same as ODataKit's). What they build on -- ODataKit's,
+XFormsKit's and DiagramKit's frameworks, UDCode's SDK, and Sparkle -- are the XCFrameworks of the
 releases `.github/pins.env` names, in `.deps/`, which
 gnustep-release-actions' `scripts/deps.sh apple` unpacks there (run it from
 the repository's root once, and again after moving a pin). The project

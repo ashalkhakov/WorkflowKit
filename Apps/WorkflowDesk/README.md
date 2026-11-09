@@ -38,9 +38,9 @@ XForms form; the form is sent with its button, or ⌘Return.
 | --- | --- |
 | `../Shared/WDSession` | Core Data over `ODataIncrementalStore`, with the engine's own model on its `API` configuration. Fetches and operations run on a private-queue context; the windows bind to the main queue's context. |
 | `../Shared/WDSignIn` | OpenID Connect sign-in: the authorization code flow with PKCE, in the system browser, back to a loopback redirect. It is the store's credential provider. |
-| `../Shared/WDConnectWindowController` | The connect window, which WorkflowDesigner opens too. |
+| `../Shared/WDConnectWindowController` | The connect window. |
 | `WDFormDocument` | Puts the task's instance into its form. |
-| `WDDiagramView` | The diagram with where instances are, drawn by the designer's renderer (`../Shared/WKDRenderer`) from its document model (`../Shared/WKDDiagram`). |
+| `WDDiagramView` | The diagram with where instances are, drawn by the designer's renderer (`../Shared/WKDRenderer`) from its process model (`../Shared/WKDModel`). |
 | `Resources/*.xib` | The windows. Each list is an `NSArrayController` with Cocoa Bindings. |
 
 ## Running it
