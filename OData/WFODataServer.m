@@ -131,9 +131,25 @@ static NSMutableDictionary *WFStoreTypes;
 
 /* Each directory under the deployments directory, as a deployment of the
  * files in it by their paths under it. */
+- (BOOL)deployBuilt:(NSString *)path to:(WFProcessEngine *)engine error:(NSError **)error
+{
+	NSError *failure = nil;
+	WFBuiltDeployment *built = [WFBuiltDeployment deploymentWithContentsOfURL:[NSURL fileURLWithPath:path] error:&failure];
+	if (built == nil || [engine.repositoryService deployBuiltDeployment:built error:&failure] == nil) {
+		return WFServerFail(error, [NSString stringWithFormat:@"deployment %@: %@", [path lastPathComponent],
+			[failure localizedDescription]]);
+	}
+	HSLogMessage(HSLogLevelInfo, WFServerComponent, nil, @"deployment %@ (built): %lu resources", built.name,
+	             (unsigned long)[built.resources count]);
+	return YES;
+}
+
 - (BOOL)deployTo:(WFProcessEngine *)engine from:(NSString *)directory error:(NSError **)error
 {
 	NSFileManager *files = [NSFileManager defaultManager];
+	if ([[directory pathExtension] isEqualToString:WFBuiltDeploymentExtension]) {
+		return [self deployBuilt:directory to:engine error:error];
+	}
 	NSArray *names = [[files contentsOfDirectoryAtPath:directory error:NULL] sortedArrayUsingSelector:@selector(compare:)];
 	if (names == nil) {
 		return WFServerFail(error, [NSString stringWithFormat:@"Deployments %@ is not a directory", directory]);
@@ -142,6 +158,12 @@ static NSMutableDictionary *WFStoreTypes;
 		NSString *root = [directory stringByAppendingPathComponent:name];
 		BOOL isDirectory = NO;
 		if ([name hasPrefix:@"."] || ![files fileExistsAtPath:root isDirectory:&isDirectory] || !isDirectory) {
+			continue;
+		}
+		if ([[name pathExtension] isEqualToString:WFBuiltDeploymentExtension]) {
+			if (![self deployBuilt:root to:engine error:error]) {
+				return NO;
+			}
 			continue;
 		}
 		NSMutableDictionary *resources = [NSMutableDictionary dictionary];

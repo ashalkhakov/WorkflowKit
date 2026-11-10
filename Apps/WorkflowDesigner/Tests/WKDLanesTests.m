@@ -24,14 +24,14 @@
 static NSArray *
 WKDRefs(WKDEditor *editor, NSString *laneId)
 {
-	return [editor.diagram laneWithId:laneId].flowNodeIds;
+	return [editor.model laneWithId:laneId].flowNodeIds;
 }
 
 static NSRect
 WKDBoundsOf(WKDEditor *editor, NSString *elementId)
 {
-	WKDShape *shape = [editor.diagram shapeWithId:elementId];
-	return shape != nil ? shape.bounds : [editor.diagram laneWithId:elementId].bounds;
+	WKDNode *shape = [editor.model nodeWithId:elementId];
+	return shape != nil ? shape.bounds : [editor.model laneWithId:elementId].bounds;
 }
 
 /* Whether the engine reads the document. */
@@ -44,7 +44,7 @@ WKDRuns(WKDEditor *editor, NSError **error)
 - (void)testAPoolAndItsLanesAreRead
 {
 	WKDEditor *editor = [self team];
-	WKDDiagram *diagram = editor.diagram;
+	WKDModel *diagram = editor.model;
 	XCTAssertEqualObjects(diagram.pool.elementId, @"company");
 	XCTAssertEqualObjects(diagram.pool.name, @"Company");
 	XCTAssertTrue(diagram.pool.horizontal);
@@ -53,7 +53,7 @@ WKDRuns(WKDEditor *editor, NSError **error)
 	NSArray *expected = @[ @"hr", @"manager" ];
 	XCTAssertEqualObjects(lanes, expected);
 	XCTAssertEqualObjects([diagram.leafLanes valueForKey:@"elementId"], expected);
-	XCTAssertEqualObjects([diagram laneOf:[diagram shapeWithId:@"approve"]].elementId, @"manager");
+	XCTAssertEqualObjects([diagram laneOf:[diagram nodeWithId:@"approve"]].elementId, @"manager");
 	XCTAssertEqualObjects([diagram.otherPools valueForKey:@"elementId"], @[ @"candidate" ]);
 	XCTAssertTrue(NSContainsRect(diagram.contentBounds, NSMakeRect(100, 420, 700, 80)), @"pools are content");
 	NSError *error = nil;
@@ -90,13 +90,13 @@ WKDRuns(WKDEditor *editor, NSError **error)
 	NSString *lane = [editor addLaneAfter:@"hr"];
 	XCTAssertNotNil(lane);
 	NSArray *order = @[ @"hr", lane, @"manager" ];
-	XCTAssertEqualObjects([editor.diagram.lanes valueForKey:@"elementId"], order);
+	XCTAssertEqualObjects([editor.model.lanes valueForKey:@"elementId"], order);
 	XCTAssertTrue(NSEqualRects(WKDBoundsOf(editor, lane), NSMakeRect(130, 230, 670, 125)));
 	XCTAssertEqual(NSMinY(WKDBoundsOf(editor, @"manager")), 355.0, @"moved down to make room");
 	XCTAssertEqual(NSMinY(WKDBoundsOf(editor, @"approve")), 390.0, @"with what is in it");
 	XCTAssertEqual(NSHeight(WKDBoundsOf(editor, @"company")), 425.0);
 	XCTAssertEqual(NSHeight(WKDBoundsOf(editor, @"hr")), 150.0, @"the lane before is as it was");
-	WKDConnection *f2 = [editor.diagram connectionWithId:@"f2"];
+	WKDFlow *f2 = [editor.model flowWithId:@"f2"];
 	XCTAssertEqual([[f2.waypoints lastObject] pointValue].y, 430.0, @"the flow's end with its node");
 	XCTAssertEqual([[f2.waypoints firstObject] pointValue].y, 155.0, @"its start where it was");
 	NSArray *manager = @[ @"approve", @"done" ];
@@ -105,22 +105,22 @@ WKDRuns(WKDEditor *editor, NSError **error)
 	NSError *error = nil;
 	XCTAssertTrue(WKDRuns(editor, &error), @"%@", error);
 	NSString *last = [editor addLaneAfter:nil];
-	XCTAssertEqualObjects([[editor.diagram.lanes lastObject] elementId], last, @"at the bottom of the pool");
+	XCTAssertEqualObjects([[editor.model.lanes lastObject] elementId], last, @"at the bottom of the pool");
 }
 
 - (void)testAProcessIsPutInAPoolAndGivenLanes
 {
 	WKDEditor *editor = [[WKDEditor alloc] initWithDocument:WKDParse(WKDModellerFile) undoManager:nil];
-	XCTAssertNil(editor.diagram.pool);
+	XCTAssertNil(editor.model.pool);
 	NSString *lane = [editor addLaneAfter:nil];
-	WKDLane *pool = editor.diagram.pool;
+	WKDLane *pool = editor.model.pool;
 	XCTAssertNotNil(pool, @"a pool first");
-	XCTAssertEqual([editor.diagram.lanes count], (NSUInteger)2, @"a lane holding everything, then the new one");
-	WKDLane *first = [editor.diagram.lanes firstObject];
+	XCTAssertEqual([editor.model.lanes count], (NSUInteger)2, @"a lane holding everything, then the new one");
+	WKDLane *first = [editor.model.lanes firstObject];
 	XCTAssertTrue([first.flowNodeIds containsObject:@"review"], @"%@", first.flowNodeIds);
 	XCTAssertTrue([first.flowNodeIds containsObject:@"late"], @"boundary events too");
 	XCTAssertFalse([first.flowNodeIds containsObject:@"pack"], @"not what a subprocess holds");
-	XCTAssertEqualObjects([[editor.diagram.lanes lastObject] elementId], lane);
+	XCTAssertEqualObjects([[editor.model.lanes lastObject] elementId], lane);
 	XCTAssertEqual(NSMaxY(WKDBoundsOf(editor, lane)), NSMaxY(pool.bounds));
 	NSString *xml = [editor.document XMLString];
 	XCTAssertTrue([xml rangeOfString:@"processRef=\"order\""].location != NSNotFound, @"%@", xml);
@@ -129,12 +129,12 @@ WKDRuns(WKDEditor *editor, NSError **error)
 
 	/* And taken out again: the plane shows the process. */
 	[editor deleteElements:@[ pool.elementId ]];
-	XCTAssertNil(editor.diagram.pool);
-	XCTAssertEqual([editor.diagram.lanes count], (NSUInteger)0);
+	XCTAssertNil(editor.model.pool);
+	XCTAssertEqual([editor.model.lanes count], (NSUInteger)0);
 	xml = [editor.document XMLString];
 	XCTAssertTrue([xml rangeOfString:@"collaboration"].location == NSNotFound, @"%@", xml);
 	XCTAssertTrue([xml rangeOfString:@"bpmnElement=\"order\""].location != NSNotFound);
-	XCTAssertNotNil([editor.diagram shapeWithId:@"review"], @"the nodes stay");
+	XCTAssertNotNil([editor.model nodeWithId:@"review"], @"the nodes stay");
 }
 
 - (void)testLanesAreResizedAndRemoved
@@ -152,14 +152,14 @@ WKDRuns(WKDEditor *editor, NSError **error)
 
 	[editor deleteElements:@[ @"hr" ]];
 	NSArray *one = @[ @"manager" ];
-	XCTAssertEqualObjects([editor.diagram.lanes valueForKey:@"elementId"], one);
+	XCTAssertEqualObjects([editor.model.lanes valueForKey:@"elementId"], one);
 	XCTAssertEqual(NSMinY(WKDBoundsOf(editor, @"manager")), 80.0, @"the lane after takes its room");
 	NSArray *everything = @[ @"approve", @"done", @"start", @"review" ];
 	XCTAssertEqualObjects(WKDRefs(editor, @"manager"), everything, @"and what was in it");
 	[editor deleteElements:@[ @"manager" ]];
-	XCTAssertEqual([editor.diagram.lanes count], (NSUInteger)0);
+	XCTAssertEqual([editor.model.lanes count], (NSUInteger)0);
 	XCTAssertTrue([[editor.document XMLString] rangeOfString:@"laneSet"].location == NSNotFound);
-	XCTAssertNotNil(editor.diagram.pool, @"the pool stays");
+	XCTAssertNotNil(editor.model.pool, @"the pool stays");
 }
 
 - (void)testThePoolIsMovedWithWhatItHolds
@@ -169,7 +169,7 @@ WKDRuns(WKDEditor *editor, NSError **error)
 	XCTAssertTrue(NSEqualRects(WKDBoundsOf(editor, @"company"), NSMakeRect(150, 100, 700, 300)));
 	XCTAssertTrue(NSEqualRects(WKDBoundsOf(editor, @"manager"), NSMakeRect(180, 250, 670, 150)));
 	XCTAssertTrue(NSEqualRects(WKDBoundsOf(editor, @"review"), NSMakeRect(310, 135, 100, 80)));
-	WKDConnection *f2 = [editor.diagram connectionWithId:@"f2"];
+	WKDFlow *f2 = [editor.model flowWithId:@"f2"];
 	XCTAssertEqual([[f2.waypoints objectAtIndex:1] pointValue].x, 440.0, @"its bends with it");
 	XCTAssertTrue(NSEqualRects(WKDBoundsOf(editor, @"candidate"), NSMakeRect(100, 420, 700, 80)),
 	              @"not another's pool");
@@ -191,8 +191,8 @@ WKDRuns(WKDEditor *editor, NSError **error)
 {
 	WKDEditor *editor = [self team];
 	[editor arrange];
-	for (WKDShape *shape in editor.diagram.shapes) {
-		WKDLane *lane = [editor.diagram laneOf:shape];
+	for (WKDNode *shape in editor.model.nodes) {
+		WKDLane *lane = [editor.model laneOf:shape];
 		XCTAssertNotNil(lane, @"%@", shape.elementId);
 		XCTAssertTrue(NSPointInRect(NSMakePoint(NSMidX(shape.bounds), NSMidY(shape.bounds)), lane.bounds),
 		              @"%@ in %@", shape, lane);

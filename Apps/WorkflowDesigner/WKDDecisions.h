@@ -1,60 +1,5 @@
 #import <Foundation/Foundation.h>
-
-/*
- * A DMN file's decisions, as the decision editor shows them: read from the
- * XML after every change, as WKDDiagram is from a process's.
- */
-
-/* A decision table's column. An input is the expression whose value the
- * rules test, with its label and type; an output is the name a rule's
- * value has in the result, with its label and type. */
-@interface WKDDmnColumn : NSObject
-@property (nonatomic, readonly, copy) NSString *columnId;
-@property (nonatomic, readonly, getter=isOutput) BOOL output;
-@property (nonatomic, readonly, copy) NSString *label;
-/* typeRef: string, boolean, integer, long, double, date; nil for any. */
-@property (nonatomic, readonly, copy) NSString *typeRef;
-/* An input's: its inputExpression's text, and camunda:inputVariable, the
- * name its entries see the value under besides ?. */
-@property (nonatomic, readonly, copy) NSString *expression;
-@property (nonatomic, readonly, copy) NSString *inputVariable;
-/* An output's. */
-@property (nonatomic, readonly, copy) NSString *name;
-/* What the column is called: its label, else its expression or name. */
-@property (nonatomic, readonly, copy) NSString *title;
-@end
-
-/* A rule: an entry per column, inputs first -- "" where the file has none
- * -- and its annotation, the rule's description. */
-@interface WKDDmnRule : NSObject
-@property (nonatomic, readonly, copy) NSString *ruleId;
-@property (nonatomic, readonly, copy) NSArray<NSString *> *entries;
-@property (nonatomic, readonly, copy) NSString *annotation;
-@end
-
-@interface WKDDmnDecision : NSObject
-@property (nonatomic, readonly, copy) NSString *decisionId;
-@property (nonatomic, readonly, copy) NSString *name;
-/* A decision table; NO for a literal expression, or for neither. */
-@property (nonatomic, readonly, getter=isTable) BOOL table;
-/* A table's: its hitPolicy as written, UNIQUE when not, and its
- * aggregation (SUM, MIN, MAX, COUNT) or nil. */
-@property (nonatomic, readonly, copy) NSString *hitPolicy;
-@property (nonatomic, readonly, copy) NSString *aggregation;
-@property (nonatomic, readonly, copy) NSArray<WKDDmnColumn *> *inputs;
-@property (nonatomic, readonly, copy) NSArray<WKDDmnColumn *> *outputs;
-/* The inputs, then the outputs: what a rule's entries are for. */
-@property (nonatomic, readonly, copy) NSArray<WKDDmnColumn *> *columns;
-@property (nonatomic, readonly, copy) NSArray<WKDDmnRule *> *rules;
-/* A literal expression's: its text, and the variable it gives. */
-@property (nonatomic, readonly, copy) NSString *expression;
-@property (nonatomic, readonly, copy) NSString *variableName;
-@property (nonatomic, readonly, copy) NSString *variableType;
-/* The decisions it requires, by id. */
-@property (nonatomic, readonly, copy) NSArray<NSString *> *required;
-/* Its name, else its id. */
-@property (nonatomic, readonly, copy) NSString *title;
-@end
+#import "WKDDmnModel.h"
 
 /* The types a column or a variable can have, as the engine knows them. */
 NSArray<NSString *> *WKDDmnTypes(void);
@@ -62,9 +7,16 @@ NSArray<NSString *> *WKDDmnTypes(void);
  * each an array of policy and aggregation (or ""), with what to call it. */
 NSArray<NSArray<NSString *> *> *WKDDmnHitPolicies(void);
 
+/* Posted, by the editor, after every change, undo and redo included. */
+extern NSString * const WKDDmnEditorDidChangeNotification;
+/* Posted, by the editor, as a decision is given another id: its old id and
+ * its new one, under "from" and "to". The change follows. */
+extern NSString * const WKDDmnEditorWillRenameNotification;
+
 /*
  * Every change to a DMN document goes through here, as WKDEditor's do to
- * a process: each one undo step that restores the document as it was. A
+ * a process: made in the model, written where it differs, and one undo
+ * step of the journal's, which takes back what it touched. A
  * table's rules keep an entry per column as columns come, go and move;
  * a decision's references -- requirements on it, its diagram shape -- go
  * with it, and change with its id. Where the file has a DMN diagram
@@ -77,11 +29,13 @@ NSArray<NSArray<NSString *> *> *WKDDmnHitPolicies(void);
 
 - (instancetype)initWithDocument:(NSXMLDocument *)document undoManager:(NSUndoManager *)undoManager;
 
+/* The model's carrier: changes, undo and redo edit it in place. */
 @property (nonatomic, readonly, strong) NSXMLDocument *document;
-/* Read again after every change. */
+@property (nonatomic, readonly, strong) WKDDmnModel *model;
 @property (nonatomic, readonly, copy) NSArray<WKDDmnDecision *> *decisions;
-/* Called after every change, undo and redo included. */
-@property (nonatomic, copy) void (^changed)(void);
+/* After every change, undo and redo, the model is compared with one read
+ * afresh from the document, and a disagreement raises: for tests. */
+@property (class, nonatomic) BOOL checksAgreement;
 
 - (WKDDmnDecision *)decisionWithId:(NSString *)decisionId;
 

@@ -78,7 +78,7 @@
 	NSXMLElement *review = [editor elementWithId:@"review"];
 	XCTAssertEqualObjects(WKDAttribute(review, @"camunda:assignee"), @"ann");
 	XCTAssertNil(WKDAttribute(review, @"camunda:candidateGroups"), @"emptied, it is gone");
-	XCTAssertEqualObjects([editor.diagram shapeWithId:@"review"].name, @"Review the order");
+	XCTAssertEqualObjects([editor.model nodeWithId:@"review"].name, @"Review the order");
 	XCTAssertEqualObjects([[self engineRead:editor] nodeWithId:@"review"].name, @"Review the order");
 }
 
@@ -91,14 +91,14 @@
 	XCTAssertFalse([[self property:@"Id" of:@"ok" in:editor] setValue:@"1st" in:editor of:@"ok" error:&reason]);
 	[self set:@"Id" of:@"ok" to:@"checked" in:editor];
 	[self set:@"Id" of:@"f4" to:@"refusal" in:editor];
-	WKDDiagram *diagram = editor.diagram;
-	XCTAssertNotNil([diagram shapeWithId:@"checked"]);
-	XCTAssertEqual([diagram connectionWithId:@"f2"].target, [diagram shapeWithId:@"checked"]);
-	XCTAssertTrue([diagram connectionWithId:@"refusal"].isDefault, @"the gateway's default follows the flow");
+	WKDModel *diagram = editor.model;
+	XCTAssertNotNil([diagram nodeWithId:@"checked"]);
+	XCTAssertEqual([diagram flowWithId:@"f2"].target, [diagram nodeWithId:@"checked"]);
+	XCTAssertTrue([diagram flowWithId:@"refusal"].isDefault, @"the gateway's default follows the flow");
 	NSString *xml = [editor.document XMLString];
 	XCTAssertTrue([xml rangeOfString:@"bpmnElement=\"checked\""].location != NSNotFound);
 	XCTAssertTrue([xml rangeOfString:@"<bpmn:outgoing>refusal</bpmn:outgoing>"].location != NSNotFound);
-	XCTAssertTrue(NSEqualRects([diagram shapeWithId:@"checked"].bounds, NSMakeRect(360, 93, 50, 50)), @"its shape too");
+	XCTAssertTrue(NSEqualRects([diagram nodeWithId:@"checked"].bounds, NSMakeRect(360, 93, 50, 50)), @"its shape too");
 	[self engineRead:editor];
 }
 
@@ -212,7 +212,7 @@
 	[self set:@"Asynchronous before" of:@"review" to:@"true" in:editor];
 	[self set:@"Exclusive" of:@"review" to:@"false" in:editor];
 	[self set:@"Retry cycle" of:@"review" to:@"R5/PT1M" in:editor];
-	XCTAssertEqualObjects([editor.diagram shapeWithId:@"review"].loop, @"sequential");
+	XCTAssertEqualObjects([editor.model nodeWithId:@"review"].loop, @"sequential");
 	NSXMLElement *review = [editor elementWithId:@"review"];
 	XCTAssertEqualObjects([[[review children] lastObject] localName], @"multiInstanceLoopCharacteristics",
 	                      @"loop characteristics last, as BPMN's schema has them");

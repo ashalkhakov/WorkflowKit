@@ -2,7 +2,7 @@
 #import "WDDiagramView.h"
 #import "WDInterface.h"
 #import "WDSession.h"
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 #import "WKDEditor.h"
 
 static NSSortDescriptor *
@@ -24,7 +24,7 @@ WDSort(NSString *key, BOOL ascending)
 	NSInteger _instanceFilter;
 	/* Each definition's diagram, by its id, once read; and the
 	 * document each was read from, which its shapes need kept. */
-	NSMutableDictionary<NSString *, WKDDiagram *> *_diagrams;
+	NSMutableDictionary<NSString *, WKDModel *> *_diagrams;
 	NSMutableDictionary<NSString *, NSXMLDocument *> *_documents;
 }
 
@@ -269,14 +269,14 @@ WDIsRunning(NSManagedObject *instance)
 - (void)showDiagramOf:(NSManagedObject *)definition
 {
 	NSString *definitionId = [definition valueForKey:@"definitionId"];
-	WKDDiagram *known = definitionId != nil ? [_diagrams objectForKey:definitionId] : nil;
+	WKDModel *known = definitionId != nil ? [_diagrams objectForKey:definitionId] : nil;
 	if (definition == nil || known != nil) {
 		self.diagramView.placeholder = definition == nil ? @"No process selected." : nil;
-		self.diagramView.diagram = known;
+		self.diagramView.model = known;
 		[self markDiagram];
 		return;
 	}
-	self.diagramView.diagram = nil;
+	self.diagramView.model = nil;
 	self.diagramView.placeholder = @"Reading the diagram…";
 	[self setLoading:YES];
 	[_session invoke:@"Bpmn" on:definition parameters:nil completion:^(id result, NSError *error) {
@@ -292,10 +292,10 @@ WDIsRunning(NSManagedObject *instance)
 		WKDEditor *editor = [[WKDEditor alloc] initWithDocument:document undoManager:nil];
 		[editor completeDiagram];
 		[self->_documents setObject:editor.document forKey:definitionId];
-		[self->_diagrams setObject:editor.diagram forKey:definitionId];
+		[self->_diagrams setObject:editor.model forKey:definitionId];
 		if ([[[self selectedOf:self.definitions] valueForKey:@"definitionId"] isEqual:definitionId]) {
 			self.diagramView.placeholder = nil;
-			self.diagramView.diagram = editor.diagram;
+			self.diagramView.model = editor.model;
 			[self markDiagram];
 		}
 	}];
@@ -394,7 +394,7 @@ WDIsRunning(NSManagedObject *instance)
 /* What the diagram shows of the activity clicked, in the status line. */
 - (void)describeActivity:(NSString *)activityId
 {
-	WKDShape *shape = [self.diagramView.diagram shapeWithId:activityId];
+	WKDNode *shape = [self.diagramView.model nodeWithId:activityId];
 	if (shape == nil) {
 		self.status = @"";
 		return;

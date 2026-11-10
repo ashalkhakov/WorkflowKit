@@ -165,8 +165,9 @@
         <di:waypoint x="728" y="160"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="noBugFlow_Edge" bpmnElement="noBugFlow">
-        <di:waypoint x="527" y="238"/>
-        <di:waypoint x="527" y="220"/>
+        <di:waypoint x="552" y="213"/>
+        <di:waypoint x="725" y="213"/>
+        <di:waypoint x="725" y="220"/>
         <di:waypoint x="898" y="220"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="workedAround_Edge" bpmnElement="workedAround">

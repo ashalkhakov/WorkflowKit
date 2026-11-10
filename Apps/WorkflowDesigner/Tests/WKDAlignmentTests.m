@@ -18,7 +18,7 @@
 static NSRect
 WKDBounds(WKDEditor *editor, NSString *elementId)
 {
-	return [editor.diagram shapeWithId:elementId].bounds;
+	return [editor.model nodeWithId:elementId].bounds;
 }
 
 - (void)testShapesLineUpWithTheFirst

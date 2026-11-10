@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24127" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24127"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="WKDCanvasViewController">
+            <connections>
+                <outlet property="view" destination="WKDc-scroll" id="WKDc-o-view"/>
+                <outlet property="canvas" destination="WKDc-canvas" id="WKDc-o-canvas"/>
+                <outlet property="elementMenu" destination="WKDc-menu" id="WKDc-o-menu"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <scrollView borderType="none" autohidesScrollers="NO" horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" hasHorizontalScroller="YES" usesPredominantAxisScrolling="NO" id="WKDc-scroll">
+            <rect key="frame" x="0.0" y="0.0" width="748" height="752"/>
+            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+            <clipView key="contentView" id="WKDc-clip">
+                <rect key="frame" x="0" y="0" width="748" height="752"/>
+                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                <subviews>
+                    <customView id="WKDc-canvas" customClass="WKDCanvasView">
+                        <rect key="frame" x="0" y="0" width="2000" height="2000"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </customView>
+                </subviews>
+            </clipView>
+            <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="WKDc-hs">
+                <rect key="frame" x="0" y="737" width="748" height="15"/>
+                <autoresizingMask key="autoresizingMask"/>
+            </scroller>
+            <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="WKDc-vs">
+                <rect key="frame" x="733" y="0" width="15" height="752"/>
+                <autoresizingMask key="autoresizingMask"/>
+            </scroller>
+            <connections>
+                <outlet property="documentView" destination="WKDc-canvas" id="WKDc-o-doc"/>
+            </connections>
+        </scrollView>
+        <menu title="Element" id="WKDc-menu">
+            <items>
+                <menuItem title="Rename" tag="1" id="WKDc-m-rename">
+                    <connections>
+                        <action selector="rename:" target="-1" id="WKDc-a-rename"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Add Lane" tag="2" id="WKDc-m-addlane">
+                    <connections>
+                        <action selector="addLane:" target="-1" id="WKDc-a-addlane"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Change Type" tag="3" id="WKDc-m-changetype">
+                    <menu key="submenu" title="Change Type" id="WKDc-m-types">
+                        <items>
+                            <menuItem title="Type" id="WKDc-m-type">
+                                <connections>
+                                    <action selector="changeType:" target="-1" id="WKDc-a-changetype"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" tag="4" id="WKDc-m-sep1"/>
+                <menuItem title="Align" tag="5" id="WKDc-m-align">
+                    <menu key="submenu" title="Align" id="WKDc-m-aligns">
+                        <items>
+                            <menuItem title="Left Edges" id="WKDc-m-left">
+                                <connections>
+                                    <action selector="alignLeftEdges:" target="-1" id="WKDc-a-left"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Centres" id="WKDc-m-centres">
+                                <connections>
+                                    <action selector="alignCentres:" target="-1" id="WKDc-a-centres"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Right Edges" id="WKDc-m-right">
+                                <connections>
+                                    <action selector="alignRightEdges:" target="-1" id="WKDc-a-right"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Top Edges" id="WKDc-m-top">
+                                <connections>
+                                    <action selector="alignTopEdges:" target="-1" id="WKDc-a-top"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Middles" id="WKDc-m-middles">
+                                <connections>
+                                    <action selector="alignMiddles:" target="-1" id="WKDc-a-middles"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Bottom Edges" id="WKDc-m-bottom">
+                                <connections>
+                                    <action selector="alignBottomEdges:" target="-1" id="WKDc-a-bottom"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Distribute" tag="6" id="WKDc-m-distribute">
+                    <menu key="submenu" title="Distribute" id="WKDc-m-distributes">
+                        <items>
+                            <menuItem title="Across" id="WKDc-m-across">
+                                <connections>
+                                    <action selector="distributeAcross:" target="-1" id="WKDc-a-across"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Down" id="WKDc-m-down">
+                                <connections>
+                                    <action selector="distributeDown:" target="-1" id="WKDc-a-down"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" tag="7" id="WKDc-m-sep2"/>
+                <menuItem title="Cut" id="WKDc-m-cut">
+                    <connections>
+                        <action selector="cut:" target="-1" id="WKDc-a-cut"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Copy" id="WKDc-m-copy">
+                    <connections>
+                        <action selector="copy:" target="-1" id="WKDc-a-copy"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Duplicate" id="WKDc-m-duplicate">
+                    <connections>
+                        <action selector="duplicate:" target="-1" id="WKDc-a-duplicate"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Delete" id="WKDc-m-delete">
+                    <connections>
+                        <action selector="delete:" target="-1" id="WKDc-a-delete"/>
+                    </connections>
+                </menuItem>
+            </items>
+        </menu>
+    </objects>
+</document>

@@ -1,5 +1,5 @@
 //
-// WKDUpdater — WorkflowDesk's and WorkflowDesigner's updates.
+// WKDUpdater — WorkflowDesk's updates.
 //
 // On macOS, Sparkle (WKDUpdater-Apple.m): the newest release's appcast for
 // this app (SUFeedURL in <App>-Info.plist, appcast-<App>.xml, signed with the

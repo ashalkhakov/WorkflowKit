@@ -8,8 +8,8 @@ Each directory is one deployment: its BPMN files, with the decisions
   the scenario its documentation describes, on every store.
 - The example server deploys all of them, with the plugin they call:
   `make -C Server run` (which builds `Examples/Plugins` first), or the
-  `wf-serve` scheme in Xcode. Try them in WorkflowDesk, or open them in
-  WorkflowDesigner (File ▸ Open from Server). Elsewhere,
+  `wf-serve` scheme in Xcode. Try them in WorkflowDesk, and open their
+  files in UDCode with WorkflowKit's extension (`docs/UDCODE.md`). Elsewhere,
   `wf-serve -Deployments Examples/Processes -Plugins Examples/Plugins/obj`
   does the same.
 
@@ -24,7 +24,7 @@ instances and take them back.
 
 Four forms of the examples are written in XForms and deployed beside
 their processes (`camunda:formKey="embedded:deployment:..."`): open them
-in WorkflowDesk, or in the designer with Edit Form. They show the two ways
+in WorkflowDesk, or from the process in UDCode with Edit Form. They show the two ways
 a form gets its data:
 
 - `loan-application/underwrite.xhtml` lays out the task's fields

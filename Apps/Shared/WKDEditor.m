@@ -1,6 +1,8 @@
 #import "WKDEditorPriv.h"
 #import <DiagramKit/DKLayeredLayout.h>
 #import "WKDXML.h"
+#import "WKDJournal.h"
+#import "WKDModelPriv.h"
 
 /* Inside a subprocess, around what it holds. */
 static const double WKDPadding = 40;
@@ -10,6 +12,8 @@ static const double WKDMargin = 80;
 @implementation WKDEditor
 {
 	NSUndoManager *_undoManager;
+	/* The step a coalescing change may join. */
+	WKDJournalStep *_lastStep;
 	/* The change the next coalescing one may join, and when it was. */
 	NSString *_coalescedName;
 	NSDate *_coalescedAt;
@@ -49,22 +53,42 @@ static const double WKDMargin = 80;
 	if ((self = [super init])) {
 		_document = document;
 		_undoManager = undoManager;
-		_diagram = [WKDDiagram diagramOfDocument:document];
+		_model = [WKDModel modelOfDocument:document];
 	}
 	return self;
 }
 
-- (void)reread
+NSString * const WKDEditorDidChangeNotification = @"WKDEditorDidChange";
+NSString * const WKDEditorWillRenameNotification = @"WKDEditorWillRename";
+
+static BOOL WKDChecksAgreement = NO;
+
++ (BOOL)checksAgreement
 {
-	_diagram = [WKDDiagram diagramOfDocument:_document];
-	if (self.changed != nil) {
-		self.changed();
-	}
+	return WKDChecksAgreement;
 }
 
-/* One undoable step: the document as it was is what undo restores. The
- * diagram it starts from is held for the change: its shapes' links to one
- * another are weak, and a change reads the document afresh as it goes. */
++ (void)setChecksAgreement:(BOOL)checks
+{
+	WKDChecksAgreement = checks;
+}
+
+- (void)reread
+{
+	if (_model == nil) {
+		_model = [WKDModel modelOfDocument:_document];
+	}
+	if (WKDChecksAgreement && _model != nil) {
+		NSString *disagreement = [_model disagreementWith:[WKDModel modelOfDocument:_document]]
+			?: [_model.journal indexDisagreement];
+		if (disagreement != nil) {
+			[NSException raise:NSInternalInconsistencyException format:@"the model disagrees with its document: %@", disagreement];
+		}
+	}
+	[[NSNotificationCenter defaultCenter] postNotificationName:WKDEditorDidChangeNotification object:self];
+}
+
+/* One undoable step: what it changes is what undo takes back. */
 - (void)change:(NSString *)name with:(void (^)(void))change
 {
 	[self change:name coalescing:NO with:change];
@@ -75,56 +99,71 @@ static const double WKDMargin = 80;
  * key presses is undone at once. */
 - (void)change:(NSString *)name coalescing:(BOOL)coalescing with:(void (^)(void))change
 {
-	__attribute__((objc_precise_lifetime)) WKDDiagram *start = _diagram;
 	NSDate *now = [NSDate date];
-	BOOL joins = coalescing && _undoManager != nil && [_coalescedName isEqualToString:name]
+	BOOL joins = coalescing && _undoManager != nil && _lastStep != nil && [_coalescedName isEqualToString:name]
 		&& [now timeIntervalSinceDate:_coalescedAt] < 1.0 && ![_undoManager canRedo]
 		&& [[_undoManager undoActionName] isEqualToString:name];
-	NSXMLDocument *before = joins ? nil : WKDCopyDocument(_document);
+	WKDJournal *journal = _model.journal;
+	[journal begin];
+	self.needsSync = NO;
 	change();
+	[_model write];
 	[self keepLanes];
-	if (!joins) {
-		[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:before];
-		[_undoManager setActionName:name];
+	[_model write];
+	if (self.needsSync) {
+		[self syncModel];
+		self.needsSync = NO;
+	}
+	WKDJournalStep *step = [journal end];
+	if (step != nil) {
+		if (joins) {
+			[journal merge:step into:_lastStep];
+		} else {
+			[_undoManager registerUndoWithTarget:self selector:@selector(undoStep:) object:step];
+			[_undoManager setActionName:name];
+			_lastStep = step;
+		}
 	}
 	_coalescedName = coalescing ? name : nil;
 	_coalescedAt = now;
 	[self reread];
 }
 
-- (void)restore:(NSXMLDocument *)snapshot
+/* The model read again from the document, every element's state and the
+ * model's lists recorded first, so that undo puts them back. */
+- (void)syncModel
 {
-	[_undoManager registerUndoWithTarget:self selector:@selector(restore:) object:WKDCopyDocument(_document)];
-	_document = snapshot;
+	WKDJournal *journal = _model.journal;
+	[journal willChangeModel];
+	for (WKDNode *node in _model.nodes) {
+		[journal willChange:node];
+	}
+	for (WKDFlow *flow in _model.flows) {
+		[journal willChange:flow];
+	}
+	for (WKDLane *lane in _model.lanes) {
+		[journal willChange:lane];
+	}
+	for (WKDLane *pool in _model.otherPools) {
+		[journal willChange:pool];
+	}
+	[journal willChange:_model.pool];
+	[_model readDocumentAgain:_document];
+}
+
+- (void)undoStep:(WKDJournalStep *)step
+{
+	WKDJournalStep *inverse = [_model.journal undo:step];
+	[_undoManager registerUndoWithTarget:self selector:@selector(undoStep:) object:inverse];
+	_lastStep = nil;
 	[self reread];
 }
 
 #pragma mark Identifiers
 
-- (NSMutableSet *)usedIds
-{
-	NSMutableSet *ids = [NSMutableSet set];
-	NSMutableArray *pending = [NSMutableArray arrayWithObject:[_document rootElement]];
-	while ([pending count] > 0) {
-		NSXMLElement *element = [pending lastObject];
-		[pending removeLastObject];
-		NSString *elementId = WKDAttribute(element, @"id");
-		if (elementId != nil) {
-			[ids addObject:elementId];
-		}
-		for (NSXMLNode *child in [element children]) {
-			if ([child kind] == NSXMLElementKind) {
-				[pending addObject:child];
-			}
-		}
-	}
-	return ids;
-}
-
 /* Prefix_ and seven letters and digits, as modellers make them. */
 - (NSString *)freshId:(NSString *)prefix
 {
-	NSSet *used = [self usedIds];
 	static const char letters[] = "abcdefghijklmnopqrstuvwxyz0123456789";
 	while (YES) {
 		char tail[8];
@@ -133,7 +172,7 @@ static const double WKDMargin = 80;
 		}
 		tail[7] = 0;
 		NSString *candidate = [NSString stringWithFormat:@"%@_%s", prefix, tail];
-		if (![used containsObject:candidate]) {
+		if ([_model.journal elementWithId:candidate] == nil) {
 			return candidate;
 		}
 	}
@@ -175,18 +214,7 @@ WKDIdPrefix(NSString *type)
 /* The plane that shows the process, made when the document has none. */
 - (NSXMLElement *)plane
 {
-	if (_diagram.plane != nil) {
-		return _diagram.plane;
-	}
-	NSXMLElement *diagram = WKDNewElement(_document, WKDBpmnDINamespace, @"BPMNDiagram");
-	WKDSetAttribute(diagram, @"id", [self freshId:@"BPMNDiagram"]);
-	NSXMLElement *plane = WKDNewElement(_document, WKDBpmnDINamespace, @"BPMNPlane");
-	WKDSetAttribute(plane, @"id", [self freshId:@"BPMNPlane"]);
-	WKDSetAttribute(plane, @"bpmnElement", WKDAttribute(_diagram.process, @"id"));
-	[diagram addChild:plane];
-	[[_document rootElement] addChild:diagram];
-	_diagram = [WKDDiagram diagramOfDocument:_document];
-	return plane;
+	return [_model ensurePlane];
 }
 
 /* The DI element that shows the BPMN element: BPMNShape or BPMNEdge. */
@@ -203,67 +231,108 @@ WKDIdPrefix(NSString *type)
 	}
 	NSXMLElement *element = WKDNewElement(_document, WKDBpmnDINamespace, local);
 	NSString *prefix = [local isEqualToString:@"BPMNShape"] ? @"Shape" : @"Edge";
-	WKDSetAttribute(element, @"id", [NSString stringWithFormat:@"%@_%@", elementId, prefix]);
-	WKDSetAttribute(element, @"bpmnElement", elementId);
-	[plane addChild:element];
+	WKDLogAttribute(self.model.journal, element, @"id", [NSString stringWithFormat:@"%@_%@", elementId, prefix]);
+	WKDLogAttribute(self.model.journal, element, @"bpmnElement", elementId);
+	WKDLogAdd(self.model.journal, plane, element);
 	return element;
 }
 
+/* The model's element of the id. One an operation has just made in the XML
+ * is read into the model first, until every operation makes its elements
+ * in the model. */
+- (WKDModelElement *)modelElement:(NSString *)elementId
+{
+	WKDModelElement *element = [_model nodeWithId:elementId] ?: [_model flowWithId:elementId]
+		?: (WKDModelElement *)[_model laneWithId:elementId];
+	if (element == nil && elementId != nil) {
+		[self syncModel];
+		element = [_model nodeWithId:elementId] ?: [_model flowWithId:elementId]
+			?: (WKDModelElement *)[_model laneWithId:elementId];
+	}
+	return element;
+}
+
+/* Diagrams are written in whole points: the model holds what is written. */
+static NSRect
+WKDWholeRect(NSRect rect)
+{
+	return NSMakeRect(round(rect.origin.x), round(rect.origin.y), round(rect.size.width), round(rect.size.height));
+}
+
+static NSArray<NSValue *> *
+WKDWholePoints(NSArray<NSValue *> *points)
+{
+	NSMutableArray *whole = [NSMutableArray arrayWithCapacity:[points count]];
+	for (NSValue *value in points) {
+		NSPoint point = [value pointValue];
+		[whole addObject:[NSValue valueWithPoint:NSMakePoint(round(point.x), round(point.y))]];
+	}
+	return whole;
+}
+
+/* The geometry is the model's: set there and written at once, so what the
+ * rest of a change reads of the XML is what it set. */
 - (void)setBounds:(NSRect)bounds of:(NSString *)elementId
 {
-	NSXMLElement *shape = [self diagramElement:@"BPMNShape" of:elementId create:YES];
-	WKDShape *node = [_diagram shapeWithId:elementId];
-	if (node != nil && WKDIsContainerType(node.type)) {
-		WKDSetAttribute(shape, @"isExpanded", @"true");
+	bounds = WKDWholeRect(bounds);
+	WKDModelElement *element = [self modelElement:elementId];
+	if (element == nil) {
+		/* An element not yet in the document (a lane being made): its shape
+		 * by its id, as before the model. */
+		NSXMLElement *shape = [self diagramElement:@"BPMNShape" of:elementId create:YES];
+		NSXMLElement *box = WKDChild(shape, WKDDCNamespace, @"Bounds");
+		if (box == nil) {
+			box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
+			WKDLogInsert(self.model.journal, shape, box, 0);
+		}
+		WKDLogAttribute(self.model.journal, box, @"x", WKDFormat(bounds.origin.x));
+		WKDLogAttribute(self.model.journal, box, @"y", WKDFormat(bounds.origin.y));
+		WKDLogAttribute(self.model.journal, box, @"width", WKDFormat(bounds.size.width));
+		WKDLogAttribute(self.model.journal, box, @"height", WKDFormat(bounds.size.height));
+		return;
 	}
-	NSXMLElement *box = WKDChild(shape, WKDDCNamespace, @"Bounds");
-	if (box == nil) {
-		box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
-		[shape insertChild:box atIndex:0];
+	if ([element isKindOfClass:[WKDFlow class]]) {
+		return;
 	}
-	WKDSetAttribute(box, @"x", WKDFormat(bounds.origin.x));
-	WKDSetAttribute(box, @"y", WKDFormat(bounds.origin.y));
-	WKDSetAttribute(box, @"width", WKDFormat(bounds.size.width));
-	WKDSetAttribute(box, @"height", WKDFormat(bounds.size.height));
+	[_model.journal willChange:element];
+	if ([element isKindOfClass:[WKDNode class]]) {
+		((WKDNode *)element).bounds = bounds;
+		((WKDNode *)element).hasBounds = YES;
+	} else {
+		((WKDLane *)element).bounds = bounds;
+		((WKDLane *)element).hasBounds = YES;
+	}
+	[_model writeGeometryOf:element];
 }
 
 - (void)setWaypoints:(NSArray<NSValue *> *)points of:(NSString *)flowId
 {
-	NSXMLElement *edge = [self diagramElement:@"BPMNEdge" of:flowId create:YES];
-	for (NSXMLElement *old in WKDChildren(edge, WKDDINamespace, @"waypoint")) {
-		[old detach];
+	WKDFlow *flow = (WKDFlow *)[self modelElement:flowId];
+	if (![flow isKindOfClass:[WKDFlow class]]) {
+		return;
 	}
-	NSUInteger index = 0;
-	for (NSValue *value in points) {
-		NSPoint point = [value pointValue];
-		NSXMLElement *waypoint = WKDNewElement(_document, WKDDINamespace, @"waypoint");
-		WKDSetAttribute(waypoint, @"x", WKDFormat(point.x));
-		WKDSetAttribute(waypoint, @"y", WKDFormat(point.y));
-		[edge insertChild:waypoint atIndex:index++];
-	}
+	[_model.journal willChange:flow];
+	flow.waypoints = WKDWholePoints(points);
+	[_model writeGeometryOf:flow];
 }
 
 - (void)setLabelBounds:(NSRect)bounds of:(NSString *)elementId
 {
-	NSString *local = [_diagram connectionWithId:elementId] != nil ? @"BPMNEdge" : @"BPMNShape";
-	NSXMLElement *owner = [self diagramElement:local of:elementId create:NO];
-	if (owner == nil) {
+	WKDModelElement *element = [self modelElement:elementId];
+	WKDFlow *flow = [element isKindOfClass:[WKDFlow class]] ? (WKDFlow *)element : nil;
+	WKDNode *node = [element isKindOfClass:[WKDNode class]] ? (WKDNode *)element : nil;
+	/* A label goes on a shape or an edge that is there. */
+	if ((flow == nil && node == nil) || (flow ?: (WKDModelElement *)node).diagramElement == nil) {
 		return;
 	}
-	NSXMLElement *label = WKDChild(owner, WKDBpmnDINamespace, @"BPMNLabel");
-	if (label == nil) {
-		label = WKDNewElement(_document, WKDBpmnDINamespace, @"BPMNLabel");
-		[owner addChild:label];
+	[_model.journal willChange:element];
+	bounds = WKDWholeRect(bounds);
+	if (flow != nil) {
+		flow.labelBounds = bounds;
+	} else {
+		node.labelBounds = bounds;
 	}
-	NSXMLElement *box = WKDChild(label, WKDDCNamespace, @"Bounds");
-	if (box == nil) {
-		box = WKDNewElement(_document, WKDDCNamespace, @"Bounds");
-		[label addChild:box];
-	}
-	WKDSetAttribute(box, @"x", WKDFormat(bounds.origin.x));
-	WKDSetAttribute(box, @"y", WKDFormat(bounds.origin.y));
-	WKDSetAttribute(box, @"width", WKDFormat(bounds.size.width));
-	WKDSetAttribute(box, @"height", WKDFormat(bounds.size.height));
+	[_model writeGeometryOf:element];
 }
 
 static NSValue *
@@ -283,11 +352,20 @@ WKDPoint(double x, double y)
 	return [self routeFrom:source to:target fromBoundary:fromBoundary fromGateway:fromGateway toActivity:NO];
 }
 
-+ (NSArray<NSValue *> *)routeFrom:(NSRect)s to:(NSRect)t fromBoundary:(BOOL)fromBoundary
++ (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary
                       fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity
 {
-	if (fromGateway && NSMinX(t) >= NSMaxX(s) && fabs(NSMidY(t) - NSMidY(s)) >= 1) {
-		/* Up or down out of the corner, then across into the target. */
+	return [self routeFrom:source to:target fromBoundary:fromBoundary fromGateway:fromGateway toActivity:toActivity
+	              intoSide:NO];
+}
+
++ (NSArray<NSValue *> *)routeFrom:(NSRect)s to:(NSRect)t fromBoundary:(BOOL)fromBoundary
+                      fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity intoSide:(BOOL)intoSide
+{
+	if (fromGateway && NSMinX(t) >= NSMaxX(s) && (NSMidY(t) < NSMinY(s) || NSMidY(t) > NSMaxY(s))) {
+		/* Up or down out of the corner, then across into the target; one
+		 * level with the gateway leaves by the side corner, not back
+		 * through it. */
 		BOOL below = NSMidY(t) > NSMidY(s);
 		return @[ WKDPoint(NSMidX(s), below ? NSMaxY(s) : NSMinY(s)), WKDPoint(NSMidX(s), NSMidY(t)),
 			WKDPoint(NSMinX(t), NSMidY(t)) ];
@@ -319,8 +397,9 @@ WKDPoint(double x, double y)
 		if (fabs(start.y - end.y) < 1) {
 			return @[ [NSValue valueWithPoint:start], [NSValue valueWithPoint:end] ];
 		}
-		if (NSMidX(t) - NSMaxX(s) > 30) {
-			/* Across, then up or down into the target's top or bottom. */
+		if (NSMidX(t) - NSMaxX(s) > 30 && !intoSide && (start.y < NSMinY(t) || start.y > NSMaxY(t))) {
+			/* Across, then up or down into the target's top or bottom,
+			 * when it is clear above or below. */
 			BOOL below = NSMidY(t) > NSMidY(s);
 			if (NSMaxX(s) + 20 < NSMidX(t)) {
 				return @[ [NSValue valueWithPoint:start], WKDPoint(NSMidX(t), start.y),
@@ -334,6 +413,12 @@ WKDPoint(double x, double y)
 	if (NSMaxX(t) <= NSMinX(s)) {
 		/* Backwards: out of the bottom, under both, into the bottom. */
 		double under = MAX(NSMaxY(s), NSMaxY(t)) + 30;
+		if (intoSide) {
+			/* Back round into the side corner, leaving the bottom to the branches. */
+			double before = NSMinX(t) - 20;
+			return @[ WKDPoint(NSMidX(s), NSMaxY(s)), WKDPoint(NSMidX(s), under), WKDPoint(before, under),
+				WKDPoint(before, NSMidY(t)), WKDPoint(NSMinX(t), NSMidY(t)) ];
+		}
 		return @[ WKDPoint(NSMidX(s), NSMaxY(s)), WKDPoint(NSMidX(s), under), WKDPoint(NSMidX(t), under),
 			WKDPoint(NSMidX(t), NSMaxY(t)) ];
 	}
@@ -376,22 +461,22 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 
 /* The shapes a flow must not pass through: all but its ends, the
  * activity its source is on, and the subprocesses either end is in. */
-- (NSArray<NSValue *> *)obstaclesFor:(WKDConnection *)connection
+- (NSArray<NSValue *> *)obstaclesFor:(WKDFlow *)connection
 {
 	NSMutableSet *allowed = [NSMutableSet set];
-	for (WKDShape *end in @[ connection.source, connection.target ]) {
-		for (WKDShape *shape = end; shape != nil; shape = shape.parent) {
+	for (WKDNode *end in @[ connection.source, connection.target ]) {
+		for (WKDNode *shape = end; shape != nil; shape = shape.parent) {
 			[allowed addObject:shape.elementId];
 		}
 	}
 	if (connection.source.host != nil) {
 		[allowed addObject:connection.source.host.elementId];
-		for (WKDShape *shape = connection.source.host.parent; shape != nil; shape = shape.parent) {
+		for (WKDNode *shape = connection.source.host.parent; shape != nil; shape = shape.parent) {
 			[allowed addObject:shape.elementId];
 		}
 	}
 	NSMutableArray *obstacles = [NSMutableArray array];
-	for (WKDShape *shape in _diagram.shapes) {
+	for (WKDNode *shape in _model.nodes) {
 		if (shape.hasBounds && ![allowed containsObject:shape.elementId]) {
 			[obstacles addObject:[NSValue valueWithRect:shape.bounds]];
 		}
@@ -399,15 +484,31 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	return obstacles;
 }
 
+/* A gateway with branches: what comes into it takes its side corner,
+ * the branches its top and bottom. */
+static BOOL
+WKDIsSplit(WKDNode *node)
+{
+	if (node.kind != WKDShapeGateway) {
+		return NO;
+	}
+	NSUInteger branches = 0;
+	for (WKDFlow *flow in node.outgoing) {
+		branches += !flow.isAssociation;
+	}
+	return branches > 1;
+}
+
 /* The route the router would take, unless it passes through other
  * shapes: then the first of the other ways round that does not, or that
  * passes through fewest. */
-- (NSArray<NSValue *> *)routeFor:(WKDConnection *)connection
+- (NSArray<NSValue *> *)routeFor:(WKDFlow *)connection
 {
 	NSRect s = connection.source.bounds, t = connection.target.bounds;
 	BOOL fromBoundary = connection.source.host != nil, fromGateway = connection.source.kind == WKDShapeGateway;
 	NSArray *primary = [WKDEditor routeFrom:s to:t fromBoundary:fromBoundary fromGateway:fromGateway
-	                             toActivity:connection.target.kind == WKDShapeActivity];
+	                             toActivity:connection.target.kind == WKDShapeActivity
+	                               intoSide:WKDIsSplit(connection.target)];
 	NSArray *obstacles = [self obstaclesFor:connection];
 	if (WKDCrossings(primary, obstacles) == 0) {
 		return primary;
@@ -442,9 +543,9 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	return best;
 }
 
-- (void)reroute:(WKDConnection *)connection
+- (void)reroute:(WKDFlow *)connection
 {
-	WKDShape *source = connection.source, *target = connection.target;
+	WKDNode *source = connection.source, *target = connection.target;
 	if (source.hasBounds && target.hasBounds) {
 		[self setWaypoints:[self routeFor:connection] of:connection.elementId];
 	}
@@ -454,9 +555,9 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 
 /* The shapes laid out in the container, relative to its top left; the
  * containers in it laid out first, to know their sizes. */
-- (NSSize)layOut:(WKDShape *)container into:(NSMutableDictionary *)frames
+- (NSSize)layOut:(WKDNode *)container into:(NSMutableDictionary *)frames
 {
-	NSArray<WKDShape *> *shapes = [_diagram shapesIn:container];
+	NSArray<WKDNode *> *shapes = [_model nodesIn:container];
 	/* DiagramKit's layered layout, left to right, as a process reads. */
 	DKLayeredLayout *layout = [[DKLayeredLayout alloc] init];
 	/* Room for the names under events and gateways. */
@@ -465,9 +566,9 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	NSMutableDictionary *sizes = [NSMutableDictionary dictionary];
 	/* Event subprocesses are joined to nothing: a row of their own,
 	 * under the rest. */
-	NSMutableArray<WKDShape *> *eventSubProcesses = [NSMutableArray array];
+	NSMutableArray<WKDNode *> *eventSubProcesses = [NSMutableArray array];
 	NSMutableSet *laidOut = [NSMutableSet set];
-	for (WKDShape *shape in shapes) {
+	for (WKDNode *shape in shapes) {
 		NSSize size = [WKDEditor sizeOfType:shape.type];
 		if (WKDIsContainerType(shape.type)) {
 			NSSize inner = [self layOut:shape into:frames];
@@ -484,11 +585,11 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 		[layout addNode:shape.elementId size:size];
 		[laidOut addObject:shape.elementId];
 	}
-	for (WKDConnection *connection in _diagram.connections) {
+	for (WKDFlow *connection in _model.flows) {
 		/* A boundary event's flows, and its compensation handler, leave
 		 * from the bottom of its activity; an annotation is not laid out
 		 * by what it is joined to. */
-		WKDShape *source = connection.source.host ?: connection.source;
+		WKDNode *source = connection.source.host ?: connection.source;
 		if (connection.isAssociation && connection.source.host == nil) {
 			continue;
 		}
@@ -506,7 +607,7 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	NSSize size = layout.size;
 	if ([eventSubProcesses count] > 0) {
 		double x = 0, top = [origins count] > 0 ? size.height + 60 : 0, bottom = top;
-		for (WKDShape *shape in eventSubProcesses) {
+		for (WKDNode *shape in eventSubProcesses) {
 			NSSize box = [[sizes objectForKey:shape.elementId] sizeValue];
 			[frames setObject:[NSValue valueWithRect:NSMakeRect(x, top, box.width, box.height)] forKey:shape.elementId];
 			x += box.width + 40;
@@ -519,7 +620,7 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 
 /* Frames relative to their containers made absolute, outermost first;
  * a container that keeps its shape is where it is. */
-- (NSRect)absolute:(WKDShape *)shape frames:(NSDictionary *)frames origin:(NSPoint)origin keep:(BOOL)keep
+- (NSRect)absolute:(WKDNode *)shape frames:(NSDictionary *)frames origin:(NSPoint)origin keep:(BOOL)keep
 {
 	if (keep && shape.hasBounds) {
 		return shape.bounds;
@@ -536,7 +637,7 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 - (void)placeBoundaryEvents
 {
 	NSMutableDictionary *byHost = [NSMutableDictionary dictionary];
-	for (WKDShape *shape in _diagram.shapes) {
+	for (WKDNode *shape in _model.nodes) {
 		if (shape.host != nil) {
 			NSMutableArray *events = [byHost objectForKey:shape.host.elementId];
 			if (events == nil) {
@@ -548,9 +649,9 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	}
 	/* Leftmost the event whose flows go lowest, so that the routes
 	 * down and across out of them do not cross. */
-	double (^depth)(WKDShape *) = ^double(WKDShape *event) {
+	double (^depth)(WKDNode *) = ^double(WKDNode *event) {
 		double lowest = 0;
-		for (WKDConnection *connection in [self->_diagram connectionsOf:event]) {
+		for (WKDFlow *connection in [self->_model flowsOf:event]) {
 			if (connection.source == event && connection.target.hasBounds) {
 				lowest = MAX(lowest, NSMidY(connection.target.bounds));
 			}
@@ -558,15 +659,15 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 		return lowest;
 	};
 	for (NSString *hostId in byHost) {
-		NSRect host = [_diagram shapeWithId:hostId].bounds;
+		NSRect host = [_model nodeWithId:hostId].bounds;
 		NSArray *events = [[byHost objectForKey:hostId] sortedArrayWithOptions:NSSortStable
-		                                                      usingComparator:^NSComparisonResult(WKDShape *a, WKDShape *b) {
+		                                                      usingComparator:^NSComparisonResult(WKDNode *a, WKDNode *b) {
 			double da = depth(a), db = depth(b);
 			return da > db ? NSOrderedAscending : da < db ? NSOrderedDescending : NSOrderedSame;
 		}];
 		NSUInteger count = [events count];
 		for (NSUInteger i = 0; i < count; i++) {
-			WKDShape *event = [events objectAtIndex:i];
+			WKDNode *event = [events objectAtIndex:i];
 			double x = NSMinX(host) + NSWidth(host) * (i + 1) / (count + 1);
 			[self setBounds:NSMakeRect(x - 18, NSMaxY(host) - 18, 36, 36) of:event.elementId];
 		}
@@ -577,8 +678,8 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 {
 	/* Each node stays in its lane, which its new place would not say. */
 	NSDictionary *membership = [self laneMembership];
-	BOOL bandsMissing = _diagram.pool != nil && !_diagram.pool.hasBounds;
-	for (WKDLane *lane in _diagram.lanes) {
+	BOOL bandsMissing = _model.pool != nil && !_model.pool.hasBounds;
+	for (WKDLane *lane in _model.lanes) {
 		bandsMissing = bandsMissing || !lane.hasBounds;
 	}
 	NSMutableDictionary *frames = [NSMutableDictionary dictionary];
@@ -586,12 +687,12 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 	NSPoint origin = NSMakePoint(WKDMargin, WKDMargin);
 	if (onlyMissing) {
 		/* Below what is there. */
-		NSRect content = _diagram.contentBounds;
+		NSRect content = _model.contentBounds;
 		if (!NSIsEmptyRect(content)) {
 			origin = NSMakePoint(NSMinX(content), NSMaxY(content) + WKDMargin);
 		}
 	}
-	for (WKDShape *shape in _diagram.shapes) {
+	for (WKDNode *shape in _model.nodes) {
 		if (shape.host != nil || [frames objectForKey:shape.elementId] == nil) {
 			continue;
 		}
@@ -600,24 +701,21 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 		}
 		[self setBounds:[self absolute:shape frames:frames origin:origin keep:onlyMissing] of:shape.elementId];
 	}
-	_diagram = [WKDDiagram diagramOfDocument:_document];
 	[self placeBoundaryEvents];
-	_diagram = [WKDDiagram diagramOfDocument:_document];
 	if (!onlyMissing || bandsMissing) {
 		[self stackLanes:membership];
 	}
-	for (WKDConnection *connection in _diagram.connections) {
+	for (WKDFlow *connection in _model.flows) {
 		[self reroute:connection];
 	}
 }
 
 - (void)completeDiagram
 {
-	if (!_diagram.needsLayout) {
+	if (!_model.needsLayout) {
 		return;
 	}
-	[self layOutAll:_diagram.contentBounds.size.width > 0];
-	_diagram = [WKDDiagram diagramOfDocument:_document];
+	[self layOutAll:_model.contentBounds.size.width > 0];
 }
 
 - (void)arrange
@@ -630,10 +728,10 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 #pragma mark Inserting
 
 /* The innermost subprocess whose shape holds the point. */
-- (WKDShape *)containerAt:(NSPoint)point
+- (WKDNode *)containerAt:(NSPoint)point
 {
-	WKDShape *found = nil;
-	for (WKDShape *shape in _diagram.shapes) {
+	WKDNode *found = nil;
+	for (WKDNode *shape in _model.nodes) {
 		if (WKDIsContainerType(shape.type) && shape.hasBounds && NSPointInRect(point, shape.bounds)) {
 			found = shape;
 		}
@@ -642,10 +740,10 @@ WKDCrossings(NSArray<NSValue *> *route, NSArray<NSValue *> *obstacles)
 }
 
 /* The activity whose edge is near the point. */
-- (WKDShape *)activityNear:(NSPoint)point
+- (WKDNode *)activityNear:(NSPoint)point
 {
-	WKDShape *found = nil;
-	for (WKDShape *shape in _diagram.shapes) {
+	WKDNode *found = nil;
+	for (WKDNode *shape in _model.nodes) {
 		if (shape.kind == WKDShapeActivity && shape.hasBounds && NSPointInRect(point, NSInsetRect(shape.bounds, -20, -20))) {
 			found = shape;
 		}
@@ -674,7 +772,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 - (void)addReference:(NSString *)local to:(NSString *)flowId in:(NSXMLElement *)node
 {
 	NSXMLElement *reference = WKDNewElement(_document, WKDBpmnNamespace, local);
-	[reference setStringValue:flowId];
+	WKDLogText(self.model.journal, reference, flowId);
 	NSArray *before = [local isEqualToString:@"incoming"]
 		? @[ @"documentation", @"extensionElements", @"incoming" ]
 		: @[ @"documentation", @"extensionElements", @"incoming", @"outgoing" ];
@@ -686,7 +784,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 			index = i + 1;
 		}
 	}
-	[node insertChild:reference atIndex:index];
+	WKDLogInsert(self.model.journal, node, reference, index);
 }
 
 - (NSString *)insertNodeOfType:(NSString *)type
@@ -696,13 +794,13 @@ WKDOnEdge(NSRect host, NSPoint point)
 {
 	BOOL flowNode = NO;
 	WKDKindOfType(type, &flowNode);
-	if (!flowNode || _diagram.process == nil) {
+	if (!flowNode || _model.process == nil) {
 		if (reason != NULL) {
-			*reason = _diagram.process == nil ? @"The document has no process." : @"That is not a flow node.";
+			*reason = _model.process == nil ? @"The document has no process." : @"That is not a flow node.";
 		}
 		return nil;
 	}
-	WKDShape *host = nil;
+	WKDNode *host = nil;
 	if ([type isEqualToString:@"boundaryEvent"]) {
 		host = [self activityNear:point];
 		if (host == nil) {
@@ -712,36 +810,29 @@ WKDOnEdge(NSRect host, NSPoint point)
 			return nil;
 		}
 	}
-	WKDShape *container = host != nil ? host.parent : [self containerAt:point];
+	WKDNode *container = host != nil ? host.parent : [self containerAt:point];
 	NSString *elementId = [self freshId:WKDIdPrefix(type)];
 	NSSize size = [WKDEditor sizeOfType:type];
 	NSPoint centre = host != nil ? WKDOnEdge(host.bounds, point) : point;
 	[self change:@"Add" with:^{
-		NSXMLElement *element = WKDNewElement(self->_document, WKDBpmnNamespace, type);
-		WKDSetAttribute(element, @"id", elementId);
+		WKDModel *model = self->_model;
+		WKDNode *node = [model makeNodeOfType:type elementId:elementId in:[model nodeWithId:container.elementId]];
+		node.eventDefinition = eventDefinition;
 		if (host != nil) {
-			WKDSetAttribute(element, @"attachedToRef", host.elementId);
+			[model setHost:[model nodeWithId:host.elementId] ofNode:node];
 		}
-		if (eventDefinition != nil) {
-			NSXMLElement *definition = WKDNewElement(self->_document, WKDBpmnNamespace, eventDefinition);
-			NSString *prefix = [[eventDefinition substringToIndex:1] uppercaseString];
-			prefix = [prefix stringByAppendingString:[eventDefinition substringFromIndex:1]];
-			WKDSetAttribute(definition, @"id", [self freshId:prefix]);
-			[element addChild:definition];
-		}
-		[(container != nil ? container.element : self->_diagram.process) addChild:element];
-		self->_diagram = [WKDDiagram diagramOfDocument:self->_document];
-		[self setBounds:NSMakeRect(centre.x - size.width / 2, centre.y - size.height / 2, size.width, size.height)
-		             of:elementId];
+		node.bounds = NSMakeRect(centre.x - size.width / 2, centre.y - size.height / 2, size.width, size.height);
+		node.hasBounds = YES;
+		[model write];
 	}];
 	return elementId;
 }
 
 #pragma mark Connecting
 
-- (NSString *)refusalToConnect:(WKDShape *)source to:(WKDShape *)target except:(NSString *)flowId
+- (NSString *)refusalToConnect:(WKDNode *)source to:(WKDNode *)target except:(NSString *)flowId
 {
-	WKDShape *sourceScope = source.host != nil ? source.host.parent : source.parent;
+	WKDNode *sourceScope = source.host != nil ? source.host.parent : source.parent;
 	if (source == nil || target == nil || source.kind == WKDShapeArtifact || target.kind == WKDShapeArtifact) {
 		return @"Sequence flows join flow nodes.";
 	}
@@ -757,7 +848,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 	if (sourceScope != target.parent) {
 		return @"A flow stays within its process or subprocess.";
 	}
-	for (WKDConnection *connection in _diagram.connections) {
+	for (WKDFlow *connection in _model.flows) {
 		if (!connection.isAssociation && connection.source == source && connection.target == target
 		    && ![connection.elementId isEqualToString:flowId ?: @""]) {
 			return @"The two are joined already.";
@@ -768,7 +859,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 
 - (NSString *)connect:(NSString *)sourceId to:(NSString *)targetId error:(NSString **)reason
 {
-	WKDShape *source = [_diagram shapeWithId:sourceId], *target = [_diagram shapeWithId:targetId];
+	WKDNode *source = [_model nodeWithId:sourceId], *target = [_model nodeWithId:targetId];
 	NSString *refusal = [self refusalToConnect:source to:target except:nil];
 	if (refusal != nil) {
 		if (reason != NULL) {
@@ -778,17 +869,11 @@ WKDOnEdge(NSRect host, NSPoint point)
 	}
 	NSString *flowId = [self freshId:@"Flow"];
 	[self change:@"Connect" with:^{
-		NSXMLElement *flow = WKDNewElement(self->_document, WKDBpmnNamespace, @"sequenceFlow");
-		WKDSetAttribute(flow, @"id", flowId);
-		WKDSetAttribute(flow, @"sourceRef", sourceId);
-		WKDSetAttribute(flow, @"targetRef", targetId);
-		[(target.parent != nil ? target.parent.element : self->_diagram.process) addChild:flow];
-		[self addReference:@"outgoing" to:flowId in:source.element];
-		[self addReference:@"incoming" to:flowId in:target.element];
-		[self setWaypoints:[WKDEditor routeFrom:source.bounds to:target.bounds fromBoundary:source.host != nil
-		                            fromGateway:source.kind == WKDShapeGateway
-		                             toActivity:target.kind == WKDShapeActivity]
-		                of:flowId];
+		WKDModel *model = self->_model;
+		WKDFlow *flow = [model makeFlowFrom:[model nodeWithId:sourceId] to:[model nodeWithId:targetId] elementId:flowId
+		                        association:NO];
+		flow.waypoints = [self routeFor:flow];
+		[model write];
 	}];
 	return flowId;
 }
@@ -796,16 +881,14 @@ WKDOnEdge(NSRect host, NSPoint point)
 #pragma mark Moving
 
 /* The shape, what it contains, and what is attached to any of them. */
-- (void)collect:(WKDShape *)shape into:(NSMutableSet *)ids
+- (void)collect:(WKDNode *)shape into:(NSMutableSet *)ids
 {
 	if ([ids containsObject:shape.elementId]) {
 		return;
 	}
 	[ids addObject:shape.elementId];
-	for (WKDShape *other in _diagram.shapes) {
-		if (other.parent == shape || other.host == shape) {
-			[self collect:other into:ids];
-		}
+	for (WKDNode *other in [shape.children arrayByAddingObjectsFromArray:shape.attached]) {
+		[self collect:other into:ids];
 	}
 }
 
@@ -827,11 +910,11 @@ WKDOnEdge(NSRect host, NSPoint point)
 	 * it, a container's before its contents'; a boundary event moved
 	 * without its activity slides along the activity's edge. */
 	/* The pool takes what it holds and its lanes with it. */
-	WKDLane *pool = _diagram.pool;
+	WKDLane *pool = _model.pool;
 	NSValue *poolOffset = pool != nil ? [offsets objectForKey:pool.elementId] : nil;
 	if (poolOffset != nil) {
 		NSMutableDictionary *all = [offsets mutableCopy];
-		for (WKDShape *shape in _diagram.shapes) {
+		for (WKDNode *shape in _model.nodes) {
 			if (shape.parent == nil && shape.host == nil) {
 				[all setObject:poolOffset forKey:shape.elementId];
 			}
@@ -840,7 +923,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 	}
 	NSMutableDictionary<NSString *, NSValue *> *moving = [NSMutableDictionary dictionary];
 	NSMutableDictionary<NSString *, NSValue *> *sliding = [NSMutableDictionary dictionary];
-	for (WKDShape *shape in _diagram.shapes) {
+	for (WKDNode *shape in _model.nodes) {
 		NSValue *offset = [offsets objectForKey:shape.elementId];
 		NSSize by = offset != nil ? [offset sizeValue] : NSZeroSize;
 		if (offset == nil || (by.width == 0 && by.height == 0) || [moving objectForKey:shape.elementId] != nil) {
@@ -864,7 +947,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 	[self change:action coalescing:coalescing with:^{
 		if (poolOffset != nil) {
 			NSSize by = [poolOffset sizeValue];
-			NSMutableArray *bands = [NSMutableArray arrayWithArray:self->_diagram.lanes];
+			NSMutableArray *bands = [NSMutableArray arrayWithArray:self->_model.lanes];
 			[bands addObject:pool];
 			for (WKDLane *band in bands) {
 				if (band.hasBounds) {
@@ -872,46 +955,60 @@ WKDOnEdge(NSRect host, NSPoint point)
 				}
 			}
 		}
+		/* The routes of the flows that touch what moves, as they were. */
+		NSMutableArray<WKDFlow *> *touching = [NSMutableArray array];
+		NSMapTable<WKDFlow *, NSArray *> *routes = [NSMapTable strongToStrongObjectsMapTable];
+		NSMapTable<WKDFlow *, NSValue *> *labels = [NSMapTable strongToStrongObjectsMapTable];
+		NSMutableArray *ends = [NSMutableArray arrayWithArray:[moving allKeys]];
+		[ends addObjectsFromArray:[sliding allKeys]];
+		for (NSString *endId in ends) {
+			for (WKDFlow *flow in [self->_model flowsOf:[self->_model nodeWithId:endId]]) {
+				if ([routes objectForKey:flow] == nil) {
+					[touching addObject:flow];
+					[routes setObject:flow.waypoints ?: @[] forKey:flow];
+					[labels setObject:[NSValue valueWithRect:flow.labelBounds] forKey:flow];
+				}
+			}
+		}
 		/* How far each shape went, its label with it. */
 		NSMutableDictionary<NSString *, NSValue *> *moved = [NSMutableDictionary dictionary];
-		void (^place)(WKDShape *, NSRect) = ^(WKDShape *shape, NSRect bounds) {
+		void (^place)(WKDNode *, NSRect) = ^(WKDNode *shape, NSRect bounds) {
 			NSSize by = NSMakeSize(NSMinX(bounds) - NSMinX(shape.bounds), NSMinY(bounds) - NSMinY(shape.bounds));
-			[self setBounds:bounds of:shape.elementId];
 			if (!NSIsEmptyRect(shape.labelBounds)) {
 				[self setLabelBounds:NSOffsetRect(shape.labelBounds, by.width, by.height) of:shape.elementId];
 			}
+			[self setBounds:bounds of:shape.elementId];
 			[moved setObject:[NSValue valueWithSize:by] forKey:shape.elementId];
 		};
-		for (WKDShape *shape in self->_diagram.shapes) {
+		for (WKDNode *shape in self->_model.nodes) {
 			NSValue *offset = [moving objectForKey:shape.elementId];
 			if (offset != nil && shape.hasBounds) {
 				place(shape, NSOffsetRect(shape.bounds, [offset sizeValue].width, [offset sizeValue].height));
 			}
 		}
 		for (NSString *eventId in sliding) {
-			WKDShape *event = [self->_diagram shapeWithId:eventId];
+			WKDNode *event = [self->_model nodeWithId:eventId];
 			NSSize offset = [[sliding objectForKey:eventId] sizeValue];
 			NSRect bounds = NSOffsetRect(event.bounds, offset.width, offset.height);
 			NSPoint centre = WKDOnEdge(event.host.bounds, NSMakePoint(NSMidX(bounds), NSMidY(bounds)));
 			place(event, NSMakeRect(centre.x - NSWidth(bounds) / 2, centre.y - NSHeight(bounds) / 2,
 			                        NSWidth(bounds), NSHeight(bounds)));
 		}
-		NSArray *connections = self->_diagram.connections;
-		self->_diagram = [WKDDiagram diagramOfDocument:self->_document];
-		for (WKDConnection *old in connections) {
-			NSValue *fromMove = [moved objectForKey:old.source.elementId];
-			NSValue *toMove = [moved objectForKey:old.target.elementId];
+		for (WKDFlow *flow in touching) {
+			NSValue *fromMove = [moved objectForKey:flow.source.elementId];
+			NSValue *toMove = [moved objectForKey:flow.target.elementId];
 			if (fromMove == nil && toMove == nil) {
 				continue;
 			}
 			NSSize from = fromMove != nil ? [fromMove sizeValue] : NSZeroSize;
 			NSSize to = toMove != nil ? [toMove sizeValue] : NSZeroSize;
-			WKDConnection *now = [self->_diagram connectionWithId:old.elementId];
+			NSArray *route = [routes objectForKey:flow];
+			NSRect label = [[labels objectForKey:flow] rectValue];
 			NSArray *points = nil;
 			if (NSEqualSizes(from, to)) {
 				/* Both ends went the same way: the route goes with them. */
 				NSMutableArray *shifted = [NSMutableArray array];
-				for (NSValue *value in old.waypoints) {
+				for (NSValue *value in route) {
 					NSPoint point = [value pointValue];
 					[shifted addObject:WKDPoint(point.x + from.width, point.y + from.height)];
 				}
@@ -919,14 +1016,14 @@ WKDOnEdge(NSRect host, NSPoint point)
 			} else {
 				/* One end went: its bends stay where they were, unless the
 				 * route cannot keep them. */
-				points = [WKDEditor keptRoute:old.waypoints source:now.source.bounds target:now.target.bounds
-				                 sourceMoved:from targetMoved:to] ?: [self routeFor:now];
+				points = [WKDEditor keptRoute:route source:flow.source.bounds target:flow.target.bounds
+				                 sourceMoved:from targetMoved:to] ?: [self routeFor:flow];
 			}
-			[self setWaypoints:points of:old.elementId];
-			if (!NSIsEmptyRect(old.labelBounds)) {
-				NSRect before = WKDFlowLabelRect(old.waypoints), after = WKDFlowLabelRect(points);
-				[self setLabelBounds:NSOffsetRect(old.labelBounds, NSMinX(after) - NSMinX(before),
-				                                  NSMinY(after) - NSMinY(before)) of:old.elementId];
+			[self setWaypoints:points of:flow.elementId];
+			if (!NSIsEmptyRect(label)) {
+				NSRect before = WKDFlowLabelRect(route), after = WKDFlowLabelRect(points);
+				[self setLabelBounds:NSOffsetRect(label, NSMinX(after) - NSMinX(before),
+				                                  NSMinY(after) - NSMinY(before)) of:flow.elementId];
 			}
 		}
 	}];
@@ -934,27 +1031,25 @@ WKDOnEdge(NSRect host, NSPoint point)
 
 - (void)resizeElement:(NSString *)elementId to:(NSRect)bounds
 {
-	if ([_diagram laneWithId:elementId] != nil) {
+	if ([_model laneWithId:elementId] != nil) {
 		[self resizeBand:elementId to:bounds];
 		return;
 	}
-	WKDShape *shape = [_diagram shapeWithId:elementId];
+	WKDNode *shape = [_model nodeWithId:elementId];
 	if (shape == nil || NSWidth(bounds) < 20 || NSHeight(bounds) < 20) {
 		return;
 	}
 	[self change:@"Resize" with:^{
 		[self setBounds:bounds of:elementId];
-		self->_diagram = [WKDDiagram diagramOfDocument:self->_document];
-		WKDShape *resized = [self->_diagram shapeWithId:elementId];
-		for (WKDShape *event in self->_diagram.shapes) {
+		WKDNode *resized = [self->_model nodeWithId:elementId];
+		for (WKDNode *event in self->_model.nodes) {
 			if (event.host == resized) {
 				NSPoint centre = WKDOnEdge(bounds, NSMakePoint(NSMidX(event.bounds), NSMidY(event.bounds)));
 				[self setBounds:NSMakeRect(centre.x - NSWidth(event.bounds) / 2, centre.y - NSHeight(event.bounds) / 2,
 				                           NSWidth(event.bounds), NSHeight(event.bounds)) of:event.elementId];
 			}
 		}
-		self->_diagram = [WKDDiagram diagramOfDocument:self->_document];
-		for (WKDConnection *connection in self->_diagram.connections) {
+		for (WKDFlow *connection in self->_model.flows) {
 			if (connection.source == resized || connection.target == resized
 			    || connection.source.host == resized) {
 				[self reroute:connection];
@@ -967,7 +1062,7 @@ WKDOnEdge(NSRect host, NSPoint point)
 
 - (NSXMLElement *)elementWithId:(NSString *)elementId
 {
-	return WKDElementWithId(_document, elementId);
+	return [_model.journal elementWithId:elementId];
 }
 
 - (BOOL)edit:(NSString *)elementId
@@ -978,7 +1073,24 @@ WKDOnEdge(NSRect host, NSPoint point)
 		return NO;
 	}
 	[self change:action with:^{
-		edit([self elementWithId:elementId], self->_document);
+		NSXMLElement *element = [self elementWithId:elementId];
+		NSXMLElement *root = [self->_document rootElement];
+		WKDJournal *journal = self->_model.journal;
+		[journal willEditXML:element];
+		if (root != element) {
+			[journal willEditXML:root];
+		}
+		edit(element, self->_document);
+		[journal didEditXML:element];
+		if (root != element) {
+			[journal didEditXML:root];
+		}
+		/* Its values, where the model holds it: nothing else is its to edit. */
+		WKDModelElement *modelled = [self->_model nodeWithId:elementId] ?: [self->_model flowWithId:elementId]
+			?: (WKDModelElement *)[self->_model laneWithId:elementId];
+		if (modelled.element == element) {
+			[self->_model readValuesAgain:modelled];
+		}
 	}];
 	return YES;
 }
@@ -995,10 +1107,10 @@ WKDOnEdge(NSRect host, NSPoint point)
 	prefix = [prefix stringByAppendingString:[local substringFromIndex:1]];
 	NSXMLElement *definition = WKDNewElement(_document, WKDBpmnNamespace, local);
 	NSString *definitionId = [self freshId:prefix];
-	WKDSetAttribute(definition, @"id", definitionId);
-	WKDSetAttribute(definition, @"name", value);
+	WKDLogAttribute(self.model.journal, definition, @"id", definitionId);
+	WKDLogAttribute(self.model.journal, definition, @"name", value);
 	if (![key isEqualToString:@"name"]) {
-		WKDSetAttribute(definition, key, value);
+		WKDLogAttribute(self.model.journal, definition, key, value);
 	}
 	/* Before the processes, as modellers put them. */
 	NSUInteger index = 0;
@@ -1010,31 +1122,45 @@ WKDOnEdge(NSRect host, NSPoint point)
 		}
 		index = i + 1;
 	}
-	[root insertChild:definition atIndex:index];
+	WKDLogInsert(self.model.journal, root, definition, index);
 	return definitionId;
 }
 
 
+- (NSString *)refusalToRename:(NSString *)elementId to:(NSString *)newId
+{
+	if ([newId isEqualToString:elementId]) {
+		return nil;
+	}
+	if (!WKDIsName(newId)) {
+		return @"An id is a letter or _, then letters, digits, -, _ and dots.";
+	}
+	if ([self elementWithId:newId] != nil) {
+		return [NSString stringWithFormat:@"%@ is the id of another element.", newId];
+	}
+	return [self elementWithId:elementId] == nil ? @"There is no such element." : nil;
+}
+
 - (BOOL)renameElement:(NSString *)elementId to:(NSString *)newId error:(NSString **)reason
 {
-	NSString *refusal = nil;
 	if ([newId isEqualToString:elementId]) {
 		return YES;
 	}
-	if (!WKDIsName(newId)) {
-		refusal = @"An id is a letter or _, then letters, digits, -, _ and dots.";
-	} else if ([self elementWithId:newId] != nil) {
-		refusal = [NSString stringWithFormat:@"%@ is the id of another element.", newId];
-	} else if ([self elementWithId:elementId] == nil) {
-		refusal = @"There is no such element.";
-	}
+	NSString *refusal = [self refusalToRename:elementId to:newId];
 	if (refusal != nil) {
 		if (reason != NULL) {
 			*reason = refusal;
 		}
 		return NO;
 	}
+	[[NSNotificationCenter defaultCenter] postNotificationName:WKDEditorWillRenameNotification object:self
+	                                                  userInfo:@{ @"from": elementId, @"to": newId }];
 	[self change:@"Rename" with:^{
+		WKDModelElement *renamed = [self->_model nodeWithId:elementId] ?: [self->_model flowWithId:elementId]
+			?: (WKDModelElement *)[self->_model laneWithId:elementId];
+		if (renamed != nil) {
+			[self->_model renameElement:renamed to:newId];
+		}
 		NSArray *references = @[ @"sourceRef", @"targetRef", @"attachedToRef", @"default", @"bpmnElement",
 		                         @"processRef", @"activityRef" ];
 		NSMutableArray *pending = [NSMutableArray arrayWithObject:[self->_document rootElement]];
@@ -1042,16 +1168,17 @@ WKDOnEdge(NSRect host, NSPoint point)
 			NSXMLElement *element = [pending lastObject];
 			[pending removeLastObject];
 			if ([WKDAttribute(element, @"id") isEqualToString:elementId]) {
-				WKDSetAttribute(element, @"id", newId);
+				WKDLogAttribute(self.model.journal, element, @"id", newId);
 			}
 			for (NSString *reference in references) {
 				if ([WKDAttribute(element, reference) isEqualToString:elementId]) {
-					WKDSetAttribute(element, reference, newId);
+					WKDLogAttribute(self.model.journal, element, reference, newId);
 				}
 			}
-			if ((WKDIs(element, WKDBpmnNamespace, @"incoming") || WKDIs(element, WKDBpmnNamespace, @"outgoing"))
+			if ((WKDIs(element, WKDBpmnNamespace, @"incoming") || WKDIs(element, WKDBpmnNamespace, @"outgoing")
+			     || WKDIs(element, WKDBpmnNamespace, @"flowNodeRef"))
 			    && [[element stringValue] isEqualToString:elementId]) {
-				[element setStringValue:newId];
+				WKDLogText(self.model.journal, element, newId);
 			}
 			for (NSXMLNode *child in [element children]) {
 				if ([child kind] == NSXMLElementKind) {
@@ -1070,17 +1197,17 @@ WKDOnEdge(NSRect host, NSPoint point)
 	NSMutableSet *nodes = [NSMutableSet set], *flows = [NSMutableSet set];
 	NSMutableArray *bands = [NSMutableArray array];
 	for (NSString *elementId in elementIds) {
-		WKDShape *shape = [_diagram shapeWithId:elementId];
-		WKDLane *band = [_diagram laneWithId:elementId];
+		WKDNode *shape = [_model nodeWithId:elementId];
+		WKDLane *band = [_model laneWithId:elementId];
 		if (shape != nil) {
 			[self collect:shape into:nodes];
-		} else if ([_diagram connectionWithId:elementId] != nil) {
+		} else if ([_model flowWithId:elementId] != nil) {
 			[flows addObject:elementId];
-		} else if (band != nil && (!band.isPool || band == _diagram.pool)) {
+		} else if (band != nil && (!band.isPool || band == _model.pool)) {
 			[bands addObject:elementId];
 		}
 	}
-	for (WKDConnection *connection in _diagram.connections) {
+	for (WKDFlow *connection in _model.flows) {
 		if ([nodes containsObject:connection.source.elementId] || [nodes containsObject:connection.target.elementId]) {
 			[flows addObject:connection.elementId];
 		}
@@ -1092,38 +1219,14 @@ WKDOnEdge(NSRect host, NSPoint point)
 		if ([bands count] > 0) {
 			[self removeBands:bands];
 		}
+		WKDModel *model = self->_model;
 		for (NSString *flowId in flows) {
-			WKDConnection *connection = [self->_diagram connectionWithId:flowId];
-			for (WKDShape *end in @[ connection.source, connection.target ]) {
-				if ([nodes containsObject:end.elementId]) {
-					continue;
-				}
-				for (NSXMLElement *reference in WKDChildren(end.element, WKDBpmnNamespace, nil)) {
-					NSString *local = [reference localName];
-					if (([local isEqualToString:@"incoming"] || [local isEqualToString:@"outgoing"])
-					    && [[reference stringValue] isEqualToString:flowId]) {
-						[reference detach];
-					}
-				}
-				if ([WKDAttribute(end.element, @"default") isEqualToString:flowId]) {
-					WKDSetAttribute(end.element, @"default", nil);
-				}
-			}
-			[connection.element detach];
+			[model removeFlow:[model flowWithId:flowId]];
 		}
 		for (NSString *nodeId in nodes) {
-			[[self->_diagram shapeWithId:nodeId].element detach];
+			[model removeNode:[model nodeWithId:nodeId]];
 		}
-		NSMutableSet *gone = [NSMutableSet setWithSet:nodes];
-		[gone unionSet:flows];
-		NSArray *planes = WKDDescendants([self->_document rootElement], WKDBpmnDINamespace, @"BPMNPlane");
-		for (NSXMLElement *plane in planes) {
-			for (NSXMLElement *child in WKDChildren(plane, WKDBpmnDINamespace, nil)) {
-				if ([gone containsObject:WKDAttribute(child, @"bpmnElement") ?: @""]) {
-					[child detach];
-				}
-			}
-		}
+		[model write];
 	}];
 }
 

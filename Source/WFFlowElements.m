@@ -4,6 +4,7 @@
 #import "WFFeelInternal.h"
 
 NSString * const WFErrorDomain = @"WFErrorDomain";
+NSString * const WFErrorElementIdKey = @"WFErrorElementIdKey";
 NSString * const WFErrorRangeKey = @"WFErrorRange";
 NSString * const WFErrorRefKey = @"WFErrorRef";
 

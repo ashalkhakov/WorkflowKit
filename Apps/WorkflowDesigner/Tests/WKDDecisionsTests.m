@@ -154,10 +154,11 @@ WKDEntries(WKDDmnEditor *editor, NSString *decisionId)
 	[editor moveRule:3 to:0 of:@"dish"];
 	[undo endUndoGrouping];
 	XCTAssertEqualObjects([[editor decisionWithId:@"dish"].rules[0] ruleId], @"other");
+	/* The model is live: what is left is known before. */
+	NSArray *left = @[ @"other", [[editor decisionWithId:@"dish"].rules[3] ruleId] ];
 	[undo beginUndoGrouping];
 	[editor deleteRules:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(1, 2)] of:@"dish"];
 	[undo endUndoGrouping];
-	NSArray *left = @[ @"other", [dish.rules[2] ruleId] ];
 	NSMutableArray *ids = [NSMutableArray array];
 	for (WKDDmnRule *rule in [editor decisionWithId:@"dish"].rules) {
 		[ids addObject:rule.ruleId];
@@ -174,6 +175,49 @@ WKDEntries(WKDDmnEditor *editor, NSString *decisionId)
 		[undo undo];
 	}
 	XCTAssertEqualObjects([editor.document XMLString], [WKDParse(WKDDecisionsFile) XMLString], @"undone, as it was");
+}
+
+/* Each kind of change one step: undone, the file is as it was to the byte,
+ * and redone, as it was after. */
+- (void)testEveryChangeIsUndoneAndRedoneExactly
+{
+	NSUndoManager *undo = [[NSUndoManager alloc] init];
+	[undo setGroupsByEvent:NO];
+	NSXMLDocument *document = WKDParse(WKDDecisionsFile);
+	NSString *original = [document XMLString];
+	WKDDmnEditor *editor = [[WKDDmnEditor alloc] initWithDocument:document undoManager:undo];
+	NSArray *steps = @[
+		^{ [editor insertColumn:NO at:1 of:@"dish"]; },
+		^{ [editor setColumn:1 property:@"inputVariable" to:@"vegan" of:@"dish"]; },
+		^{ [editor setColumn:1 property:@"expression" to:@"isVegan" of:@"dish"]; },
+		^{ [editor moveColumn:1 to:0 of:@"dish"]; },
+		^{ [editor setEntry:@"true" rule:1 column:0 of:@"dish"]; },
+		^{ [editor deleteColumn:2 of:@"dish"]; },
+		^{ [editor setHitPolicy:@"COLLECT" aggregation:@"MAX" of:@"dish"]; },
+		^{ [editor addDecisionTable:NO withId:@"dessert"]; },
+		^{ [editor setLiteral:@"expression" to:@"\"Cake\"" of:@"dessert"]; },
+		^{ [editor setRequired:@[ @"dish", @"dessert" ] of:@"drink" error:NULL]; },
+		^{ [editor renameDecision:@"dessert" to:@"sweet" error:NULL]; },
+		^{ [editor setName:@"Dish of the day" of:@"dish"]; },
+		^{ [editor deleteDecision:@"dish"]; },
+	];
+	for (void (^step)(void) in steps) {
+		[undo beginUndoGrouping];
+		step();
+		[undo endUndoGrouping];
+	}
+	NSString *edited = [document XMLString];
+	XCTAssertNotEqualObjects(edited, original);
+	XCTAssertNil([editor decisionWithId:@"dish"]);
+	XCTAssertEqualObjects([editor decisionWithId:@"drink"].required, @[ @"sweet" ]);
+	for (NSUInteger i = 0; i < [steps count]; i++) {
+		[undo undo];
+	}
+	XCTAssertEqualObjects([document XMLString], original, @"undone, as it was");
+	for (NSUInteger i = 0; i < [steps count]; i++) {
+		[undo redo];
+	}
+	XCTAssertEqualObjects([document XMLString], edited, @"redone, as it was after");
 }
 
 - (void)testTheHitPolicyIsWrittenAsTheEngineReadsIt

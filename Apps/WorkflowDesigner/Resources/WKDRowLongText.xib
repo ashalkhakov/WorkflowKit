@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24127" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24127"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="WKDInspectorRow">
+            <connections>
+                <outlet property="view" destination="WKDrl-row" id="WKDrl-o-view"/>
+                <outlet property="label" destination="WKDrl-label" id="WKDrl-o-label"/>
+                <outlet property="control" destination="WKDrl-text" id="WKDrl-o-control"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customView id="WKDrl-row">
+            <rect key="frame" x="0.0" y="0.0" width="336" height="72"/>
+            <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
+            <subviews>
+                <textField focusRingType="none" verticalHuggingPriority="750" id="WKDrl-label">
+                    <rect key="frame" x="12" y="52" width="104" height="16"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES"/>
+                    <textFieldCell key="cell" controlSize="small" lineBreakMode="truncatingTail" alignment="right" title="Label" id="WKDrl-labelcell">
+                        <font key="font" metaFont="smallSystem"/>
+                        <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <scrollView horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" id="WKDrl-scroll">
+                    <rect key="frame" x="122" y="4" width="202" height="64"/>
+                    <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
+                    <clipView key="contentView" copiesOnScroll="NO" id="WKDrl-clip">
+                        <rect key="frame" x="1" y="1" width="185" height="62"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <textView importsGraphics="NO" richText="NO" verticallyResizable="YES" spellCheckingEnabled="NO" smartInsertDeleteEnabled="NO" id="WKDrl-text">
+                                <rect key="frame" x="0" y="0" width="185" height="62"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
+                                <color key="textColor" name="textColor" catalog="System" colorSpace="catalog"/>
+                                <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                <size key="minSize" width="185" height="62"/>
+                                <size key="maxSize" width="10000" height="10000000"/>
+                            </textView>
+                        </subviews>
+                    </clipView>
+                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="WKDrl-hs">
+                        <rect key="frame" x="-100" y="-100" width="185" height="15"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </scroller>
+                    <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="WKDrl-vs">
+                        <rect key="frame" x="186" y="1" width="15" height="62"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" heightSizable="YES"/>
+                    </scroller>
+                </scrollView>
+            </subviews>
+        </customView>
+    </objects>
+</document>

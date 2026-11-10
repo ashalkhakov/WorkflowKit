@@ -105,6 +105,8 @@ typedef NS_ENUM(NSInteger, WFErrorCode) {
 };
 
 WORKFLOWKIT_EXPORT NSString * const WFErrorDomain;
+/* In an error about an element of a process or a decision: its id. */
+WORKFLOWKIT_EXPORT NSString * const WFErrorElementIdKey;
 /* In an error about text -- an expression the engine cannot read --
  * where in the text, as an NSValue holding an NSRange. */
 WORKFLOWKIT_EXPORT NSString * const WFErrorRangeKey;

@@ -1,5 +1,5 @@
 #import "WKDOutline.h"
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 #import "WKDXML.h"
 
 /* A row: what it shows and the element it is. */
@@ -31,7 +31,7 @@ WKDWords(NSString *type)
 }
 
 static NSString *
-WKDTitle(WKDShape *shape)
+WKDTitle(WKDNode *shape)
 {
 	return [shape.name length] > 0 ? shape.name : WKDWords(shape.type);
 }
@@ -53,7 +53,7 @@ WKDTitle(WKDShape *shape)
 	return self;
 }
 
-- (WKDOutlineItem *)itemFor:(WKDShape *)shape in:(WKDDiagram *)diagram
+- (WKDOutlineItem *)itemFor:(WKDNode *)shape in:(WKDModel *)diagram
 {
 	WKDOutlineItem *item = [[WKDOutlineItem alloc] init];
 	item.elementId = shape.elementId;
@@ -61,17 +61,17 @@ WKDTitle(WKDShape *shape)
 	item.children = [NSMutableArray array];
 	NSMutableArray *inside = [NSMutableArray array];
 	if (WKDIsContainerType(shape.type)) {
-		[inside addObjectsFromArray:[diagram shapesIn:shape]];
+		[inside addObjectsFromArray:[diagram nodesIn:shape]];
 	}
-	for (WKDShape *other in diagram.shapes) {
+	for (WKDNode *other in diagram.nodes) {
 		if (other.host == shape) {
 			[inside addObject:other];
 		}
 	}
-	for (WKDShape *child in inside) {
+	for (WKDNode *child in inside) {
 		[item.children addObject:[self itemFor:child in:diagram]];
 	}
-	for (WKDConnection *connection in diagram.connections) {
+	for (WKDFlow *connection in diagram.flows) {
 		if (connection.source == shape) {
 			WKDOutlineItem *flow = [[WKDOutlineItem alloc] init];
 			flow.elementId = connection.elementId;
@@ -85,13 +85,13 @@ WKDTitle(WKDShape *shape)
 	return item;
 }
 
-- (void)showDiagram:(WKDDiagram *)diagram
+- (void)showDiagram:(WKDModel *)diagram
 {
 	WKDOutlineItem *root = [[WKDOutlineItem alloc] init];
 	root.elementId = WKDAttribute(diagram.process, @"id");
 	root.title = WKDAttribute(diagram.process, @"name") ?: @"Process";
 	root.children = [NSMutableArray array];
-	for (WKDShape *shape in [diagram shapesIn:nil]) {
+	for (WKDNode *shape in [diagram nodesIn:nil]) {
 		[root.children addObject:[self itemFor:shape in:diagram]];
 	}
 	_root = root;

@@ -1,5 +1,5 @@
 #import <XCTest/XCTest.h>
-#import "WKDDiagram.h"
+#import "WKDModel.h"
 #import "WKDXML.h"
 #import "WKDFixtures.h"
 
@@ -10,56 +10,56 @@
 
 - (void)testShapesAreReadWithTheirKindsAndBounds
 {
-	WKDDiagram *diagram = [WKDDiagram diagramOfDocument:WKDParse(WKDModellerFile)];
+	WKDModel *diagram = [WKDModel modelOfDocument:WKDParse(WKDModellerFile)];
 	XCTAssertEqualObjects(WKDAttribute(diagram.process, @"id"), @"order");
 	XCTAssertNotNil(diagram.plane);
-	XCTAssertEqual([diagram.shapes count], (NSUInteger)12);
-	WKDShape *review = [diagram shapeWithId:@"review"];
+	XCTAssertEqual([diagram.nodes count], (NSUInteger)12);
+	WKDNode *review = [diagram nodeWithId:@"review"];
 	XCTAssertEqual(review.kind, WKDShapeActivity);
 	XCTAssertEqualObjects(review.name, @"Review");
 	XCTAssertTrue(NSEqualRects(review.bounds, NSMakeRect(200, 78, 100, 80)));
-	XCTAssertEqual([diagram shapeWithId:@"ok"].kind, WKDShapeGateway);
-	XCTAssertEqual([diagram shapeWithId:@"note"].kind, WKDShapeArtifact);
-	XCTAssertEqualObjects([diagram shapeWithId:@"note"].name, @"Ask the warehouse", @"an annotation's text is its name");
+	XCTAssertEqual([diagram nodeWithId:@"ok"].kind, WKDShapeGateway);
+	XCTAssertEqual([diagram nodeWithId:@"note"].kind, WKDShapeArtifact);
+	XCTAssertEqualObjects([diagram nodeWithId:@"note"].name, @"Ask the warehouse", @"an annotation's text is its name");
 	XCTAssertFalse(diagram.needsLayout);
 }
 
 - (void)testContainmentAndAttachment
 {
-	WKDDiagram *diagram = [WKDDiagram diagramOfDocument:WKDParse(WKDModellerFile)];
-	WKDShape *ship = [diagram shapeWithId:@"ship"];
-	XCTAssertEqual([diagram shapeWithId:@"pack"].parent, ship);
-	XCTAssertNil([diagram shapeWithId:@"review"].parent);
-	WKDShape *late = [diagram shapeWithId:@"late"];
-	XCTAssertEqual(late.host, [diagram shapeWithId:@"review"]);
+	WKDModel *diagram = [WKDModel modelOfDocument:WKDParse(WKDModellerFile)];
+	WKDNode *ship = [diagram nodeWithId:@"ship"];
+	XCTAssertEqual([diagram nodeWithId:@"pack"].parent, ship);
+	XCTAssertNil([diagram nodeWithId:@"review"].parent);
+	WKDNode *late = [diagram nodeWithId:@"late"];
+	XCTAssertEqual(late.host, [diagram nodeWithId:@"review"]);
 	XCTAssertEqualObjects(late.eventDefinition, @"timerEventDefinition");
 	XCTAssertFalse(late.interrupting);
-	XCTAssertEqualObjects([[diagram shapesIn:ship] valueForKey:@"elementId"], (@[ @"shipStart", @"pack", @"shipEnd" ]));
-	XCTAssertFalse([[[diagram shapesIn:nil] valueForKey:@"elementId"] containsObject:@"late"],
+	XCTAssertEqualObjects([[diagram nodesIn:ship] valueForKey:@"elementId"], (@[ @"shipStart", @"pack", @"shipEnd" ]));
+	XCTAssertFalse([[[diagram nodesIn:nil] valueForKey:@"elementId"] containsObject:@"late"],
 	               @"a boundary event is its activity's, not the process's");
 }
 
 - (void)testFlowsWithTheirRoutesDefaultsAndConditions
 {
-	WKDDiagram *diagram = [WKDDiagram diagramOfDocument:WKDParse(WKDModellerFile)];
-	XCTAssertEqual([diagram.connections count], (NSUInteger)8);
-	WKDConnection *late = [diagram connectionWithId:@"f5"];
+	WKDModel *diagram = [WKDModel modelOfDocument:WKDParse(WKDModellerFile)];
+	XCTAssertEqual([diagram.flows count], (NSUInteger)8);
+	WKDFlow *late = [diagram flowWithId:@"f5"];
 	XCTAssertEqual([late.waypoints count], (NSUInteger)3);
 	XCTAssertTrue(NSEqualPoints([[late.waypoints lastObject] pointValue], NSMakePoint(300, 318)));
-	XCTAssertTrue([diagram connectionWithId:@"f4"].isDefault);
-	XCTAssertFalse([diagram connectionWithId:@"f3"].isDefault);
-	XCTAssertTrue([diagram connectionWithId:@"f3"].hasCondition);
-	XCTAssertEqual([[diagram connectionsOf:[diagram shapeWithId:@"ok"]] count], (NSUInteger)3);
+	XCTAssertTrue([diagram flowWithId:@"f4"].isDefault);
+	XCTAssertFalse([diagram flowWithId:@"f3"].isDefault);
+	XCTAssertTrue([diagram flowWithId:@"f3"].hasCondition);
+	XCTAssertEqual([[diagram flowsOf:[diagram nodeWithId:@"ok"]] count], (NSUInteger)3);
 }
 
 - (void)testAProcessWithoutADiagramNeedsLayout
 {
-	WKDDiagram *diagram = [WKDDiagram diagramOfDocument:WKDParse(WKDUndrawnFile)];
+	WKDModel *diagram = [WKDModel modelOfDocument:WKDParse(WKDUndrawnFile)];
 	XCTAssertNil(diagram.plane);
 	XCTAssertTrue(diagram.needsLayout);
-	XCTAssertEqual([diagram.shapes count], (NSUInteger)6);
-	XCTAssertEqual([diagram.connections count], (NSUInteger)6);
-	XCTAssertEqual([[diagram connectionWithId:@"a"].waypoints count], (NSUInteger)0, @"no shapes, no route");
+	XCTAssertEqual([diagram.nodes count], (NSUInteger)6);
+	XCTAssertEqual([diagram.flows count], (NSUInteger)6);
+	XCTAssertEqual([[diagram flowWithId:@"a"].waypoints count], (NSUInteger)0, @"no shapes, no route");
 }
 
 @end

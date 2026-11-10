@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
-#import "WKDDiagram.h"
+#import "WKDModel.h"
+#import "WKDModel.h"
 
 /* A type a node can have: its BPMN name, its event's definition (nil for
  * none), and what to call it. */
@@ -10,13 +11,20 @@
 + (instancetype)type:(NSString *)type eventDefinition:(NSString *)eventDefinition title:(NSString *)title;
 @end
 
+/* Posted, by the editor, after every change, undo and redo included. */
+extern NSString * const WKDEditorDidChangeNotification;
+/* Posted, by the editor, as an element is given another id: its old id
+ * and its new one, under "from" and "to". The change follows. */
+extern NSString * const WKDEditorWillRenameNotification;
+
 /*
  * Every change to a BPMN document goes through here: elements and their
  * references -- a flow's ends, the nodes' incoming and outgoing, a
- * gateway's default -- and the diagram that shows them change together.
- * Each change is one step on the undo manager, which keeps the document
- * as it was before: restoring a snapshot is right whatever the change was,
- * and a process's XML is small.
+ * gateway's default -- and the diagram that shows them change together,
+ * in the model first and then in its document where they differ. Each
+ * change is one step on the undo manager: the journal's record of the
+ * elements it touched and the XML it edited, so that undoing it costs what
+ * the change did, not the size of the process.
  */
 @interface WKDEditor : NSObject
 
@@ -25,12 +33,14 @@
 
 - (instancetype)initWithDocument:(NSXMLDocument *)document undoManager:(NSUndoManager *)undoManager;
 
-/* The document as it is now: undo and redo replace it. */
+/* The model's carrier: changes, undo and redo edit it in place. */
 @property (nonatomic, readonly, strong) NSXMLDocument *document;
-/* Read again after every change. */
-@property (nonatomic, readonly, strong) WKDDiagram *diagram;
-/* Called after every change, undo and redo included. */
-@property (nonatomic, copy) void (^changed)(void);
+/* The process as objects: one model for the editor's life, its elements
+ * the same objects from one change to the next. */
+@property (nonatomic, readonly, strong) WKDModel *model;
+/* After every change, undo and redo, the model is compared with one read
+ * afresh from the document, and a disagreement raises: for tests. */
+@property (class, nonatomic) BOOL checksAgreement;
 
 /* Shapes for the nodes that have none, laid out with the rest left as
  * they are; nothing when every node has one. Not undoable: for opening. */
@@ -65,6 +75,8 @@
  * boundary events' activities, defaults, incoming and outgoing, the
  * diagram. NO, with why, for an id that is taken or not an XML name. */
 - (BOOL)renameElement:(NSString *)elementId to:(NSString *)newId error:(NSString **)reason;
+/* Why the element cannot have the id; nil when it can. */
+- (NSString *)refusalToRename:(NSString *)elementId to:(NSString *)newId;
 /* An element of the document anywhere, by id. */
 - (NSXMLElement *)elementWithId:(NSString *)elementId;
 /* A top-level definition -- bpmn:message, signal, error, escalation --
@@ -82,6 +94,10 @@
  * face each other; a gateway or an event it enters at its corner. */
 + (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary
                       fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity;
+/* Into a gateway's side corner, its top and bottom corners left to the
+ * branches of a split. */
++ (NSArray<NSValue *> *)routeFrom:(NSRect)source to:(NSRect)target fromBoundary:(BOOL)fromBoundary
+                      fromGateway:(BOOL)fromGateway toActivity:(BOOL)toActivity intoSide:(BOOL)intoSide;
 /* The default size of a node of the type. */
 + (NSSize)sizeOfType:(NSString *)type;
 

@@ -1,7 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <DiagramKitUI/DKCanvasView.h>
 
-@class WKDCanvasView, WKDDiagram, WKDLook;
+@class WKDCanvasView, WKDModel, WKDLook;
 
 /* What the canvas asks for; the document's editor makes the changes. */
 @protocol WKDCanvasDelegate <NSObject>
@@ -56,7 +56,7 @@
  */
 @interface WKDCanvasView : DKCanvasView <DKCanvasDataSource, DKCanvasDelegate, NSTextFieldDelegate>
 
-@property (nonatomic, strong) WKDDiagram *diagram;
+@property (nonatomic, strong) WKDModel *model;
 /* The ids of the shapes and flows selected. */
 @property (nonatomic, copy) NSSet<NSString *> *selection;
 /* The same, in the order they were selected: the first is the anchor that

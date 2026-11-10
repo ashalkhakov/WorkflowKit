@@ -1,5 +1,7 @@
 #import "WKDEditorPriv.h"
 #import "WKDXML.h"
+#import "WKDModelPriv.h"
+#import "WKDJournal.h"
 
 /* A new lane's height, the least a lane may have, and the room round what
  * a pool holds. */
@@ -15,7 +17,7 @@ WKDPointAt(double x, double y)
 
 /* What the lanes' changes share. */
 @interface WKDEditor (WKDLanesHelpers)
-- (NSArray<WKDShape *> *)laneMembers;
+- (NSArray<WKDNode *> *)laneMembers;
 - (NSUInteger)laneLevels;
 - (WKDLane *)leafLaneAt:(NSPoint)point;
 - (void)setRefs:(NSArray<NSString *> *)ids of:(WKDLane *)lane;
@@ -28,10 +30,10 @@ WKDPointAt(double x, double y)
 
 /* The process's own nodes at its top level, boundary events with them:
  * what lanes list. */
-- (NSArray<WKDShape *> *)laneMembers
+- (NSArray<WKDNode *> *)laneMembers
 {
 	NSMutableArray *members = [NSMutableArray array];
-	for (WKDShape *shape in self.diagram.shapes) {
+	for (WKDNode *shape in self.model.nodes) {
 		if (shape.parent == nil && shape.kind != WKDShapeArtifact) {
 			[members addObject:shape];
 		}
@@ -43,7 +45,7 @@ WKDPointAt(double x, double y)
 - (NSUInteger)laneLevels
 {
 	NSUInteger levels = 0;
-	for (WKDLane *lane in self.diagram.lanes) {
+	for (WKDLane *lane in self.model.lanes) {
 		levels = MAX(levels, lane.depth + 1);
 	}
 	return levels;
@@ -55,7 +57,7 @@ WKDPointAt(double x, double y)
 {
 	WKDLane *nearest = nil;
 	double best = DBL_MAX;
-	for (WKDLane *lane in self.diagram.leafLanes) {
+	for (WKDLane *lane in self.model.leafLanes) {
 		if (!lane.hasBounds) {
 			continue;
 		}
@@ -69,20 +71,51 @@ WKDPointAt(double x, double y)
 	return nearest;
 }
 
-/* The lane's flowNodeRefs, as the ids given. */
+/* The lane's flowNodeRefs, as the ids given: its nodes the model's, the
+ * refs naming no node of the process kept only where given. */
 - (void)setRefs:(NSArray<NSString *> *)ids of:(WKDLane *)lane
 {
-	for (NSXMLElement *ref in WKDChildren(lane.element, WKDBpmnNamespace, @"flowNodeRef")) {
-		[ref detach];
-	}
-	NSXMLElement *childSet = WKDChild(lane.element, WKDBpmnNamespace, @"childLaneSet");
+	WKDModel *model = self.model;
+	NSMutableArray<WKDNode *> *nodes = [NSMutableArray array];
+	NSMutableArray<NSString *> *others = [NSMutableArray array];
 	for (NSString *nodeId in ids) {
-		NSXMLElement *ref = WKDNewElement(self.document, WKDBpmnNamespace, @"flowNodeRef");
-		[ref setStringValue:nodeId];
-		if (childSet != nil) {
-			[lane.element insertChild:ref atIndex:[childSet index]];
+		WKDNode *node = [model nodeWithId:nodeId];
+		if (node != nil) {
+			[nodes addObject:node];
 		} else {
-			[lane.element addChild:ref];
+			[others addObject:nodeId];
+		}
+	}
+	NSCharacterSet *space = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+	for (NSXMLElement *ref in WKDChildren(lane.element, WKDBpmnNamespace, @"flowNodeRef")) {
+		NSString *named = [[ref stringValue] stringByTrimmingCharactersInSet:space];
+		if ([model nodeWithId:named] == nil && ![others containsObject:named]) {
+			WKDLogDetach(model.journal, ref);
+		}
+	}
+	NSMutableSet<WKDNode *> *moved = [NSMutableSet setWithArray:lane.nodeList];
+	NSSet<WKDNode *> *staying = [NSSet setWithArray:nodes];
+	[moved minusSet:staying];
+	for (WKDNode *node in nodes) {
+		if ([lane.nodeList indexOfObjectIdenticalTo:node] == NSNotFound) {
+			[moved addObject:node];
+		}
+	}
+	[lane willChange];
+	lane.nodeList = nodes;
+	lane.otherIds = others;
+	/* Each node's lane: the innermost listing it. */
+	for (WKDNode *node in moved) {
+		WKDLane *innermost = nil;
+		for (WKDLane *listing in model.lanes) {
+			if ((innermost == nil || listing.depth >= innermost.depth)
+			    && [listing.nodeList indexOfObjectIdenticalTo:node] != NSNotFound) {
+				innermost = listing;
+			}
+		}
+		if (node.lane != innermost) {
+			[node willChange];
+			node.lane = innermost;
 		}
 	}
 }
@@ -91,39 +124,40 @@ WKDPointAt(double x, double y)
  * diagram's plane shows the collaboration then. Its id. */
 - (NSString *)makePool
 {
+	self.needsSync = YES;
 	NSXMLElement *root = [self.document rootElement];
-	NSXMLElement *process = self.diagram.process;
+	NSXMLElement *process = self.model.process;
 	NSXMLElement *collaboration = WKDChild(root, WKDBpmnNamespace, @"collaboration");
 	if (collaboration == nil) {
 		collaboration = WKDNewElement(self.document, WKDBpmnNamespace, @"collaboration");
-		WKDSetAttribute(collaboration, @"id", [self freshId:@"Collaboration"]);
-		[root insertChild:collaboration atIndex:[process index]];
+		WKDLogAttribute(self.model.journal, collaboration, @"id", [self freshId:@"Collaboration"]);
+		WKDLogInsert(self.model.journal, root, collaboration, [process index]);
 	}
 	NSString *poolId = [self freshId:@"Participant"];
 	NSXMLElement *participant = WKDNewElement(self.document, WKDBpmnNamespace, @"participant");
-	WKDSetAttribute(participant, @"id", poolId);
-	WKDSetAttribute(participant, @"name", WKDAttribute(process, @"name"));
-	WKDSetAttribute(participant, @"processRef", WKDAttribute(process, @"id"));
-	[collaboration addChild:participant];
+	WKDLogAttribute(self.model.journal, participant, @"id", poolId);
+	WKDLogAttribute(self.model.journal, participant, @"name", WKDAttribute(process, @"name"));
+	WKDLogAttribute(self.model.journal, participant, @"processRef", WKDAttribute(process, @"id"));
+	WKDLogAdd(self.model.journal, collaboration, participant);
 	NSXMLElement *plane = [self plane];
 	if ([WKDAttribute(plane, @"bpmnElement") isEqualToString:WKDAttribute(process, @"id")]) {
-		WKDSetAttribute(plane, @"bpmnElement", WKDAttribute(collaboration, @"id"));
+		WKDLogAttribute(self.model.journal, plane, @"bpmnElement", WKDAttribute(collaboration, @"id"));
 	}
 	/* Round what the diagram shows, the process's lanes' band left of it. */
 	NSRect content = NSZeroRect;
-	for (WKDShape *shape in self.diagram.shapes) {
+	for (WKDNode *shape in self.model.nodes) {
 		if (shape.hasBounds) {
 			content = NSIsEmptyRect(content) ? shape.bounds : NSUnionRect(content, shape.bounds);
 		}
 	}
-	for (WKDLane *lane in self.diagram.lanes) {
+	for (WKDLane *lane in self.model.lanes) {
 		if (lane.hasBounds) {
 			content = NSIsEmptyRect(content) ? lane.bounds : NSUnionRect(content, lane.bounds);
 		}
 	}
 	NSRect bounds = NSIsEmptyRect(content) ? NSMakeRect(100, 80, 600, 250)
 		: NSInsetRect(content, -WKDPoolMargin, -WKDPoolMargin);
-	if ([self.diagram.lanes count] > 0) {
+	if ([self.model.lanes count] > 0) {
 		bounds = content;
 	}
 	bounds.origin.x -= WKDLaneBandWidth;
@@ -131,19 +165,20 @@ WKDPointAt(double x, double y)
 	bounds.size.width = MAX(NSWidth(bounds), 600);
 	bounds.size.height = MAX(NSHeight(bounds), 250);
 	[self setBounds:bounds of:poolId];
-	WKDSetAttribute([self diagramElement:@"BPMNShape" of:poolId create:YES], @"isHorizontal", @"true");
-	self.diagram = [WKDDiagram diagramOfDocument:self.document];
+	WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:poolId create:YES], @"isHorizontal", @"true");
+	[self syncModel];
 	return poolId;
 }
 
 /* A new lane element, with its shape. */
 - (NSXMLElement *)newLane:(NSRect)bounds
 {
+	self.needsSync = YES;
 	NSXMLElement *lane = WKDNewElement(self.document, WKDBpmnNamespace, @"lane");
 	NSString *laneId = [self freshId:@"Lane"];
-	WKDSetAttribute(lane, @"id", laneId);
+	WKDLogAttribute(self.model.journal, lane, @"id", laneId);
 	[self setBounds:bounds of:laneId];
-	WKDSetAttribute([self diagramElement:@"BPMNShape" of:laneId create:YES], @"isHorizontal", @"true");
+	WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:laneId create:YES], @"isHorizontal", @"true");
 	return lane;
 }
 
@@ -152,7 +187,7 @@ WKDPointAt(double x, double y)
  * shapes, names, bends, lanes. */
 - (void)shiftBelow:(double)line by:(double)dy
 {
-	for (WKDShape *shape in self.diagram.shapes) {
+	for (WKDNode *shape in self.model.nodes) {
 		if (shape.hasBounds && NSMidY(shape.bounds) > line) {
 			[self setBounds:NSOffsetRect(shape.bounds, 0, dy) of:shape.elementId];
 			if (!NSIsEmptyRect(shape.labelBounds)) {
@@ -160,7 +195,7 @@ WKDPointAt(double x, double y)
 			}
 		}
 	}
-	for (WKDConnection *connection in self.diagram.connections) {
+	for (WKDFlow *connection in self.model.flows) {
 		NSMutableArray *points = [NSMutableArray array];
 		BOOL moved = NO;
 		for (NSValue *value in connection.waypoints) {
@@ -193,23 +228,23 @@ WKDPointAt(double x, double y)
 			for (NSXMLElement *waypoint in WKDChildren(edge, WKDDINamespace, @"waypoint")) {
 				double y = WKDNumber(waypoint, @"y");
 				if (y > line) {
-					WKDSetAttribute(waypoint, @"y", WKDFormat(y + dy));
+					WKDLogAttribute(self.model.journal, waypoint, @"y", WKDFormat(y + dy));
 				}
 			}
 		}
 	}
 	/* The process's pool and lanes, and the other pools below. */
-	NSMutableArray *bands = [NSMutableArray arrayWithArray:self.diagram.lanes];
-	if (self.diagram.pool != nil) {
-		[bands addObject:self.diagram.pool];
+	NSMutableArray *bands = [NSMutableArray arrayWithArray:self.model.lanes];
+	if (self.model.pool != nil) {
+		[bands addObject:self.model.pool];
 	}
-	[bands addObjectsFromArray:self.diagram.otherPools];
+	[bands addObjectsFromArray:self.model.otherPools];
 	for (WKDLane *lane in bands) {
 		NSRect r = lane.bounds;
 		if (!lane.hasBounds) {
 			continue;
 		}
-		BOOL other = lane.isPool && lane != self.diagram.pool;
+		BOOL other = lane.isPool && lane != self.model.pool;
 		if (other && NSMinY(r) < line - 0.5) {
 			continue;
 		}
@@ -219,7 +254,6 @@ WKDPointAt(double x, double y)
 			[self setBounds:NSMakeRect(NSMinX(r), NSMinY(r), NSWidth(r), NSHeight(r) + dy) of:lane.elementId];
 		}
 	}
-	self.diagram = [WKDDiagram diagramOfDocument:self.document];
 }
 
 @end
@@ -232,15 +266,14 @@ WKDPointAt(double x, double y)
  * no longer listed. Only what changed is written. */
 - (void)keepLanes
 {
-	self.diagram = [WKDDiagram diagramOfDocument:self.document];
-	WKDLane *pool = self.diagram.pool;
-	if (pool == nil && [self.diagram.lanes count] == 0) {
+	WKDLane *pool = self.model.pool;
+	if (pool == nil && [self.model.lanes count] == 0) {
 		return;
 	}
-	NSArray<WKDShape *> *members = [self laneMembers];
+	NSArray<WKDNode *> *members = [self laneMembers];
 	if (pool.hasBounds && pool.horizontal) {
 		NSRect content = NSZeroRect;
-		for (WKDShape *shape in members) {
+		for (WKDNode *shape in members) {
 			if (shape.hasBounds) {
 				NSRect r = shape.bounds;
 				if (!NSIsEmptyRect(shape.labelBounds)) {
@@ -261,7 +294,7 @@ WKDPointAt(double x, double y)
 		if (left + right + top + bottom > 0) {
 			[self setBounds:NSMakeRect(NSMinX(old) - left, NSMinY(old) - top, NSWidth(old) + left + right,
 			                           NSHeight(old) + top + bottom) of:pool.elementId];
-			for (WKDLane *lane in self.diagram.lanes) {
+			for (WKDLane *lane in self.model.lanes) {
 				NSRect r = lane.bounds;
 				if (!lane.hasBounds) {
 					continue;
@@ -276,16 +309,15 @@ WKDPointAt(double x, double y)
 				}
 				[self setBounds:NSMakeRect(NSMinX(r) - left, y, NSWidth(r) + left + right, height) of:lane.elementId];
 			}
-			self.diagram = [WKDDiagram diagramOfDocument:self.document];
 		}
 	}
 
-	NSArray<WKDLane *> *lanes = self.diagram.lanes;
-	if ([self.diagram.leafLanes count] == 0) {
+	NSArray<WKDLane *> *lanes = self.model.lanes;
+	if ([self.model.leafLanes count] == 0) {
 		return;
 	}
 	NSMutableSet *present = [NSMutableSet set];
-	for (WKDShape *shape in self.diagram.shapes) {
+	for (WKDNode *shape in self.model.nodes) {
 		[present addObject:shape.elementId];
 	}
 	NSMutableDictionary<NSString *, NSMutableArray *> *refs = [NSMutableDictionary dictionary];
@@ -298,13 +330,13 @@ WKDPointAt(double x, double y)
 		}
 		[refs setObject:kept forKey:lane.elementId];
 	}
-	for (WKDShape *shape in [self laneMembers]) {
-		WKDShape *placed = shape.host ?: shape;
+	for (WKDNode *shape in [self laneMembers]) {
+		WKDNode *placed = shape.host ?: shape;
 		if (!placed.hasBounds) {
 			continue;
 		}
 		WKDLane *target = [self leafLaneAt:NSMakePoint(NSMidX(placed.bounds), NSMidY(placed.bounds))];
-		WKDLane *current = [self.diagram laneOf:shape];
+		WKDLane *current = [self.model laneOf:shape];
 		if (target == nil || target == current) {
 			continue;
 		}
@@ -324,7 +356,6 @@ WKDPointAt(double x, double y)
 			[self setRefs:now of:lane];
 		}
 	}
-	self.diagram = [WKDDiagram diagramOfDocument:self.document];
 }
 
 /* A lane's or a pool's shape and its new size: a lane is made taller or
@@ -332,15 +363,15 @@ WKDPointAt(double x, double y)
  * lanes', and its height its bottom lanes'. */
 - (void)resizeBand:(NSString *)elementId to:(NSRect)bounds
 {
-	WKDLane *band = [self.diagram laneWithId:elementId];
-	WKDLane *pool = self.diagram.pool;
+	WKDLane *band = [self.model laneWithId:elementId];
+	WKDLane *pool = self.model.pool;
 	if (band == nil || !band.hasBounds || (band.isPool && band != pool)) {
 		return;
 	}
 	NSRect old = band.bounds;
 	/* No lane shorter than the least: the ones at the bottom included. */
 	double least = WKDLaneMinimum;
-	for (WKDLane *lane in self.diagram.lanes) {
+	for (WKDLane *lane in self.model.lanes) {
 		if (lane != band && fabs(NSMaxY(lane.bounds) - NSMaxY(old)) < 1 && NSMinY(lane.bounds) >= NSMinY(old) - 0.5) {
 			least = MAX(least, NSHeight(old) - NSHeight(lane.bounds) + WKDLaneMinimum);
 		}
@@ -356,10 +387,10 @@ WKDPointAt(double x, double y)
 		}
 		if (fabs(right) >= 1) {
 			/* Across: the pool and every lane in it end where it now does. */
-			double end = MAX(NSMaxX(old) + right, NSMinX(self.diagram.pool.bounds) + 200);
-			NSMutableArray *bands = [NSMutableArray arrayWithArray:self.diagram.lanes];
-			if (self.diagram.pool != nil) {
-				[bands addObject:self.diagram.pool];
+			double end = MAX(NSMaxX(old) + right, NSMinX(self.model.pool.bounds) + 200);
+			NSMutableArray *bands = [NSMutableArray arrayWithArray:self.model.lanes];
+			if (self.model.pool != nil) {
+				[bands addObject:self.model.pool];
 			}
 			for (WKDLane *lane in bands) {
 				NSRect r = lane.bounds;
@@ -375,11 +406,12 @@ WKDPointAt(double x, double y)
  * participant. The nodes stay. */
 - (void)removeBands:(NSArray<NSString *> *)elementIds
 {
+	self.needsSync = YES;
 	NSMutableSet *gone = [NSMutableSet set];
-	WKDLane *pool = self.diagram.pool;
+	WKDLane *pool = self.model.pool;
 	BOOL poolGoes = pool != nil && [elementIds containsObject:pool.elementId];
 	for (NSString *elementId in elementIds) {
-		WKDLane *lane = [self.diagram laneWithId:elementId];
+		WKDLane *lane = [self.model laneWithId:elementId];
 		if (lane == nil || lane.isPool || poolGoes) {
 			continue;
 		}
@@ -388,57 +420,57 @@ WKDPointAt(double x, double y)
 		NSUInteger index = [siblings indexOfObjectIdenticalTo:lane.element];
 		NSXMLElement *neighbour = index > 0 ? [siblings objectAtIndex:index - 1]
 			: [siblings count] > 1 ? [siblings objectAtIndex:1] : nil;
-		WKDLane *taker = [self.diagram laneWithId:WKDAttribute(neighbour, @"id")];
+		WKDLane *taker = [self.model laneWithId:WKDAttribute(neighbour, @"id")];
 		if (taker.hasBounds && lane.hasBounds) {
 			[self setBounds:NSUnionRect(taker.bounds, lane.bounds) of:taker.elementId];
 		}
 		[gone addObject:lane.elementId];
-		for (WKDLane *inner in self.diagram.lanes) {
+		for (WKDLane *inner in self.model.lanes) {
 			for (WKDLane *up = inner; up != nil; up = up.parent) {
 				if (up == lane) {
 					[gone addObject:inner.elementId];
 				}
 			}
 		}
-		[lane.element detach];
+		WKDLogDetach(self.model.journal, lane.element);
 		if ([WKDChildren(set, WKDBpmnNamespace, @"lane") count] == 0) {
-			[set detach];
+			WKDLogDetach(self.model.journal, set);
 		}
 	}
 	if (poolGoes) {
 		[gone addObject:pool.elementId];
-		for (WKDLane *lane in self.diagram.lanes) {
+		for (WKDLane *lane in self.model.lanes) {
 			[gone addObject:lane.elementId];
 		}
-		[WKDChild(self.diagram.process, WKDBpmnNamespace, @"laneSet") detach];
+		WKDLogDetach(self.model.journal, WKDChild(self.model.process, WKDBpmnNamespace, @"laneSet"));
 		NSXMLElement *collaboration = (NSXMLElement *)[pool.element parent];
 		for (NSXMLElement *flow in WKDChildren(collaboration, WKDBpmnNamespace, @"messageFlow")) {
 			if ([WKDAttribute(flow, @"sourceRef") isEqualToString:pool.elementId]
 			    || [WKDAttribute(flow, @"targetRef") isEqualToString:pool.elementId]) {
 				[gone addObject:WKDAttribute(flow, @"id") ?: @""];
-				[flow detach];
+				WKDLogDetach(self.model.journal, flow);
 			}
 		}
-		[pool.element detach];
+		WKDLogDetach(self.model.journal, pool.element);
 		if ([WKDChildren(collaboration, WKDBpmnNamespace, @"participant") count] == 0) {
 			/* The plane shows the process again. */
 			NSString *collaborationId = WKDAttribute(collaboration, @"id");
 			for (NSXMLElement *plane in WKDDescendants([self.document rootElement], WKDBpmnDINamespace, @"BPMNPlane")) {
 				if ([WKDAttribute(plane, @"bpmnElement") isEqualToString:collaborationId]) {
-					WKDSetAttribute(plane, @"bpmnElement", WKDAttribute(self.diagram.process, @"id"));
+					WKDLogAttribute(self.model.journal, plane, @"bpmnElement", WKDAttribute(self.model.process, @"id"));
 				}
 			}
-			[collaboration detach];
+			WKDLogDetach(self.model.journal, collaboration);
 		}
 	}
 	for (NSXMLElement *plane in WKDDescendants([self.document rootElement], WKDBpmnDINamespace, @"BPMNPlane")) {
 		for (NSXMLElement *child in WKDChildren(plane, WKDBpmnDINamespace, nil)) {
 			if ([gone containsObject:WKDAttribute(child, @"bpmnElement") ?: @""]) {
-				[child detach];
+				WKDLogDetach(self.model.journal, child);
 			}
 		}
 	}
-	self.diagram = [WKDDiagram diagramOfDocument:self.document];
+	[self syncModel];
 }
 
 /* After the layout: each lane's nodes stacked in a band of their own, top
@@ -447,13 +479,13 @@ WKDPointAt(double x, double y)
  * ids of the nodes it held before. */
 - (void)stackLanes:(NSDictionary<NSString *, NSArray<NSString *> *> *)membership
 {
-	WKDLane *pool = self.diagram.pool;
-	NSArray<WKDLane *> *leaves = self.diagram.leafLanes;
+	WKDLane *pool = self.model.pool;
+	NSArray<WKDLane *> *leaves = self.model.leafLanes;
 	if (pool == nil && [leaves count] == 0) {
 		return;
 	}
-	NSRect content = self.diagram.contentBounds;
-	for (WKDShape *shape in self.diagram.shapes) {
+	NSRect content = self.model.contentBounds;
+	for (WKDNode *shape in self.model.nodes) {
 		if (shape.hasBounds) {
 			content = NSIsEmptyRect(content) ? shape.bounds : NSUnionRect(content, shape.bounds);
 		}
@@ -466,13 +498,13 @@ WKDPointAt(double x, double y)
 		[held setObject:ids forKey:lane.elementId];
 		[placed addObjectsFromArray:ids];
 	}
-	for (WKDShape *shape in [self laneMembers]) {
+	for (WKDNode *shape in [self laneMembers]) {
 		if (shape.host == nil && ![placed containsObject:shape.elementId] && [leaves count] > 0) {
 			[[held objectForKey:[[leaves firstObject] elementId]] addObject:shape.elementId];
 		}
 	}
 	/* The shapes' bounds, read once: moving one changes the diagram. */
-	NSArray<WKDShape *> *shapes = self.diagram.shapes;
+	NSArray<WKDNode *> *shapes = self.model.nodes;
 	double band = WKDLaneBandWidth;
 	double left = NSMinX(content) - WKDPoolMargin - band * (1 + [self laneLevels]);
 	double right = NSMaxX(content) + WKDPoolMargin;
@@ -482,13 +514,13 @@ WKDPointAt(double x, double y)
 	for (WKDLane *lane in leaves) {
 		NSMutableSet *ids = [NSMutableSet set];
 		for (NSString *nodeId in [held objectForKey:lane.elementId]) {
-			WKDShape *shape = [self.diagram shapeWithId:nodeId];
+			WKDNode *shape = [self.model nodeWithId:nodeId];
 			if (shape != nil && shape.host == nil) {
 				[self collect:shape into:ids];
 			}
 		}
 		NSRect box = NSZeroRect;
-		for (WKDShape *shape in shapes) {
+		for (WKDNode *shape in shapes) {
 			if ([ids containsObject:shape.elementId] && shape.hasBounds) {
 				NSRect r = shape.bounds;
 				NSRect label = WKDNodeLabelRect(shape.type, r);
@@ -499,7 +531,7 @@ WKDPointAt(double x, double y)
 		double height = WKDLaneHeight;
 		if (!NSIsEmptyRect(box)) {
 			double dy = y + WKDPoolMargin - NSMinY(box);
-			for (WKDShape *shape in shapes) {
+			for (WKDNode *shape in shapes) {
 				if ([ids containsObject:shape.elementId] && shape.hasBounds) {
 					[self setBounds:NSOffsetRect(shape.bounds, 0, dy) of:shape.elementId];
 					if (!NSIsEmptyRect(shape.labelBounds)) {
@@ -516,7 +548,7 @@ WKDPointAt(double x, double y)
 		y = NSMaxY(content) + WKDPoolMargin;
 	}
 	/* Lanes round the lanes dividing them, innermost first. */
-	for (WKDLane *lane in [self.diagram.lanes reverseObjectEnumerator]) {
+	for (WKDLane *lane in [self.model.lanes reverseObjectEnumerator]) {
 		NSRect span = NSZeroRect;
 		if ([spans objectForKey:lane.elementId] != nil) {
 			span = [[spans objectForKey:lane.elementId] rectValue];
@@ -529,21 +561,21 @@ WKDPointAt(double x, double y)
 		[spans setObject:[NSValue valueWithRect:span] forKey:lane.elementId];
 		double x = left + band * (1 + lane.depth);
 		[self setBounds:NSMakeRect(x, NSMinY(span), right - x, NSHeight(span)) of:lane.elementId];
-		WKDSetAttribute([self diagramElement:@"BPMNShape" of:lane.elementId create:YES], @"isHorizontal", @"true");
+		WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:lane.elementId create:YES], @"isHorizontal", @"true");
 	}
 	if (pool != nil) {
 		[self setBounds:NSMakeRect(left, top, right - left, y - top) of:pool.elementId];
-		WKDSetAttribute([self diagramElement:@"BPMNShape" of:pool.elementId create:YES], @"isHorizontal", @"true");
+		WKDLogAttribute(self.model.journal, [self diagramElement:@"BPMNShape" of:pool.elementId create:YES], @"isHorizontal", @"true");
 	}
-	self.diagram = [WKDDiagram diagramOfDocument:self.document];
+	[self syncModel];
 }
 
 /* Leaf lane id to the nodes it lists, as the document says now. */
 - (NSDictionary<NSString *, NSArray<NSString *> *> *)laneMembership
 {
 	NSMutableDictionary *membership = [NSMutableDictionary dictionary];
-	for (WKDShape *shape in [self laneMembers]) {
-		WKDLane *lane = [self.diagram laneOf:shape];
+	for (WKDNode *shape in [self laneMembers]) {
+		WKDLane *lane = [self.model laneOf:shape];
 		while (lane != nil && [lane.children count] > 0) {
 			lane = [lane.children firstObject];
 		}
@@ -566,8 +598,8 @@ WKDPointAt(double x, double y)
 
 - (NSString *)addPool
 {
-	if (self.diagram.pool != nil) {
-		return self.diagram.pool.elementId;
+	if (self.model.pool != nil) {
+		return self.model.pool.elementId;
 	}
 	__block NSString *made = nil;
 	[self change:@"Add Pool" with:^{
@@ -578,32 +610,32 @@ WKDPointAt(double x, double y)
 
 - (NSString *)addLaneAfter:(NSString *)elementId
 {
-	WKDLane *after = [self.diagram laneWithId:elementId];
-	if (after != nil && after.isPool && after != self.diagram.pool) {
+	WKDLane *after = [self.model laneWithId:elementId];
+	if (after != nil && after.isPool && after != self.model.pool) {
 		return nil;
 	}
 	__block NSString *made = nil;
 	[self change:@"Add Lane" with:^{
-		if (self.diagram.pool == nil) {
+		if (self.model.pool == nil) {
 			[self makePool];
 		}
-		WKDLane *pool = self.diagram.pool;
-		WKDLane *target = after != nil && !after.isPool ? [self.diagram laneWithId:after.elementId] : nil;
-		if ([self.diagram.lanes count] == 0) {
+		WKDLane *pool = self.model.pool;
+		WKDLane *target = after != nil && !after.isPool ? [self.model laneWithId:after.elementId] : nil;
+		if ([self.model.lanes count] == 0) {
 			/* A pool without lanes: one lane first, holding all it holds. */
-			NSXMLElement *laneSet = WKDEnsureChild(self.document, self.diagram.process, WKDBpmnNamespace, @"laneSet");
-			WKDSetAttribute(laneSet, @"id", [self freshId:@"LaneSet"]);
+			NSXMLElement *laneSet = WKDEnsureChild(self.document, self.model.process, WKDBpmnNamespace, @"laneSet");
+			WKDLogAttribute(self.model.journal, laneSet, @"id", [self freshId:@"LaneSet"]);
 			NSRect r = pool.bounds;
 			NSXMLElement *first = [self newLane:NSMakeRect(NSMinX(r) + WKDLaneBandWidth, NSMinY(r),
 			                                                NSWidth(r) - WKDLaneBandWidth, NSHeight(r))];
-			[laneSet addChild:first];
-			self.diagram = [WKDDiagram diagramOfDocument:self.document];
+			WKDLogAdd(self.model.journal, laneSet, first);
+			[self syncModel];
 			[self keepLanes];
-			target = [self.diagram laneWithId:WKDAttribute(first, @"id")];
+			target = [self.model laneWithId:WKDAttribute(first, @"id")];
 		}
 		if (target == nil) {
 			/* At the bottom of the pool: after its last lane. */
-			for (WKDLane *lane in self.diagram.lanes) {
+			for (WKDLane *lane in self.model.lanes) {
 				if (lane.parent == nil) {
 					target = lane;
 				}
@@ -615,7 +647,7 @@ WKDPointAt(double x, double y)
 		[self setBounds:r of:target.elementId];
 		NSXMLElement *lane = [self newLane:NSMakeRect(NSMinX(r), NSMaxY(r), NSWidth(r), WKDLaneHeight)];
 		NSXMLElement *set = (NSXMLElement *)[target.element parent];
-		[set insertChild:lane atIndex:[target.element index] + 1];
+		WKDLogInsert(self.model.journal, set, lane, [target.element index] + 1);
 		made = WKDAttribute(lane, @"id");
 	}];
 	return made;

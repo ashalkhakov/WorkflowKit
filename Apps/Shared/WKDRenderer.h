@@ -55,7 +55,7 @@ void WKDEndDrawing(void);
  * them now; and as AppKit colours, for what a view draws over them. */
 DKColor WKDInk(void);
 DKColor WKDPaper(void);
-DKColor WKDSelection(void);
+DKColor WKDSelectionInk(void);
 NSColor *WKDInkColor(void);
 NSColor *WKDPaperColor(void);
 NSColor *WKDSelectionColor(void);

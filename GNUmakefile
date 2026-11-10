@@ -1,16 +1,20 @@
 # WorkflowKit on GNUstep.
 #
-#   make                 the library, obj/libWorkflowKit.so; with ODataKit
-#                        installed (or ODATAKIT, below) its OData API,
-#                        wf-serve (Server/) and the apps (Apps/) too
+#   make                 the library, obj/libWorkflowKit.so, wf-build and the
+#                        designer's tools; with ODataKit installed (or
+#                        ODATAKIT, below) its OData API, wf-serve (Server/)
+#                        and WorkflowDesk (Apps/) too; with UDCode's SDK
+#                        installed, UDCode's BPMN and DMN extension
+#                        (UDCodeExtension/)
 #   make check           the XCTest suite, on every store there is a server
-#                        for; wf-serve over HTTP; the apps' tests; the demo
-#   make install         the library, and wf-serve and the apps
+#                        for; wf-serve over HTTP; WorkflowDesk's, the
+#                        designer's and the extension's tests; the demo
+#   make install         the library, wf-serve and WorkflowDesk
 #   make examples        the demo tools in Examples/
 #   make test            the library, then the XCTest suite (tools-xctest)
 #
 # Built against the patched GNUstep stack and the releases of FreeCoreData,
-# ODataKit and XFormsKit that .github/pins.env names, which
+# ODataKit, DiagramKit, XFormsKit and UDCode's SDK that .github/pins.env names, which
 # gnustep-release-actions' scripts/deps.sh unpacks into /opt/gnustep (CI,
 # .github/workflows/build.yml); see CLAUDE.md for the docker box.
 #
@@ -35,6 +39,8 @@ WorkflowKit_OBJC_FILES = \
 	Source/WFHandlers.m \
 	Source/WFStore.m \
 	Source/WFRepositoryService.m \
+	Source/WFDeploymentChecker.m \
+	Source/WFBuiltDeployment.m \
 	Source/WFDuration.m \
 	Source/WFBpmn.m \
 	Source/WFDmn.m \
@@ -61,6 +67,8 @@ WorkflowKit_HEADER_FILES = \
 	WFHandlers.h \
 	WFStore.h \
 	WFRepositoryService.h \
+	WFDeploymentChecker.h \
+	WFBuiltDeployment.h \
 	WFRuntimeService.h \
 	WFIdentity.h \
 	WFTaskQuery.h \
@@ -163,9 +171,15 @@ export postgresql mysql
 export WORKFLOWKIT_TEST_POSTGRES_URL ?= $(POSTGRES_URL)
 export WORKFLOWKIT_TEST_MYSQL_URL ?= $(MYSQL_URL)
 
-# wf-serve and the apps, over the OData API, and the chooser between the
-# apps that the AppImage and the Windows installer open (Apps/WorkflowLauncher).
-WF_PARTS = $(if $(filter yes,$(odata)),Server Apps/WorkflowDesk Apps/WorkflowDesigner Apps/WorkflowLauncher)
+# wf-build and workflow-deployment.make (Tools/) and the designer's parts
+# (Apps/WorkflowDesigner), always; wf-serve and WorkflowDesk, over the
+# OData API; UDCode's BPMN and DMN extension (UDCodeExtension/) where
+# UDCode's SDK is installed (UDCODEKIT_VERSION in .github/pins.env).
+ifneq ($(wildcard $(GNUSTEP_LOCAL_HEADERS)/UDCodeKit/UDExtension.h),)
+udcode ?= yes
+endif
+WF_PARTS = Tools Apps/WorkflowDesigner $(if $(filter yes,$(odata)),Server Apps/WorkflowDesk) \
+	$(if $(filter yes,$(udcode)),UDCodeExtension)
 
 after-all::
 	@for part in $(WF_PARTS); do $(MAKE) -C $$part || exit 1; done
@@ -179,12 +193,14 @@ after-clean::
 check:: all
 	$(MAKE) -C Tests run-tests
 	$(MAKE) examples
+	$(MAKE) -C Apps/WorkflowDesigner check
 ifeq ($(odata),yes)
 	$(MAKE) -C Examples/Plugins
 	$(MAKE) -C Server check
 	$(MAKE) -C Apps/WorkflowDesk check
-	$(MAKE) -C Apps/WorkflowDesigner check
-	$(MAKE) -C Apps/WorkflowDesigner/Tools
+endif
+ifeq ($(udcode),yes)
+	$(MAKE) -C UDCodeExtension check
 endif
 	timeout 120 $(MAKE) -C Examples run
 

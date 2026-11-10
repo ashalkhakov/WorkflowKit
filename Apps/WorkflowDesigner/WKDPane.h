@@ -10,3 +10,8 @@ void WKDFillHostScrolling(NSView *host, NSView *view);
 /* A round coloured badge with one or two letters, for a tab bar: drawn,
  * not shipped as an image. */
 NSImage *WKDTabBadge(NSString *letters, double r, double g, double b);
+/* A window's XIB, in the bundle the designer's classes are in (the app's,
+ * its tests', an extension's): compiled (.nib) on a Mac, the XIB as it is
+ * on GNUstep. For -initWithWindowNibPath:owner:, which, unlike
+ * -initWithWindowNibName:, does not look in the app's bundle only. */
+NSString *WKDNibPath(NSString *name);

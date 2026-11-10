@@ -71,6 +71,11 @@ typedef NS_ENUM(NSInteger, WKDPropertyKind) {
  * inspector colours and checks as it is typed, at that place. */
 @property (nonatomic) BOOL holdsExpression;
 @property (nonatomic) WFExpressionPlace place;
+/* Why a value would be refused, before it is set; nil when it would not,
+ * and for a property that refuses nothing. */
+@property (nonatomic, copy) NSString *(^refusal)(WKDEditor *editor, NSString *elementId, NSString *value);
+/* The element's id: set, the element is the same one under the new id. */
+@property (nonatomic) BOOL identifies;
 /* The value now, for the element of that id. */
 - (NSString *)valueIn:(WKDEditor *)editor of:(NSString *)elementId;
 /* A new value: one change, or nothing when it is the value already. NO,

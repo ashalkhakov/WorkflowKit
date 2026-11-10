@@ -123,8 +123,9 @@
       <bpmndi:BPMNEdge id="waitAgain_Edge" bpmnElement="waitAgain">
         <di:waypoint x="632" y="440"/>
         <di:waypoint x="632" y="470"/>
-        <di:waypoint x="381" y="470"/>
-        <di:waypoint x="381" y="355"/>
+        <di:waypoint x="336" y="470"/>
+        <di:waypoint x="336" y="330"/>
+        <di:waypoint x="356" y="330"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="toChecks_Edge" bpmnElement="toChecks">
         <di:waypoint x="512" y="260"/>

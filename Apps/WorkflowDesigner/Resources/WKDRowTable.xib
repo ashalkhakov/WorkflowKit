@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24127" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24127"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="WKDTableRowController">
+            <connections>
+                <outlet property="view" destination="WKDrt2-row" id="WKDrt2-o-view"/>
+                <outlet property="label" destination="WKDrt2-label" id="WKDrt2-o-label"/>
+                <outlet property="tableView" destination="WKDrt2-table" id="WKDrt2-o-tableView"/>
+                <outlet property="rows" destination="WKDrt2-rows" id="WKDrt2-o-rows"/>
+                <outlet property="addButton" destination="WKDrt2-add" id="WKDrt2-o-addButton"/>
+                <outlet property="removeButton" destination="WKDrt2-remove" id="WKDrt2-o-removeButton"/>
+                <outlet property="emptyLabel" destination="WKDrt2-empty" id="WKDrt2-o-emptyLabel"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customView id="WKDrt2-row">
+            <rect key="frame" x="0.0" y="0.0" width="336" height="160"/>
+            <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
+            <subviews>
+                <textField focusRingType="none" verticalHuggingPriority="750" id="WKDrt2-label">
+                    <rect key="frame" x="12" y="140" width="312" height="16"/>
+                    <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
+                    <textFieldCell key="cell" controlSize="small" lineBreakMode="truncatingTail" alignment="left" title="Table" id="WKDrt2-labelcell">
+                        <font key="font" metaFont="smallSystem"/>
+                        <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <scrollView autohidesScrollers="NO" horizontalLineScroll="22" horizontalPageScroll="10" verticalLineScroll="22" verticalPageScroll="10" usesPredominantAxisScrolling="NO" id="WKDrt2-scroll">
+                    <rect key="frame" x="12" y="24" width="312" height="114"/>
+                    <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
+                    <clipView key="contentView" id="WKDrt2-clip">
+                        <rect key="frame" x="1" y="1" width="295" height="112"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="uniform" columnReordering="NO" multipleSelection="NO" autosaveColumns="NO" typeSelect="NO" rowHeight="20" headerView="WKDrt2-header" id="WKDrt2-table" customClass="WKDCellTable">
+                                <rect key="frame" x="0.0" y="0.0" width="295" height="88"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                <size key="intercellSpacing" width="3" height="2"/>
+                                <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                <color key="gridColor" name="gridColor" catalog="System" colorSpace="catalog"/>
+                            </tableView>
+                        </subviews>
+                    </clipView>
+                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="WKDrt2-hs">
+                        <rect key="frame" x="-100" y="-100" width="295" height="15"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </scroller>
+                    <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="WKDrt2-vs">
+                        <rect key="frame" x="296" y="24" width="15" height="89"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" heightSizable="YES"/>
+                    </scroller>
+                    <tableHeaderView key="headerView" wantsLayer="YES" id="WKDrt2-header">
+                        <rect key="frame" x="0.0" y="0.0" width="295" height="23"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </tableHeaderView>
+                </scrollView>
+                <textField focusRingType="none" verticalHuggingPriority="750" id="WKDrt2-empty">
+                    <rect key="frame" x="20" y="56" width="296" height="30"/>
+                    <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
+                    <textFieldCell key="cell" controlSize="small" lineBreakMode="truncatingTail" alignment="left" title="" id="WKDrt2-emptycell">
+                        <font key="font" metaFont="smallSystem"/>
+                        <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <button verticalHuggingPriority="750" id="WKDrt2-add">
+                    <rect key="frame" x="12" y="2" width="26" height="20"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES"/>
+                    <buttonCell key="cell" type="smallSquare" title="+" bezelStyle="smallSquare" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="WKDrt2-addcell">
+                        <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                        <font key="font" metaFont="system"/>
+                    </buttonCell>
+                    <connections>
+                        <action selector="addRow:" target="-2" id="WKDrt2-addaction"/>
+                    </connections>
+                </button>
+                <button verticalHuggingPriority="750" id="WKDrt2-remove">
+                    <rect key="frame" x="40" y="2" width="26" height="20"/>
+                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES"/>
+                    <buttonCell key="cell" type="smallSquare" title="−" bezelStyle="smallSquare" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="WKDrt2-removecell">
+                        <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                        <font key="font" metaFont="system"/>
+                    </buttonCell>
+                    <connections>
+                        <action selector="removeRow:" target="-2" id="WKDrt2-removeaction"/>
+                    </connections>
+                </button>
+            </subviews>
+        </customView>
+        <arrayController objectClassName="WKDTableItem" editable="YES" avoidsEmptySelection="NO" preservesSelection="NO" selectsInsertedObjects="NO" automaticallyRearrangesObjects="NO" id="WKDrt2-rows">
+            <connections>
+                <binding destination="-2" name="contentArray" keyPath="tableModel.rows" id="WKDrt2-rowsbinding"/>
+            </connections>
+        </arrayController>
+    </objects>
+</document>

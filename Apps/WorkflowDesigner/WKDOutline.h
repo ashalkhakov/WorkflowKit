@@ -1,6 +1,6 @@
 #import <AppKit/AppKit.h>
 
-@class WKDDiagram, WKDOutline;
+@class WKDModel, WKDOutline;
 
 @protocol WKDOutlineDelegate <NSObject>
 /* A row was chosen: the element's id, the process's for the process. */
@@ -20,7 +20,7 @@
 - (instancetype)initWithOutlineView:(NSOutlineView *)outlineView;
 @property (nonatomic, weak) id<WKDOutlineDelegate> delegate;
 /* Read again; everything open. */
-- (void)showDiagram:(WKDDiagram *)diagram;
+- (void)showDiagram:(WKDModel *)diagram;
 /* The row of the element chosen, without telling the delegate. */
 - (void)select:(NSString *)elementId;
 

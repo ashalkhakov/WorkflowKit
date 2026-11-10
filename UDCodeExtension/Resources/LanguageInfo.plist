@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- BPMN processes and DMN decisions: XML (the grammar the XML mode's),
+	     opened in the process editor and the decision editor when the text
+	     is BPMN or DMN (WKUExtension's -workbench:editorForDocument:), as
+	     text otherwise. -->
+	<key>languageModes</key>
+	<array>
+		<dict>
+			<key>identifier</key>
+			<string>bpmn</string>
+			<key>displayName</key>
+			<string>BPMN</string>
+			<key>fileExtensions</key>
+			<array>
+				<string>bpmn</string>
+			</array>
+			<key>grammarOf</key>
+			<string>xml</string>
+		</dict>
+		<dict>
+			<key>identifier</key>
+			<string>dmn</string>
+			<key>displayName</key>
+			<string>DMN</string>
+			<key>fileExtensions</key>
+			<array>
+				<string>dmn</string>
+			</array>
+			<key>grammarOf</key>
+			<string>xml</string>
+		</dict>
+	</array>
+</dict>
+</plist>

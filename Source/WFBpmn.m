@@ -1,4 +1,5 @@
 #import "WFBpmn.h"
+#import "WFDeployment+Internal.h"
 #import "WFFlowElements.h"
 #import "WFCondition.h"
 #import "WFDuration.h"
@@ -837,6 +838,10 @@ WFIgnoredElements(void)
 @property (nonatomic, strong) NSDictionary<NSString *, NSXMLElement *> *shapes;
 @property (nonatomic, copy) NSString *expressionLanguage;
 @property (nonatomic, strong) NSError *error;
+/* Every problem, the first the error, and the elements they are about:
+ * not read, so what follows from their absence is not a problem too. */
+@property (nonatomic, strong) NSMutableArray<NSError *> *problems;
+@property (nonatomic, strong) NSMutableSet<NSString *> *unread;
 /* Reading an event subprocess's own elements, whose start event may be an
  * error start. */
 @property (nonatomic) BOOL inEventSubProcess;
@@ -909,26 +914,37 @@ WFIgnoredElements(void)
 + (NSArray<WFProcessDefinition *> *)definitionsFromData:(NSData *)data
                                                   error:(NSError **)error
 {
+	NSMutableArray *problems = [NSMutableArray array];
+	NSArray *definitions = [self definitionsFromData:data problems:problems];
+	if ([problems count] > 0) {
+		if (error != NULL) {
+			*error = [problems firstObject];
+		}
+		return nil;
+	}
+	return definitions;
+}
+
++ (NSArray<WFProcessDefinition *> *)definitionsFromData:(NSData *)data problems:(NSMutableArray<NSError *> *)problems
+{
+	NSUInteger before = [problems count];
 	NSError *xmlError = nil;
 	NSXMLDocument *document = data == nil ? nil
 		: [[NSXMLDocument alloc] initWithData:data options:0 error:&xmlError];
 	NSXMLElement *root = [document rootElement];
 	if (root == nil) {
-		if (error != NULL) {
-			*error = xmlError ?: WFBpmnError(@"empty BPMN document");
-		}
-		return nil;
+		[problems addObject:xmlError ?: WFBpmnError(@"empty BPMN document")];
+		return @[];
 	}
 	if (![[root URI] isEqualToString:WFBpmnNamespace]
 	    || ![[root localName] isEqualToString:@"definitions"]) {
-		if (error != NULL) {
-			*error = WFBpmnError(@"not a BPMN 2.0 document: the root is %@",
-				[root name]);
-		}
-		return nil;
+		[problems addObject:WFBpmnError(@"not a BPMN 2.0 document: the root is %@", [root name])];
+		return @[];
 	}
 
 	WFBpmnReadContext *context = [[WFBpmnReadContext alloc] init];
+	context.problems = problems;
+	context.unread = [NSMutableSet set];
 	context.expressionLanguage = [self attr:@"expressionLanguage" of:root];
 	NSMutableDictionary *messages = [NSMutableDictionary dictionary];
 	NSMutableDictionary *errors = [NSMutableDictionary dictionary];
@@ -965,19 +981,15 @@ WFIgnoredElements(void)
 	context.shapes = shapes;
 
 	if ([processes count] == 0) {
-		if (error != NULL) {
-			*error = WFBpmnError(@"no executable process (isExecutable=\"true\")");
-		}
-		return nil;
+		[problems addObject:WFBpmnError(@"no executable process (isExecutable=\"true\")")];
+		return @[];
 	}
 	NSMutableArray *definitions = [NSMutableArray array];
 	for (NSXMLElement *process in processes) {
 		NSString *processId = [self attr:@"id" of:process];
 		if (processId == nil) {
-			if (error != NULL) {
-				*error = WFBpmnError(@"a process has no id");
-			}
-			return nil;
+			[problems addObject:WFBpmnError(@"a process has no id")];
+			continue;
 		}
 		WFDefinitionBuilder *builder =
 			[WFDefinitionBuilder process:processId
@@ -1020,25 +1032,27 @@ WFIgnoredElements(void)
 		[builder setCandidateStarterUsers:list(@"candidateStarterUsers") groups:list(@"candidateStarterGroups")];
 		[self readScope:process into:builder context:context];
 		[self readListenersOf:process id:processId into:builder context:context];
-		if (context.error != nil) {
-			if (error != NULL) {
-				*error = context.error;
-			}
-			return nil;
+		WFProcessDefinition *definition = [builder buildCollecting:problems unread:context.unread];
+		if (definition != nil) {
+			[definitions addObject:definition];
 		}
-		WFProcessDefinition *definition = [builder build:error];
-		if (definition == nil) {
-			return nil;
-		}
-		[definitions addObject:definition];
+	}
+	for (NSUInteger i = before; i < [problems count]; i++) {
+		[problems replaceObjectAtIndex:i withObject:WFErrorNamingElement([problems objectAtIndex:i])];
 	}
 	return definitions;
 }
 
 + (void)fail:(WFBpmnReadContext *)context error:(NSError *)error
 {
+	error = WFErrorNamingElement(error);
 	if (context.error == nil) {
 		context.error = error;
+	}
+	[context.problems addObject:error];
+	NSString *elementId = [[error userInfo] objectForKey:WFErrorElementIdKey];
+	if (elementId != nil) {
+		[context.unread addObject:elementId];
 	}
 }
 
@@ -1063,9 +1077,6 @@ WFIgnoredElements(void)
                context:(WFBpmnReadContext *)context
 {
 	for (NSXMLElement *element in [self children:scope of:WFBpmnNamespace]) {
-		if (context.error != nil) {
-			return;
-		}
 		NSString *name = [element localName];
 		if ([name isEqualToString:@"association"]) {
 			/* A compensation boundary event's link to its handler; any
@@ -1079,7 +1090,7 @@ WFIgnoredElements(void)
 		NSString *elementId = [self attr:@"id" of:element];
 		if (elementId == nil) {
 			[self fail:context error:WFBpmnError(@"a %@ has no id", name)];
-			return;
+			continue;
 		}
 		if ([name isEqualToString:@"sequenceFlow"]) {
 			[self readFlow:element id:elementId into:builder context:context];
@@ -1088,14 +1099,14 @@ WFIgnoredElements(void)
 		if ([self child:element named:@"standardLoopCharacteristics"] != nil) {
 			[self fail:context error:WFBpmnError(
 				@"%@: standard loops are not supported; model the loop with a gateway", elementId)];
-			return;
+			continue;
 		}
 		if (![self readNode:element name:name id:elementId into:builder context:context]) {
-			return;
+			continue;
 		}
 		NSXMLElement *loop = [self child:element named:@"multiInstanceLoopCharacteristics"];
 		if (loop != nil && ![self readLoop:loop id:elementId into:builder context:context]) {
-			return;
+			continue;
 		}
 		NSString *label = [self attr:@"name" of:element];
 		if (label != nil) {
@@ -1282,9 +1293,10 @@ WFIgnoredElements(void)
 				elementId, kind, event ?: @"")];
 			return;
 		}
+		NSUInteger reported = [context.problems count];
 		WFDelegateReference *delegate = [self delegateOf:extension fieldsIn:extension id:elementId context:context];
 		if (delegate == nil) {
-			if (context.error == nil) {
+			if ([context.problems count] == reported) {
 				[self fail:context error:WFBpmnError(
 					@"%@: a camunda:%@ needs camunda:class or camunda:delegateExpression", elementId, kind)];
 			}
@@ -1357,6 +1369,7 @@ WFIgnoredElements(void)
 			}
 		}
 		WFFeelExpression *value = nil;
+		NSUInteger reported = [context.problems count];
 		if (source != nil) {
 			value = [self expressionFrom:source language:nil
 			                        what:[NSString stringWithFormat:@"%@: field %@", elementId, fieldName]
@@ -1365,7 +1378,7 @@ WFIgnoredElements(void)
 			value = [WFFeelExpression expressionWithString:WFFeelLiteralText(literal ?: @"") error:NULL];
 		}
 		if (fieldName == nil || value == nil) {
-			if (context.error == nil) {
+			if ([context.problems count] == reported) {
 				[self fail:context error:WFBpmnError(@"%@: a camunda:field needs a name and a value", elementId)];
 			}
 			return nil;
@@ -1436,6 +1449,7 @@ WFIgnoredElements(void)
                    into:(WFDefinitionBuilder *)builder
                 context:(WFBpmnReadContext *)context
 {
+	NSUInteger reported = [context.problems count];
 	for (NSXMLElement *parameter in [self children:inputOutput of:WFCamundaNamespace]) {
 		BOOL input = [[parameter localName] isEqualToString:@"inputParameter"];
 		if (!input && ![[parameter localName] isEqualToString:@"outputParameter"]) {
@@ -1444,7 +1458,7 @@ WFIgnoredElements(void)
 		NSString *name = [self attr:@"name" of:parameter];
 		BOOL none = NO;
 		NSString *feel = [self valueOf:parameter id:elementId context:context isNull:&none];
-		if (context.error != nil) {
+		if ([context.problems count] > reported) {
 			return;
 		}
 		NSError *error = nil;
@@ -1644,6 +1658,7 @@ WFIgnoredElements(void)
             into:(WFDefinitionBuilder *)builder
          context:(WFBpmnReadContext *)context
 {
+	NSUInteger reported = [context.problems count];
 	for (NSString *unsupported in @[ @"calledElementTenantId", @"variableMappingClass",
 	                                 @"variableMappingDelegateExpression", @"caseRef" ]) {
 		if ([self attr:unsupported namespace:WFCamundaNamespace of:element] != nil) {
@@ -1704,7 +1719,7 @@ WFIgnoredElements(void)
 			[builder addOutput:mapping forElement:elementId];
 		}
 	}
-	return context.error == nil;
+	return [context.problems count] == reported;
 }
 
 + (WFVariableMapping *)mappingFrom:(NSXMLElement *)extension
@@ -1756,6 +1771,7 @@ WFIgnoredElements(void)
             into:(WFDefinitionBuilder *)builder
          context:(WFBpmnReadContext *)context
 {
+	NSUInteger reported = [context.problems count];
 	BOOL isEvent = [name hasSuffix:@"Event"];
 	NSXMLElement *definition = nil;
 	NSString *trigger = nil;
@@ -2043,16 +2059,15 @@ WFIgnoredElements(void)
 			                        name:[self attr:@"name" of:element] ?: elementId];
 		BOOL outer = context.inEventSubProcess;
 		context.inEventSubProcess = triggered;
+		NSUInteger before = [context.problems count];
 		[self readScope:element into:inner context:context];
 		context.inEventSubProcess = outer;
-		if (context.error != nil) {
-			return NO;
-		}
-		NSError *buildError = nil;
-		WFProcessDefinition *scope = [inner build:&buildError];
+		/* What is wrong inside it is said of what it is about. */
+		WFProcessDefinition *scope = [context.problems count] == before
+			? [inner buildCollecting:context.problems unread:context.unread] : nil;
 		if (scope == nil) {
-			[self fail:context error:WFBpmnError(@"%@: %@", elementId,
-				[buildError localizedDescription])];
+			context.error = context.error ?: [context.problems objectAtIndex:before];
+			[context.unread addObject:elementId];
 			return NO;
 		}
 		if (triggered) {
@@ -2069,7 +2084,7 @@ WFIgnoredElements(void)
 			elementId, name)];
 		return NO;
 	}
-	return context.error == nil;
+	return [context.problems count] == reported;
 }
 
 /*
@@ -2122,6 +2137,7 @@ WFIgnoredElements(void)
             into:(WFDefinitionBuilder *)builder
          context:(WFBpmnReadContext *)context
 {
+	NSUInteger reported = [context.problems count];
 	for (NSString *unsupported in @[ @"asyncBefore", @"asyncAfter", @"exclusive" ]) {
 		if ([self attr:unsupported namespace:WFCamundaNamespace of:loop] != nil) {
 			[self fail:context error:WFBpmnError(
@@ -2163,7 +2179,7 @@ WFIgnoredElements(void)
 		                             what:[NSString stringWithFormat:@"%@: completion condition", elementId]
 		                          context:context];
 	}
-	if (context.error != nil) {
+	if ([context.problems count] > reported) {
 		return NO;
 	}
 	BOOL sequential = [[self attr:@"isSequential" of:loop] isEqualToString:@"true"];

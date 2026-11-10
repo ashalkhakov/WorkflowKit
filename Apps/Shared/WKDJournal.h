@@ -1,0 +1,88 @@
+#import <Foundation/Foundation.h>
+
+/* What a journal keeps the record of: a model whose elements' states and
+ * own lists it can take and put back, held in a document. */
+@protocol WKDJournalElement <NSObject>
+- (NSDictionary *)journalState;
+- (void)restoreJournalState:(NSDictionary *)state;
+@end
+
+@protocol WKDJournalModel <WKDJournalElement>
+@property (nonatomic, readonly, strong) NSXMLDocument *document;
+/* Whether the node is an element's carrier: kept as itself when the XML
+ * round it is put back. */
+- (BOOL)carries:(NSXMLNode *)node;
+/* After an undo or a redo: the XML is as the states say, and nothing is
+ * left to write. */
+- (void)journalDidRestore;
+@end
+
+/*
+ * What one editor operation changed, to undo and redo it: each element it
+ * touched -- its values and links -- as it was before and after, recorded
+ * the first time it is touched in the step, the model's own lists, and every
+ * change the writer made to the XML. An operation touches a few elements,
+ * so neither the step nor its undo costs the size of the model, and undoing
+ * it gives back the XML exactly as it was: the writer's edits are reversed,
+ * not written again.
+ */
+@interface WKDJournalStep : NSObject
+@end
+
+@interface WKDJournal : NSObject
+
+- (instancetype)initWithModel:(id<WKDJournalModel>)model;
+
+/* A step begins; until it ends, what is touched and written is recorded. */
+- (void)begin;
+/* The step, with the model's state after it; nil when nothing changed. */
+- (WKDJournalStep *)end;
+@property (nonatomic, readonly) BOOL isRecording;
+
+/* Before an element's values or links change. */
+- (void)willChange:(id<WKDJournalElement>)element;
+/* Before the model's own lists change: its nodes, flows, lanes. */
+- (void)willChangeModel;
+
+/* The writer's edits of the XML, recorded while a step is. */
+- (void)didSetAttribute:(NSString *)name of:(NSXMLElement *)element from:(NSString *)before to:(NSString *)after;
+- (void)didInsert:(NSXMLNode *)child into:(NSXMLElement *)parent at:(NSUInteger)index;
+- (void)didDetach:(NSXMLNode *)child from:(NSXMLElement *)parent at:(NSUInteger)index;
+- (void)didSetText:(NSXMLNode *)node from:(NSString *)before to:(NSString *)after;
+
+/* An edit of an element's own XML done by code that changes it through any
+ * helper: its attributes, namespaces and children before and after, the
+ * children that carry model elements kept as the same objects. Around an
+ * inspector's edit of an element, or of the document's root. */
+- (void)willEditXML:(NSXMLElement *)element;
+- (void)didEditXML:(NSXMLElement *)element;
+
+/* The document's element of the id, from an index kept as edits are made
+ * and undone; nil when there is none. */
+- (NSXMLElement *)elementWithId:(NSString *)elementId;
+/* What the index has wrong, against a walk of the document; nil when
+ * nothing: for tests. */
+- (NSString *)indexDisagreement;
+
+/* The step undone -- the model and the XML as they were before it -- and
+ * the step that redoes it. */
+- (WKDJournalStep *)undo:(WKDJournalStep *)step;
+
+/* The later step's changes made part of the earlier: for a burst of nudges
+ * undone at once. */
+- (void)merge:(WKDJournalStep *)later into:(WKDJournalStep *)earlier;
+
+@end
+
+/* Edits of the XML, recorded in the journal (nil: not recorded) so that
+ * undo takes them back exactly. Every edit made inside a step goes through
+ * these or the model's writer. */
+void WKDLogAttribute(WKDJournal *journal, NSXMLElement *element, NSString *name, NSString *value);
+void WKDLogInsert(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child, NSUInteger index);
+void WKDLogAdd(WKDJournal *journal, NSXMLElement *parent, NSXMLNode *child);
+void WKDLogDetach(WKDJournal *journal, NSXMLNode *child);
+void WKDLogText(WKDJournal *journal, NSXMLNode *node, NSString *text);
+/* A namespaced attribute (nil or empty: none), its namespace declared on
+ * the root when it is not. */
+void WKDLogQualifiedAttribute(WKDJournal *journal, NSXMLDocument *document, NSXMLElement *element, NSString *uri,
+                              NSString *local, NSString *value);

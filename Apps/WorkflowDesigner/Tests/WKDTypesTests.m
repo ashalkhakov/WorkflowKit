@@ -45,7 +45,7 @@ WKDTitles(NSArray<WKDNodeType *> *types)
 	NSString *reason = nil;
 	XCTAssertTrue([editor changeType:@"review" to:[WKDNodeType type:@"serviceTask" eventDefinition:nil title:nil]
 	                           error:&reason], @"%@", reason);
-	WKDShape *review = [editor.diagram shapeWithId:@"review"];
+	WKDNode *review = [editor.model nodeWithId:@"review"];
 	XCTAssertEqualObjects(review.type, @"serviceTask");
 	XCTAssertEqualObjects([review.element name], @"bpmn:serviceTask", @"in its prefix");
 	XCTAssertEqualObjects(review.name, @"Review");
@@ -53,8 +53,8 @@ WKDTitles(NSArray<WKDNodeType *> *types)
 	             @"who does a user task goes");
 	XCTAssertNotNil(WKDDescendants(review.element, WKDCamundaNamespace, @"inputParameter").firstObject,
 	                @"its parameters stay");
-	XCTAssertEqual([[editor.diagram connectionsOf:review] count], (NSUInteger)2, @"and its flows");
-	XCTAssertNotNil([editor.diagram shapeWithId:@"late"].host, @"and what is attached to it");
+	XCTAssertEqual([[editor.model flowsOf:review] count], (NSUInteger)2, @"and its flows");
+	XCTAssertNotNil([editor.model nodeWithId:@"late"].host, @"and what is attached to it");
 }
 
 - (void)testAGatewayBecomesAnother
@@ -74,7 +74,7 @@ WKDTitles(NSArray<WKDNodeType *> *types)
 	NSString *reason = nil;
 	XCTAssertTrue([editor changeType:@"late" to:[WKDNodeType type:@"boundaryEvent"
 	                                            eventDefinition:@"messageEventDefinition" title:nil] error:&reason]);
-	WKDShape *late = [editor.diagram shapeWithId:@"late"];
+	WKDNode *late = [editor.model nodeWithId:@"late"];
 	XCTAssertEqualObjects(late.eventDefinition, @"messageEventDefinition");
 	XCTAssertNil(WKDChild(late.element, WKDBpmnNamespace, @"timerEventDefinition"));
 	XCTAssertEqualObjects([[WKDChildren(late.element, WKDBpmnNamespace, nil) lastObject] localName],
@@ -82,10 +82,10 @@ WKDTitles(NSArray<WKDNodeType *> *types)
 
 	XCTAssertTrue([editor changeType:@"refused" to:[WKDNodeType type:@"endEvent"
 	                                               eventDefinition:@"terminateEventDefinition" title:nil] error:NULL]);
-	XCTAssertEqualObjects([editor.diagram shapeWithId:@"refused"].eventDefinition, @"terminateEventDefinition");
+	XCTAssertEqualObjects([editor.model nodeWithId:@"refused"].eventDefinition, @"terminateEventDefinition");
 	XCTAssertTrue([editor changeType:@"refused" to:[WKDNodeType type:@"endEvent" eventDefinition:nil title:nil]
 	                           error:NULL]);
-	XCTAssertNil([editor.diagram shapeWithId:@"refused"].eventDefinition, @"a none event again");
+	XCTAssertNil([editor.model nodeWithId:@"refused"].eventDefinition, @"a none event again");
 
 	XCTAssertFalse([editor changeType:@"refused" to:[WKDNodeType type:@"startEvent" eventDefinition:nil title:nil]
 	                            error:&reason]);
