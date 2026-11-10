@@ -108,13 +108,16 @@ static const CGFloat WKUOutlineMinimum = 160;
 
 #pragma mark Reading
 
-/* The forms the process names, from beside its file: what deploying it
+/* The forms the process names, and the models and flows it imports (their
+ * forms its tasks may be done with), from beside its file: what deploying it
  * sends with it, and so what it is checked with. */
 - (NSDictionary<NSString *, NSData *> *)formsBeside
 {
 	NSURL *directory = [_document.fileURL URLByDeletingLastPathComponent];
 	NSMutableDictionary *forms = [NSMutableDictionary dictionary];
-	for (NSString *name in directory != nil ? WKDEmbeddedForms(self.processEditor.editor.document) : @[]) {
+	NSXMLDocument *document = self.processEditor.editor.document;
+	NSArray *names = [WKDEmbeddedForms(document) arrayByAddingObjectsFromArray:[WFModelForms importsOfProcess:[document XMLData]]];
+	for (NSString *name in directory != nil ? names : @[]) {
 		NSData *bytes = [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:name]];
 		if (bytes != nil) {
 			[forms setObject:bytes forKey:name];

@@ -63,7 +63,7 @@
 	                                             @"Listeners", @"Continuation" ]));
 	XCTAssertEqualObjects(titles(@"f3"), (@[ @"General", @"Flow", @"Listeners" ]));
 	XCTAssertEqualObjects(titles(@"late"), (@[ @"General", @"Event", @"Listeners", @"Continuation" ]));
-	XCTAssertEqualObjects(titles(@"order"), (@[ @"Process", @"Starting", @"Running", @"Listeners" ]));
+	XCTAssertEqualObjects(titles(@"order"), (@[ @"Process", @"Starting", @"Running", @"Models", @"Listeners" ]));
 	XCTAssertEqualObjects(titles(@"start"), (@[ @"General", @"Form", @"Listeners", @"Continuation" ]));
 	XCTAssertEqualObjects(titles(@"nothing"), @[]);
 }
@@ -237,6 +237,46 @@
 	XCTAssertEqualObjects([self get:@"Executable" of:@"purchase" in:editor], @"true");
 	WFProcessDefinition *definition = [self engineRead:editor];
 	XCTAssertEqualObjects(definition.name, @"Purchase");
+}
+
+/* The models and flows the process imports (ORMKit's), a row each, and a
+ * user task done with one of their forms or flows' entries, chosen from
+ * what is beside the process: the form key the engine is deployed with. */
+- (void)testATaskIsDoneWithAnImportedModelsForm
+{
+	WKDEditor *editor = [self editorOf:WKDModellerFile];
+	WKDProperty *imports = [self property:@"Imported models and flows" of:@"order" in:editor];
+	NSString *reason = nil;
+	NSArray *rows = @[ [WKDRow rowWithValues:@[ @"Logbook.orm" ]], [WKDRow rowWithValues:@[ @"Records.flow" ]] ];
+	XCTAssertTrue([imports setRows:rows in:editor of:@"order" master:NSNotFound error:&reason], @"%@", reason);
+	XCTAssertEqualObjects([[imports rowsIn:editor of:@"order" master:NSNotFound] valueForKey:@"values"],
+	                      (@[ @[ @"Logbook.orm" ], @[ @"Records.flow" ] ]));
+	NSXMLElement *definitions = [editor.document rootElement];
+	NSArray *written = WKDChildren(definitions, WKDBpmnNamespace, @"import");
+	XCTAssertEqual([written count], (NSUInteger)2);
+	XCTAssertEqualObjects(WKDAttribute([written lastObject], @"importType"), WFModelFormsFlowImportType);
+	XCTAssertEqual([[definitions children] indexOfObject:[written firstObject]], (NSUInteger)0, @"first in definitions");
+	XCTAssertEqualObjects([WFModelForms importsOfProcess:[editor.document XMLData]], (@[ @"Logbook.orm", @"Records.flow" ]));
+
+	NSData *model = [@"<ormRoot:ORM2 xmlns:ormRoot=\"http://schemas.neumont.edu/ORM/2006-04/ORMRoot\" "
+	                 @"xmlns:ormq=\"http://schemas.ormkit.org/2026-10/Queries\"><ormq:Queries>"
+	                 @"<ormq:Query id=\"_q\" Name=\"RecordFillUp\" Kind=\"Form\"/></ormq:Queries></ormRoot:ORM2>"
+		dataUsingEncoding:NSUTF8StringEncoding];
+	NSData *flow = [@"<flow:Flow xmlns:flow=\"http://schemas.ormkit.org/2026-10/Flows\" Name=\"Records\">"
+	                @"<flow:Entry Name=\"Start\" Screen=\"s\"/></flow:Flow>" dataUsingEncoding:NSUTF8StringEncoding];
+	editor.resourcesBeside = ^NSDictionary *{
+		return @{ @"Logbook.orm": model, @"Records.flow": flow };
+	};
+	WKDProperty *chosen = [self property:@"Model form" of:@"review" in:editor];
+	XCTAssertEqualObjects(chosen.values, (@[ @"", @"ormkit:form:RecordFillUp", @"ormkit:flow:Records.flow#Start" ]));
+	XCTAssertEqualObjects(chosen.titles, (@[ @"None", @"RecordFillUp (Logbook.orm)", @"Records: Start (Records.flow)" ]));
+	[self set:@"Model form" of:@"review" to:@"ormkit:form:RecordFillUp" in:editor];
+	XCTAssertEqualObjects([self get:@"Form key" of:@"review" in:editor], @"ormkit:form:RecordFillUp");
+	XCTAssertEqualObjects([self get:@"Model form" of:@"review" in:editor], @"ormkit:form:RecordFillUp");
+	WFProcessDefinition *definition = [self engineRead:editor];
+	XCTAssertNotNil(definition);
+	[self set:@"Model form" of:@"review" to:@"" in:editor];
+	XCTAssertEqualObjects([self get:@"Form key" of:@"review" in:editor], @"", @"none: the key gone");
 }
 
 - (void)testAPropertyIsOneUndoStep

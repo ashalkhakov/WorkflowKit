@@ -1,3 +1,4 @@
+#import "WFModelForms.h"
 #import "WFDeploymentChecker.h"
 #import "WFDeployment+Internal.h"
 #import "WFDecision.h"
@@ -203,6 +204,9 @@ WFByPlace(id a, id b, void *context)
 			NSString *text = WFTextOf(data);
 			NSMutableArray *found = [NSMutableArray array];
 			NSArray *definitions = [WFBpmnReader definitionsFromData:data problems:found];
+			/* The model's forms and flows its tasks are done with: imported,
+			 * and beside it. */
+			[found addObjectsFromArray:[WFModelForms problemsOfProcess:data resources:resources]];
 			for (WFProcessDefinition *definition in definitions) {
 				[found addObjectsFromArray:WFDeploymentRefusals(definition, resources)];
 				if ([processKeys containsObject:definition.processId]) {

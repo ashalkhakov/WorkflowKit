@@ -147,6 +147,14 @@ WKDReadProcess(NSData *data, NSUndoManager *undoManager, BOOL *laidOut, NSError 
 	[self performSelector:@selector(checkNow) withObject:nil afterDelay:WKDCheckDelay];
 }
 
+/* What is beside the process: its editor reads its imported models' forms
+ * from it too (the inspector's Model form). */
+- (void)setResourcesBeside:(NSDictionary<NSString *, NSData *> *(^)(void))resourcesBeside
+{
+	_resourcesBeside = [resourcesBeside copy];
+	_editor.resourcesBeside = _resourcesBeside;
+}
+
 #pragma mark The engine's problems
 
 - (void)checkNow
