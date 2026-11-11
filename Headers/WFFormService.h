@@ -17,6 +17,9 @@
 /* A start form's business key: the one it is submitted with, which the
  * handler may set when the submission gives one. */
 @property (nonatomic, copy) NSString *businessKey;
+/* The form's XForms document, as deployed beside the process; nil for a
+ * key the application resolves itself. */
+@property (nonatomic, readonly, strong) NSXMLDocument *document;
 - (instancetype)init NS_UNAVAILABLE;
 @end
 

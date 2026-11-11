@@ -315,6 +315,13 @@ WFXFormsLabel(NSString *text)
 	return [_formKey hasPrefix:prefix] ? [_formKey substringFromIndex:[prefix length]] : nil;
 }
 
+- (NSString *)modelFormDocumentName
+{
+	NSString *prefix = @"ormkit:form:";
+	return [_formKey hasPrefix:prefix] && [_formKey length] > [prefix length]
+		? [[_formKey substringFromIndex:[prefix length]] stringByAppendingPathExtension:@"xhtml"] : nil;
+}
+
 - (WFFormField *)fieldWithId:(NSString *)fieldId
 {
 	for (WFFormField *field in _fields) {

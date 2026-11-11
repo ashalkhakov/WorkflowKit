@@ -320,3 +320,83 @@
 	XCTAssertNil([b build:&error]);
 	XCTAssertTrue([[error localizedDescription] rangeOfString:@"only a user task or a start event"].location != NSNotFound);
 }
+
+/* A user task done with an object-role model's form (ORMKit's
+ * docs/FORMS.md): its XForms document, as ormtool xforms writes it,
+ * deployed beside the process; the form's inputs (its binds' given ones)
+ * filled from the variables, and what is submitted the variables it sets,
+ * a repeat's rows an array; without the document, the variables for the
+ * application's own view. */
+- (void)testATaskIsDoneWithAModelsForm
+{
+	NSError *error = nil;
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	NSData *bpmn = [@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+		@"<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\""
+		@" xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" id=\"d\">\n"
+		@"  <import importType=\"http://schemas.neumont.edu/ORM/2006-04/ORMRoot\" location=\"Logbook.orm\" namespace=\"logbook\"/>\n"
+		@"  <process id=\"refuel\" isExecutable=\"true\">\n"
+		@"    <startEvent id=\"start\"/>\n"
+		@"    <sequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"record\"/>\n"
+		@"    <userTask id=\"record\" camunda:formKey=\"ormkit:form:RecordFillUp\"/>\n"
+		@"    <sequenceFlow id=\"f2\" sourceRef=\"record\" targetRef=\"end\"/>\n"
+		@"    <endEvent id=\"end\"/>\n"
+		@"  </process>\n</definitions>\n" dataUsingEncoding:NSUTF8StringEncoding];
+	NSData *model = [@"<ormRoot:ORM2 xmlns:ormRoot=\"http://schemas.neumont.edu/ORM/2006-04/ORMRoot\""
+		@" xmlns:ormq=\"http://schemas.ormkit.org/2026-10/Queries\"><ormq:Queries>"
+		@"<ormq:Query id=\"_q2\" Name=\"RecordFillUp\" Kind=\"Form\"/></ormq:Queries></ormRoot:ORM2>"
+		dataUsingEncoding:NSUTF8StringEncoding];
+	NSData *form = [@"<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:xf=\"http://www.w3.org/2002/xforms\""
+		@" xmlns:ormf=\"urn:ormkit:forms\"><head><title>RecordFillUp</title><xf:model id=\"form-_q2\">"
+		@"<xf:instance id=\"form\"><FillUp xmlns=\"\"><id/><vehicle/><timestamp/><contact><contactName/></contact></FillUp></xf:instance>"
+		@"<xf:bind id=\"bind-a\" ref=\"id\" ormf:role=\"key\"/>"
+		@"<xf:bind id=\"bind-b\" ref=\"vehicle\" ormf:role=\"given\"/>"
+		@"<xf:bind id=\"bind-c\" ref=\"timestamp\" ormf:role=\"entered\"/>"
+		@"<xf:bind id=\"bind-d\" ref=\"contact/contactName\" ormf:role=\"entered\"/>"
+		@"<xf:bind id=\"bind-e\" ref=\"lines/item\" ormf:role=\"entered\"/>"
+		@"</xf:model></head><body><xf:repeat id=\"repeat-lines\" nodeset=\"lines\"/></body></html>"
+		dataUsingEncoding:NSUTF8StringEncoding];
+	NSDictionary *resources = @{ @"refuel.bpmn" : bpmn, @"Logbook.orm" : model, @"RecordFillUp.xhtml" : form };
+	XCTAssertNotNil([engine.repositoryService deployResources:resources name:@"refuel" filterDuplicates:NO error:&error], @"%@", error);
+	WFProcessInstance *instance = [engine.runtimeService startProcessInstanceByKey:@"refuel" variables:@{ @"vehicle" : @"V7" }
+	                                                                         error:&error];
+	XCTAssertNotNil(instance, @"%@", error);
+	NSString *taskId = [self task:@"record" of:instance.processInstanceId engine:engine].taskId;
+	WFFormData *data = [engine.formService formDataForTask:taskId error:&error];
+	XCTAssertNotNil(data.document, @"deployed beside it: %@", error);
+	XCTAssertEqualObjects([[data.instance rootElement] name], @"FillUp");
+	XCTAssertEqualObjects([self textOf:@"vehicle" in:data.instance], @"V7", @"the form's input, from the variable");
+	NSXMLDocument *filled = [[NSXMLDocument alloc] initWithXMLString:
+		@"<FillUp><id/><vehicle>V7</vehicle><timestamp>2026-11-12T08:00:00Z</timestamp>"
+		@"<contact><contactName>Ann</contactName></contact>"
+		@"<lines><item>OIL</item></lines><lines><item>FILTER</item></lines></FillUp>" options:0 error:NULL];
+	XCTAssertTrue([engine.formService submitTaskForm:taskId instance:filled error:&error], @"%@", error);
+	XCTAssertTrue([self ended:instance.processInstanceId engine:engine]);
+	NSDictionary *set = [engine.historyService historicVariablesForProcessInstance:instance.processInstanceId];
+	XCTAssertEqualObjects([set objectForKey:@"contact/contactName"], @"Ann", @"%@", set);
+	XCTAssertEqualObjects([set objectForKey:@"lines"], (@[ @{ @"item" : @"OIL" }, @{ @"item" : @"FILTER" } ]), @"%@", set);
+
+	/* Without the document: the variables, for the application's view. */
+	NSMutableDictionary *bare = [resources mutableCopy];
+	[bare removeObjectForKey:@"RecordFillUp.xhtml"];
+	XCTAssertNotNil([engine.repositoryService deployResources:bare name:@"bare" filterDuplicates:NO error:&error], @"%@", error);
+	WFProcessInstance *again = [engine.runtimeService startProcessInstanceByKey:@"refuel" variables:@{ @"vehicle" : @"V8" } error:&error];
+	NSString *againTask = [self task:@"record" of:again.processInstanceId engine:engine].taskId;
+	WFFormData *bareData = [engine.formService formDataForTask:againTask error:&error];
+	XCTAssertNil(bareData.document);
+	XCTAssertEqualObjects([[bareData.instance rootElement] name], @"variables", @"%@", error);
+	XCTAssertEqualObjects([self textOf:@"vehicle" in:bareData.instance], @"V8");
+}
+
+/* What a submitted model form sets: each element by its path, a repeat's
+ * rows an array of dictionaries. */
+- (void)testAModelFormsSubmissionIsItsElements
+{
+	WFModelFormHandler *handler = [[WFModelFormHandler alloc] init];
+	NSXMLDocument *filled = [[NSXMLDocument alloc] initWithXMLString:
+		@"<FillUp><id/><vehicle>V7</vehicle><contact><contactName>Ann</contactName></contact>"
+		@"<lines><item>OIL</item></lines><lines><item>FILTER</item></lines></FillUp>" options:0 error:NULL];
+	NSDictionary *variables = [handler variablesFromInstance:filled form:nil error:NULL];
+	XCTAssertEqualObjects(variables, (@{ @"id" : @"", @"vehicle" : @"V7", @"contact/contactName" : @"Ann",
+	                                     @"lines" : @[ @{ @"item" : @"OIL" }, @{ @"item" : @"FILTER" } ] }));
+}
