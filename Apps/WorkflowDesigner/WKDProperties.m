@@ -2,6 +2,11 @@
 #import "WKDModel.h"
 #import "WKDEditor.h"
 #import "WKDXML.h"
+#if __has_include(<WorkflowKit/WFModelForms.h>)
+#import <WorkflowKit/WFModelForms.h>
+#else
+#import "WFModelForms.h"
+#endif
 
 typedef NSString *(^WKDRead)(NSXMLElement *element, NSXMLDocument *document);
 /* NO, with why, when it cannot be written. */
@@ -374,6 +379,31 @@ WKDUserTaskProperties(void)
 	((WKDProperty *)properties[2]).placeholder = @"managers, department:purchasing";
 	((WKDProperty *)properties[0]).placeholder = @"ann, ${owner}, =reviewer";
 	return properties;
+}
+
+/* A form or a flow of a model the process imports (ORMKit's: WFModelForms),
+ * by its form key: a choice of those beside the process, or none. A key
+ * naming one the process no longer imports is offered as it is, and said. */
+static WKDProperty *
+WKDModelForm(WKDEditor *editor)
+{
+	NSDictionary *beside = editor.resourcesBeside != nil ? editor.resourcesBeside() ?: @{} : @{};
+	NSArray<WFModelForm *> *forms = [WFModelForms formsImportedBy:[editor.document XMLData] resources:beside];
+	NSMutableArray *values = [NSMutableArray arrayWithObject:@""], *titles = [NSMutableArray arrayWithObject:@"None"];
+	for (WFModelForm *form in forms) {
+		[values addObject:form.formKey];
+		[titles addObject:form.title];
+	}
+	WKDProperty *property = WKDMake(@"Model form", WKDPropertyChoice, ^NSString *(NSXMLElement *element, NSXMLDocument *document) {
+		NSString *key = WKDQualifiedAttribute(document, element, WKDCamundaNamespace, @"formKey");
+		return [key hasPrefix:@"ormkit:"] ? key : @"";
+	}, WKDEditing(@"Model form", ^(NSXMLElement *element, NSXMLDocument *document, NSString *value, WKDEditor *weakEditor) {
+		NSString *key = WKDQualifiedAttribute(document, element, WKDCamundaNamespace, @"formKey");
+		if ([value length] > 0 || [key hasPrefix:@"ormkit:"]) {
+			WKDSetQualifiedAttribute(document, element, WKDCamundaNamespace, @"formKey", [value length] > 0 ? value : nil);
+		}
+	}));
+	return WKDChoice(property, values, titles);
 }
 
 static NSArray *
@@ -1191,6 +1221,47 @@ WKDBusinessKeyField(void)
 	return property;
 }
 
+/* The object-role models and flows the process imports (ORMKit's), a row
+ * each by its place beside the process: bpmn:imports of its definitions,
+ * first among them, as BPMN has them, typed by the file's kind. */
+static WKDProperty *
+WKDImports(void)
+{
+	WKDColumn *location = WKDTextColumn(@"File beside the process", 1);
+	location.placeholder = @"Logbook.orm, Records.flow";
+	NSArray *types = @[ WFModelFormsORMImportType, WFModelFormsFlowImportType ];
+	return WKDTable(@"Imported models and flows", @[ location ], @[ @"" ], ^NSArray<NSXMLElement *> *(NSXMLElement *process) {
+		NSMutableArray *imports = [NSMutableArray array];
+		for (NSXMLElement *each in WKDChildren((NSXMLElement *)[process parent], WKDBpmnNamespace, @"import")) {
+			if ([types containsObject:WKDAttribute(each, @"importType") ?: @""]) {
+				[imports addObject:each];
+			}
+		}
+		return imports;
+	}, ^NSArray<NSString *> *(NSXMLElement *entry, NSXMLDocument *document) {
+		return @[ WKDAttribute(entry, @"location") ?: @"" ];
+	}, ^(NSXMLElement *entry, NSArray<NSString *> *values, NSXMLDocument *document) {
+		NSString *place = [values firstObject] ?: @"";
+		WKDSetAttribute(entry, @"location", [place length] > 0 ? place : nil);
+		WKDSetAttribute(entry, @"importType", [[place pathExtension] isEqualToString:@"flow"] ? WFModelFormsFlowImportType
+		                                                                                    : WFModelFormsORMImportType);
+		WKDSetAttribute(entry, @"namespace", [place length] > 0 ? [place stringByDeletingPathExtension] : nil);
+	}, ^NSXMLElement *(NSXMLElement *process, NSXMLDocument *document) {
+		NSXMLElement *definitions = (NSXMLElement *)[process parent];
+		NSXMLElement *entry = WKDNewElement(document, WKDBpmnNamespace, @"import");
+		/* Imports come first in definitions. */
+		NSUInteger at = 0;
+		for (NSXMLNode *child in [definitions children]) {
+			if ([child kind] == NSXMLElementKind && ![[child localName] isEqualToString:@"import"]) {
+				break;
+			}
+			at++;
+		}
+		[definitions insertChild:entry atIndex:at];
+		return entry;
+	}, nil);
+}
+
 NSArray<WKDSection *> *
 WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 {
@@ -1200,7 +1271,7 @@ WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 	}
 	NSString *type = [element localName];
 	if ([type isEqualToString:@"process"]) {
-		return [WKDProcessSections() arrayByAddingObject:
+		return [[WKDProcessSections() arrayByAddingObject:WKDMakeSection(@"Models", @[ WKDImports() ])] arrayByAddingObject:
 			WKDMakeSection(@"Listeners", @[ WKDListeners(NO, @[ @"start", @"end" ]) ])];
 	}
 	NSMutableArray *sections = [NSMutableArray arrayWithObject:WKDMakeSection(@"General", @[
@@ -1214,7 +1285,8 @@ WKDSectionsFor(WKDEditor *editor, NSString *elementId)
 	WKDShapeKind kind = WKDKindOfType(type, &flowNode);
 	if ([type isEqualToString:@"userTask"]) {
 		[sections addObject:WKDMakeSection(@"Assignment", WKDUserTaskProperties())];
-		[sections addObject:WKDMakeSection(@"Form", [WKDFormProperties() arrayByAddingObject:WKDFormFields()])];
+		[sections addObject:WKDMakeSection(@"Form", [[@[ WKDModelForm(editor) ] arrayByAddingObjectsFromArray:WKDFormProperties()]
+			arrayByAddingObject:WKDFormFields()])];
 	} else if ([type isEqualToString:@"serviceTask"] || [type isEqualToString:@"sendTask"]) {
 		[sections addObject:WKDMakeSection(@"Implementation",
 			[WKDImplementationProperties() arrayByAddingObject:WKDFields(YES)])];

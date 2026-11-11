@@ -95,4 +95,64 @@ WFIds(NSArray<WFProblem *> *problems)
 	XCTAssertEqualObjects([[problems firstObject] resourceName], @"rules.dmn");
 }
 
+/* A process that imports an object-role model and a flow beside it
+ * (ORMKit's): its tasks done with the model's forms and the flow's
+ * entries, by form key; a key naming what it does not import, and an
+ * import not beside it, refused. */
+- (void)testATaskIsDoneWithAModelsFormOrFlow
+{
+	NSString *(^process)(NSString *, NSString *) = ^NSString *(NSString *imports, NSString *key) {
+		return [NSString stringWithFormat:
+			@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+			@"<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n"
+			@"    xmlns:camunda=\"http://camunda.org/schema/1.0/bpmn\" id=\"d\">\n%@"
+			@"  <process id=\"refuel\" isExecutable=\"true\">\n"
+			@"    <startEvent id=\"start\"/>\n"
+			@"    <sequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"record\"/>\n"
+			@"    <userTask id=\"record\" camunda:formKey=\"%@\"/>\n"
+			@"    <sequenceFlow id=\"f2\" sourceRef=\"record\" targetRef=\"end\"/>\n"
+			@"    <endEvent id=\"end\"/>\n"
+			@"  </process>\n</definitions>\n", imports, key];
+	};
+	NSString *imports =
+		@"  <import importType=\"http://schemas.neumont.edu/ORM/2006-04/ORMRoot\" location=\"Logbook.orm\" namespace=\"logbook\"/>\n"
+		@"  <import importType=\"http://schemas.ormkit.org/2026-10/Flows\" location=\"Records.flow\" namespace=\"records\"/>\n";
+	NSData *model = WFBytes(
+		@"<ormRoot:ORM2 xmlns:ormRoot=\"http://schemas.neumont.edu/ORM/2006-04/ORMRoot\" xmlns:ormq=\"http://schemas.ormkit.org/2026-10/Queries\">"
+		@"<ormq:Queries><ormq:Query id=\"_q1\" Name=\"Vehicles\"/><ormq:Query id=\"_q2\" Name=\"RecordFillUp\" Kind=\"Form\"/></ormq:Queries>"
+		@"</ormRoot:ORM2>");
+	NSData *flow = WFBytes(
+		@"<flow:Flow xmlns:flow=\"http://schemas.ormkit.org/2026-10/Flows\" Name=\"Records\" Model=\"Logbook.orm\">"
+		@"<flow:Entry Name=\"Start\" Screen=\"s1\"/></flow:Flow>");
+	NSData *bpmn = WFBytes(process(imports, @"ormkit:form:RecordFillUp"));
+	NSDictionary *beside = @{ @"Logbook.orm": model, @"Records.flow": flow };
+
+	XCTAssertEqualObjects([WFModelForms importsOfProcess:bpmn], (@[ @"Logbook.orm", @"Records.flow" ]));
+	NSArray<WFModelForm *> *forms = [WFModelForms formsImportedBy:bpmn resources:beside];
+	XCTAssertEqualObjects([forms valueForKey:@"formKey"], (@[ @"ormkit:form:RecordFillUp", @"ormkit:flow:Records.flow#Start" ]),
+		@"the model's forms, not its lists; the flow's entries");
+	XCTAssertEqualObjects([[forms firstObject] title], @"RecordFillUp (Logbook.orm)");
+	XCTAssertEqualObjects([[forms lastObject] title], @"Records: Start (Records.flow)");
+	XCTAssertTrue([[forms lastObject] isFlow]);
+
+	NSMutableDictionary *resources = [beside mutableCopy];
+	[resources setObject:bpmn forKey:@"refuel.bpmn"];
+	XCTAssertEqualObjects([WFDeploymentChecker problemsInResources:resources], @[], @"a form it imports");
+	[resources setObject:WFBytes(process(imports, @"ormkit:flow:Records.flow#Start")) forKey:@"refuel.bpmn"];
+	XCTAssertEqualObjects([WFDeploymentChecker problemsInResources:resources], @[], @"a flow's entry");
+
+	[resources setObject:WFBytes(process(imports, @"ormkit:form:RecordService")) forKey:@"refuel.bpmn"];
+	NSArray<WFProblem *> *problems = [WFDeploymentChecker problemsInResources:resources];
+	XCTAssertEqualObjects(WFIds(problems), @[ @"record" ], @"%@", problems);
+	XCTAssertTrue([[[problems firstObject] message] rangeOfString:@"is not a form the process imports"].location != NSNotFound,
+		@"%@", [[problems firstObject] message]);
+
+	[resources removeObjectForKey:@"Records.flow"];
+	[resources setObject:bpmn forKey:@"refuel.bpmn"];
+	problems = [WFDeploymentChecker problemsInResources:resources];
+	XCTAssertEqual([problems count], (NSUInteger)1, @"%@", problems);
+	XCTAssertTrue([[[problems firstObject] message] rangeOfString:@"imports Records.flow, which is not beside it"].location != NSNotFound,
+		@"%@", [[problems firstObject] message]);
+}
+
 @end

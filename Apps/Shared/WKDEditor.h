@@ -41,6 +41,10 @@ extern NSString * const WKDEditorWillRenameNotification;
 /* After every change, undo and redo, the model is compared with one read
  * afresh from the document, and a disagreement raises: for tests. */
 @property (class, nonatomic) BOOL checksAgreement;
+/* The files beside the document, by name: what a user task's model forms
+ * are read from (WFModelForms), the models and flows it imports. nil, or
+ * none, where it is not saved anywhere. */
+@property (nonatomic, copy) NSDictionary<NSString *, NSData *> *(^resourcesBeside)(void);
 
 /* Shapes for the nodes that have none, laid out with the rest left as
  * they are; nothing when every node has one. Not undoable: for opening. */
