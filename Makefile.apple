@@ -15,12 +15,14 @@
 #                                     Apple's Core Data), WorkflowDesk's, the
 #                                     designer's parts', and the extension's
 #   make -f Makefile.apple install DESTDIR=<dir>       WorkflowDesk, and
-#                                     WorkflowKit.xcframework and
-#                                     WorkflowKitOData.xcframework (what an
-#                                     app pins: WORKFLOWKIT_VERSION)
+#                                     WorkflowKit.xcframework,
+#                                     WorkflowKitOData.xcframework and
+#                                     bin/wf-build (what an app pins:
+#                                     WORKFLOWKIT_VERSION)
 #   make -f Makefile.apple installcheck DESTDIR=<dir>  the app embeds the
 #                                     frameworks it links, and its signature
-#                                     holds
+#                                     holds; bin/wf-build builds a
+#                                     deployment beside the XCFramework
 #
 # GNUstep: GNUmakefile.
 
@@ -45,7 +47,7 @@ all:
 	@for fw in $(DEPS); do test -d .deps/$$fw.xcframework \
 	  || { echo "no $$fw in .deps: gnustep-release-actions' scripts/deps.sh apple fetches what .github/pins.env names"; exit 1; }; \
 	done
-	@for scheme in WorkflowKit wf-serve $(APPS) $(EXTENSION); do \
+	@for scheme in WorkflowKit wf-serve wf-build $(APPS) $(EXTENSION); do \
 	  $(XCODEBUILD) -scheme $$scheme -configuration Release -destination 'generic/platform=macOS' build || exit 1; \
 	done
 	@for fw in $(FRAMEWORKS); do \
@@ -68,7 +70,11 @@ install: all
 	@for fw in $(FRAMEWORKS); do \
 	  rm -rf $(DESTDIR)/$$fw.xcframework && ditto $(BUILD)/$$fw.xcframework $(DESTDIR)/$$fw.xcframework || exit 1; \
 	done
+	mkdir -p $(DESTDIR)/bin
+	cp $(RELEASE)/wf-build $(DESTDIR)/bin/wf-build
 
+# ... and bin/wf-build run where a build that pins WorkflowKit unpacks it:
+# .deps/bin beside WorkflowKit's XCFramework.
 installcheck:
 	@for app in $(APPS); do \
 	  for fw in ODataKit ODataIncrementalStore OTelKit XFormsKit DiagramKit DiagramKitUI Sparkle; do \
@@ -77,6 +83,10 @@ installcheck:
 	  done; \
 	  codesign --verify --deep --strict $(DESTDIR)/$$app.app || exit 1; \
 	done
+	@deps=$$(mktemp -d) && \
+	  cp -R $(DESTDIR)/WorkflowKit.xcframework $(DESTDIR)/bin $$deps/ && \
+	  $$deps/bin/wf-build -o $$deps/expense-review.wfdeployment Examples/Processes/expense-review \
+	  && test -d $$deps/expense-review.wfdeployment; status=$$?; rm -rf $$deps; exit $$status
 
 clean:
 	rm -rf $(BUILD)

@@ -592,9 +592,13 @@ TESTS_S = {
     "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData", "$(SRCROOT)/Examples/Plugins")',
     "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks")',
 }
+# Beside its framework when built; and, installed as a library's
+# bin/wf-build (Makefile.apple), beside the XCFramework a build that pins
+# WorkflowKit unpacks into .deps/: its macOS slice.
 BUILD_S = {
     "HEADER_SEARCH_PATHS": '"$(SRCROOT)/Headers"',
-    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path")',
+    "LD_RUNPATH_SEARCH_PATHS": '("$(inherited)", "@executable_path", "@loader_path", '
+                               '"@executable_path/../WorkflowKit.xcframework/macos-arm64_x86_64")',
 }
 SERVE_S = {
     "HEADER_SEARCH_PATHS": '("$(SRCROOT)/Headers", "$(SRCROOT)/OData")',
@@ -852,6 +856,8 @@ demo_ref = ref(t_demo, "PurchaseRequestDemo", "PurchaseRequestDemo")
 serve_ref = ref(t_serve, "wf-serve", "wf-serve")
 scheme("WorkflowKit", [fw_ref, odata_ref], test=tests_ref)
 scheme("PurchaseRequestDemo", [demo_ref], run=demo_ref)
+build_ref = ref(t_build, "wf-build", "wf-build")
+scheme("wf-build", [fw_ref, build_ref])
 # Run from Server/, on the example deployments, as `make -C Server run` does,
 # with the example plugin built beside it rather than where make puts it.
 plugin_ref = ref(t_plugin, "ExampleDelegates", "ExampleDelegates.bundle")

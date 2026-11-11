@@ -2352,7 +2352,7 @@
 			baseConfigurationReference = 82FF15CF25ACF32BC27A22C5 /* Release.xcconfig */;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path", "@loader_path");
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path", "@loader_path", "@executable_path/../WorkflowKit.xcframework/macos-arm64_x86_64");
 			};
 			name = Release;
 		};
@@ -2612,7 +2612,7 @@
 			baseConfigurationReference = 6A39BD6A1A322B814E9ED908 /* Debug.xcconfig */;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Headers";
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path", "@loader_path");
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path", "@loader_path", "@executable_path/../WorkflowKit.xcframework/macos-arm64_x86_64");
 			};
 			name = Debug;
 		};
