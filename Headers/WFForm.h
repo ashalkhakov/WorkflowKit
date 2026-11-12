@@ -90,6 +90,10 @@ typedef NS_ENUM(NSInteger, WFFormFieldType) {
 @property (nonatomic, readonly, copy) NSString *formHandlerName;
 /* The resource embedded:deployment:<resource> names; nil for another key. */
 @property (nonatomic, readonly, copy) NSString *deploymentResourceName;
+/* A model's form's XForms document, ormkit:form:<Form>'s <Form>.xhtml, as
+ * ormtool xforms writes it: deployed with the process where it is beside
+ * it, the application's to resolve where not; nil for another key. */
+@property (nonatomic, readonly, copy) NSString *modelFormDocumentName;
 @property (nonatomic, readonly, copy) NSArray<WFFormField *> *fields;
 /* A start form's field whose value becomes the instance's business key
  * (camunda:formData businessKey); nil for none. */

@@ -8,6 +8,8 @@
 #import "WFRepositoryService.h"
 #import "WFRuntimeService.h"
 #import "WFTaskService.h"
+#import "WFModelFormHandler.h"
+#import "WFModelForms.h"
 
 @interface WFFormContext ()
 @property (nonatomic, readwrite, strong) WFFormDefinition *form;
@@ -16,6 +18,7 @@
 @property (nonatomic, readwrite, copy) NSString *definitionId;
 @property (nonatomic, readwrite, copy) NSString *activityId;
 @property (nonatomic, readwrite, copy) NSDictionary *variables;
+@property (nonatomic, readwrite, strong) NSXMLDocument *document;
 @end
 
 @implementation WFFormContext
@@ -112,6 +115,10 @@
 	if ([form.fields count] > 0) {
 		return [[WFFieldsFormHandler alloc] init];
 	}
+	/* A model's form or flow (ormkit:form:, ormkit:flow:): its own. */
+	if ([form.formKey hasPrefix:WFModelFormKeyPrefix] || [form.formKey hasPrefix:WFModelFlowKeyPrefix]) {
+		return [[WFModelFormHandler alloc] init];
+	}
 	id<WFFormHandler> handler = _engine.defaultFormHandler;
 	if (handler == nil && error != NULL) {
 		*error = [NSError errorWithDomain:WFErrorDomain code:WFErrorHandler userInfo:@{ NSLocalizedDescriptionKey:
@@ -204,6 +211,7 @@
 
 - (WFFormData *)dataOf:(WFFormContext *)context error:(NSError **)error
 {
+	context.document = [self documentOf:context];
 	NSError *handlerError = nil;
 	id<WFFormHandler> handler = [self handlerOf:context error:&handlerError];
 	NSXMLDocument *instance = nil;
@@ -213,7 +221,7 @@
 			return nil;
 		}
 	}
-	return [WFFormData dataWithContext:context document:[self documentOf:context] instance:instance];
+	return [WFFormData dataWithContext:context document:context.document instance:instance];
 }
 
 - (WFFormData *)formDataForTask:(NSString *)taskId error:(NSError **)error
@@ -230,6 +238,7 @@
 
 - (NSDictionary *)variablesFrom:(NSXMLDocument *)instance context:(WFFormContext *)context error:(NSError **)error
 {
+	context.document = context.document ?: [self documentOf:context];
 	id<WFFormHandler> handler = [self handlerOf:context error:error];
 	if (handler == nil) {
 		return nil;

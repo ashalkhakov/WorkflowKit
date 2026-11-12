@@ -21,12 +21,13 @@
  *   camunda:formKey="ormkit:form:RecordFillUp"
  *   camunda:formKey="ormkit:flow:Records.flow#Start"
  *
- * The engine renders neither: the application resolves the key, as it does
- * any key the engine does not deploy itself, and opens its own view of the
- * form (its screens are the form's views); the task's input mappings give
- * the form's inputs, and what the form saved comes back as the variables its
- * form handler sets. The model's files are read as XML: WorkflowKit does not
- * build on ORMKit.
+ * The engine renders neither: the application opens its own view of the
+ * form (its screens are the form's views). A form's XForms document, as
+ * ormtool xforms writes it (<Form>.xhtml), is deployed with the process
+ * where it is beside it; WFModelFormHandler, the engine's handler of such
+ * keys, fills the form's inputs (its given elements) from the task's
+ * variables, and what is submitted comes back as the variables it sets.
+ * The model's files are read as XML: WorkflowKit does not build on ORMKit.
  */
 
 WORKFLOWKIT_EXPORT NSString * const WFModelFormsORMImportType;

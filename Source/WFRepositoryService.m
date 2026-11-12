@@ -425,7 +425,9 @@ WFRepositoryError(WFErrorCode code, NSString *message)
 		NSMutableDictionary *documents = [NSMutableDictionary dictionary];
 		for (NSString *activityId in record.forms) {
 			WFFormDefinition *form = [record.forms objectForKey:activityId];
-			NSString *resource = form.deploymentResourceName;
+			/* A model's form's, where ormtool xforms's is beside it. */
+			NSString *resource = form.deploymentResourceName
+				?: ([resources objectForKey:form.modelFormDocumentName ?: @""] != nil ? form.modelFormDocumentName : nil);
 			if (resource != nil) {
 				NSData *bytes = [resources objectForKey:resource];
 				NSXMLDocument *document = bytes != nil
