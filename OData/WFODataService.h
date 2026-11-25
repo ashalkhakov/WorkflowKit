@@ -48,6 +48,11 @@
  *       .SetVariables(Variables), .RemoveVariables(Names)
  *   Tasks(id)/WorkflowKit.SubmitForm(Instance)
  *   SubmitStartForm(Key, BusinessKey, Instance)
+ *   AllOpenTasks(), TasksOfBusinessKey(BusinessKey)
+ *       the caller's open tasks (or one business key's), each with its
+ *       process's business key: TaskId, Name, TaskDefinitionKey, FormKey,
+ *       ProcessInstanceId, BusinessKey, Assignee, CreatedAt -- a task
+ *       list's, under Tasks.Work, with no process instance read
  *
  * External tasks are worked through it as through WFExternalTaskService,
  * by workers anywhere:

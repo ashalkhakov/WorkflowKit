@@ -467,6 +467,52 @@
 	                                     body:@{ @"IncludeInstances": @NO } service:service]]), (NSInteger)204);
 }
 
+/* A task list's question, under Tasks.Work: the caller's open tasks, each
+ * with its process's business key (which order it is of), and those of one
+ * business key -- without reading process instances, which is
+ * Operations.Read's. */
+- (void)testODataOpenTasksSayTheirBusinessKeys
+{
+	WFProcessEngine *engine = [self engineWithHandler:nil];
+	ODataService *service = [self serviceFor:engine];
+	WFDefinitionBuilder *b = [WFDefinitionBuilder process:@"open"];
+	[[[b addStart:@"start"] addUserTask:@"chore" name:@"Chore" assignee:@"dan"] addEnd:@"end"];
+	[[b connect:@"start" to:@"chore"] connect:@"chore" to:@"end"];
+	NSError *error = nil;
+	[self run:[b build:&error] engine:engine variables:nil];
+	NSDictionary *operator = @{ @"X-User": @"oz", @"X-Scopes": @"Operations.Read Tasks.ReadAll ProcessInstances.StartAny" };
+	for (NSString *key in @[ @"order-7", @"order-8" ]) {
+		XCTAssertEqual(([self statusOf:[self send:@"POST" path:@"StartProcessInstance" body:@{ @"Key": @"open", @"BusinessKey": key }
+		                                  headers:operator service:service]]), (NSInteger)200);
+	}
+	NSDictionary *dan = @{ @"X-User": @"dan", @"X-Scopes": @"Tasks.Work" };
+	NSDictionary *eve = @{ @"X-User": @"eve", @"X-Scopes": @"Tasks.Work" };
+	NSArray *(^rows)(NSString *, NSDictionary *) = ^NSArray *(NSString *path, NSDictionary *who) {
+		NSDictionary *response = [self send:@"GET" path:path body:nil headers:who service:service];
+		XCTAssertEqual([self statusOf:response], (NSInteger)200, @"%@: %@", path, [response objectForKey:@"text"]);
+		return [[self jsonOf:response] objectForKey:@"value"];
+	};
+	NSArray *all = rows(@"AllOpenTasks()", dan);
+	XCTAssertEqual([all count], (NSUInteger)3, @"%@", all);
+	NSMutableSet *keys = [NSMutableSet set];
+	for (NSDictionary *row in all) {
+		if ([[row objectForKey:@"BusinessKey"] isKindOfClass:[NSString class]]) [keys addObject:[row objectForKey:@"BusinessKey"]];
+	}
+	XCTAssertEqualObjects(keys, ([NSSet setWithObjects:@"order-7", @"order-8", nil]), @"each its process's business key");
+	XCTAssertEqualObjects([[all lastObject] objectForKey:@"Name"], @"Chore");
+	XCTAssertEqualObjects([[all lastObject] objectForKey:@"TaskDefinitionKey"], @"chore");
+	NSArray *seventh = rows(@"TasksOfBusinessKey(BusinessKey='order-7')", dan);
+	XCTAssertEqual([seventh count], (NSUInteger)1, @"%@", seventh);
+	XCTAssertEqualObjects([[seventh firstObject] objectForKey:@"BusinessKey"], @"order-7");
+	XCTAssertEqual([rows(@"TasksOfBusinessKey(BusinessKey='order-9')", dan) count], (NSUInteger)0);
+	XCTAssertEqual([rows(@"AllOpenTasks()", eve) count], (NSUInteger)0, @"none of them hers");
+	XCTAssertEqual([rows(@"TasksOfBusinessKey(BusinessKey='order-7')", eve) count], (NSUInteger)0, @"nor by its key");
+	XCTAssertEqual(([self statusOf:[self send:@"GET" path:@"AllOpenTasks()" body:nil headers:@{ @"X-User": @"dan" } service:service]]),
+		(NSInteger)403, @"signed in, but not to work on tasks");
+	XCTAssertEqual(([self statusOf:[self send:@"GET" path:@"ProcessInstances" body:nil headers:dan service:service]]),
+		(NSInteger)403, @"the instances still an operator's");
+}
+
 /* Who may see and do what: the processes say it, by user, group or claim,
  * and an operator's scopes lift it. */
 - (void)testODataLimitsWhatEachCallerSeesAndDoes
