@@ -12,7 +12,9 @@
  * An engine's state as an OData service (ODataKit's ODataService), under
  * the model's API configuration, in the WorkflowKit namespace:
  *
- *   Tasks                     open user tasks
+ *   Tasks                     open user tasks; each one's BusinessKey its
+ *                             process instance's (ODataKit's OData.keyPath:
+ *                             selected and filtered by under Tasks.Work)
  *   ProcessInstances          running process instances
  *   Variables                 their variables
  *   ProcessDefinitions        deployed definitions, every version
