@@ -467,11 +467,11 @@
 	                                     body:@{ @"IncludeInstances": @NO } service:service]]), (NSInteger)204);
 }
 
-/* A task list's question, under Tasks.Work: the caller's open tasks, each
- * with its process's business key (which order it is of), and those of one
- * business key -- without reading process instances, which is
- * Operations.Read's. */
-- (void)testODataOpenTasksSayTheirBusinessKeys
+/* A task's process's business key (which order a task is of), its own
+ * BusinessKey (ODataKit's OData.keyPath: its process instance's, nothing
+ * copied): a task list selects it and filters by it under Tasks.Work,
+ * with no read of process instances, which is Operations.Read's. */
+- (void)testODataTasksSayTheirBusinessKeys
 {
 	WFProcessEngine *engine = [self engineWithHandler:nil];
 	ODataService *service = [self serviceFor:engine];
@@ -492,25 +492,18 @@
 		XCTAssertEqual([self statusOf:response], (NSInteger)200, @"%@: %@", path, [response objectForKey:@"text"]);
 		return [[self jsonOf:response] objectForKey:@"value"];
 	};
-	NSArray *all = rows(@"AllOpenTasks()", dan);
+	NSArray *all = rows(@"Tasks?$select=TaskId,Name,BusinessKey&$orderby=BusinessKey", dan);
 	XCTAssertEqual([all count], (NSUInteger)3, @"%@", all);
-	NSMutableSet *keys = [NSMutableSet set];
-	for (NSDictionary *row in all) {
-		if ([[row objectForKey:@"BusinessKey"] isKindOfClass:[NSString class]]) [keys addObject:[row objectForKey:@"BusinessKey"]];
-	}
-	XCTAssertEqualObjects(keys, ([NSSet setWithObjects:@"order-7", @"order-8", nil]), @"each its process's business key");
-	XCTAssertEqualObjects([[all lastObject] objectForKey:@"Name"], @"Chore");
-	XCTAssertEqualObjects([[all lastObject] objectForKey:@"TaskDefinitionKey"], @"chore");
-	NSArray *seventh = rows(@"TasksOfBusinessKey(BusinessKey='order-7')", dan);
+	XCTAssertEqualObjects([all valueForKey:@"BusinessKey"], (@[ [NSNull null], @"order-7", @"order-8" ]), @"each its process's");
+	NSArray *seventh = rows(@"Tasks?$filter=BusinessKey eq 'order-7'", dan);
 	XCTAssertEqual([seventh count], (NSUInteger)1, @"%@", seventh);
 	XCTAssertEqualObjects([[seventh firstObject] objectForKey:@"BusinessKey"], @"order-7");
-	XCTAssertEqual([rows(@"TasksOfBusinessKey(BusinessKey='order-9')", dan) count], (NSUInteger)0);
-	XCTAssertEqual([rows(@"AllOpenTasks()", eve) count], (NSUInteger)0, @"none of them hers");
-	XCTAssertEqual([rows(@"TasksOfBusinessKey(BusinessKey='order-7')", eve) count], (NSUInteger)0, @"nor by its key");
-	XCTAssertEqual(([self statusOf:[self send:@"GET" path:@"AllOpenTasks()" body:nil headers:@{ @"X-User": @"dan" } service:service]]),
-		(NSInteger)403, @"signed in, but not to work on tasks");
+	XCTAssertEqual([rows(@"Tasks?$filter=BusinessKey eq 'order-7'", eve) count], (NSUInteger)0, @"not hers");
 	XCTAssertEqual(([self statusOf:[self send:@"GET" path:@"ProcessInstances" body:nil headers:dan service:service]]),
 		(NSInteger)403, @"the instances still an operator's");
+	NSDictionary *metadata = [self send:@"GET" path:@"$metadata" body:nil headers:dan service:service];
+	XCTAssertTrue([[metadata objectForKey:@"text"] rangeOfString:@"<Property Name=\"BusinessKey\""].location != NSNotFound,
+		@"a property of Task");
 }
 
 /* Who may see and do what: the processes say it, by user, group or claim,

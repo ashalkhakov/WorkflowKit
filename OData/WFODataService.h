@@ -12,7 +12,9 @@
  * An engine's state as an OData service (ODataKit's ODataService), under
  * the model's API configuration, in the WorkflowKit namespace:
  *
- *   Tasks                     open user tasks
+ *   Tasks                     open user tasks; each one's BusinessKey its
+ *                             process instance's (ODataKit's OData.keyPath:
+ *                             selected and filtered by under Tasks.Work)
  *   ProcessInstances          running process instances
  *   Variables                 their variables
  *   ProcessDefinitions        deployed definitions, every version
@@ -48,11 +50,6 @@
  *       .SetVariables(Variables), .RemoveVariables(Names)
  *   Tasks(id)/WorkflowKit.SubmitForm(Instance)
  *   SubmitStartForm(Key, BusinessKey, Instance)
- *   AllOpenTasks(), TasksOfBusinessKey(BusinessKey)
- *       the caller's open tasks (or one business key's), each with its
- *       process's business key: TaskId, Name, TaskDefinitionKey, FormKey,
- *       ProcessInstanceId, BusinessKey, Assignee, CreatedAt -- a task
- *       list's, under Tasks.Work, with no process instance read
  *
  * External tasks are worked through it as through WFExternalTaskService,
  * by workers anywhere:

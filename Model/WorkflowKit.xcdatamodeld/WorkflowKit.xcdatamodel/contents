@@ -287,6 +287,11 @@
             </userInfo>
         </attribute>
         <attribute name="assignee" optional="YES" attributeType="String"/>
+        <attribute name="businessKey" optional="YES" transient="YES" attributeType="String">
+            <userInfo>
+                <entry key="OData.keyPath" value="processInstance.businessKey"/>
+            </userInfo>
+        </attribute>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="definitionId" attributeType="String">
             <userInfo>

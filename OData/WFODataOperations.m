@@ -7,7 +7,6 @@
 #import "WFExternalTaskService.h"
 #import "WFIdentity.h"
 #import "WFProcessDefinition.h"
-#import "WFTaskQuery+Internal.h"
 #import <ODataKit/ODataError.h>
 
 @protocol WFODataTaskFunctions <ODataFunctions>
@@ -183,9 +182,7 @@ WFODataJSONValue(id value)
 
 + (NSDictionary *)ODataOperationTypes
 {
-	return @{ @"fetchAndLockWithWorkerId:maxTasks:topics:reply:": @"Collection(Edm.Untyped)",
-	          @"allOpenTasks:": @"Collection(Edm.Untyped)",
-	          @"tasksOfBusinessKeyWithBusinessKey:reply:": @"Collection(Edm.Untyped)" };
+	return @{ @"fetchAndLockWithWorkerId:maxTasks:topics:reply:": @"Collection(Edm.Untyped)" };
 }
 
 + (NSDictionary *)ODataOperationScopes
@@ -196,9 +193,7 @@ WFODataJSONValue(id value)
 	          @"submitStartFormWithKey:businessKey:instance:reply:": start,
 	          @"startFormInstanceWithKey:reply:": start,
 	          @"correlateMessageWithName:businessKey:processInstanceId:variables:reply:": @[ WFODataScopeOperationsManage ],
-	          @"deployWithName:resources:reply:": @[ WFODataScopeDeploy ],
-	          @"allOpenTasks:": @[ WFODataScopeWork, WFODataScopeReadAllTasks ],
-	          @"tasksOfBusinessKeyWithBusinessKey:reply:": @[ WFODataScopeWork, WFODataScopeReadAllTasks ] };
+	          @"deployWithName:resources:reply:": @[ WFODataScopeDeploy ] };
 }
 
 - (instancetype)initWithEngine:(WFProcessEngine *)engine
@@ -340,69 +335,6 @@ WFODataJSONValue(id value)
 	NSFetchRequest *fetch = [NSFetchRequest fetchRequestWithEntityName:@"WFExecution"];
 	[fetch setPredicate:[NSPredicate predicateWithFormat:@"executionId == %@", instance.processInstanceId]];
 	return [[reply.request.context executeFetchRequest:fetch error:NULL] firstObject];
-}
-
-/* The open tasks the caller sees (as Tasks does), of the business key
- * where one is given, each with its process's business key: one fetch,
- * the join the store's. */
-static NSArray *
-WFODataOpenTasks(ODataReply *reply, NSString *businessKey)
-{
-	ODataRequest *request = reply.request;
-	NSMutableArray *conditions = [NSMutableArray array];
-	WFIdentity *identity = WFODataIdentity(request);
-	if (identity != nil && !WFODataHasScope(request, WFODataScopeReadAllTasks)) {
-		NSError *error = nil;
-		NSPredicate *visible = [[[WFTaskQuery query] visibleTo:identity] wf_predicateWithDefinitionIds:nil error:&error];
-		if (visible == nil) {
-			[reply failWithError:WFODataError(error)];
-			return nil;
-		}
-		[conditions addObject:visible];
-	}
-	if (businessKey != nil) {
-		[conditions addObject:[NSPredicate predicateWithFormat:@"processInstance.businessKey == %@", businessKey]];
-	}
-	NSFetchRequest *fetch = [NSFetchRequest fetchRequestWithEntityName:@"WFTask"];
-	[fetch setPredicate:[conditions count] ? [NSCompoundPredicate andPredicateWithSubpredicates:conditions] : nil];
-	[fetch setSortDescriptors:@[ [NSSortDescriptor sortDescriptorWithKey:@"createdAt" ascending:YES],
-	                             [NSSortDescriptor sortDescriptorWithKey:@"taskId" ascending:YES] ]];
-	NSError *error = nil;
-	NSArray *tasks = [request.context executeFetchRequest:fetch error:&error];
-	if (tasks == nil) {
-		[reply failWithError:WFODataError(error)];
-		return nil;
-	}
-	NSISO8601DateFormatter *moments = [[NSISO8601DateFormatter alloc] init];
-	NSMutableArray *rows = [NSMutableArray arrayWithCapacity:[tasks count]];
-	for (WFTaskEntity *task in tasks) {
-		NSMutableDictionary *row = [NSMutableDictionary dictionary];
-		row[@"TaskId"] = task.taskId ?: [NSNull null];
-		row[@"Name"] = task.name ?: [NSNull null];
-		row[@"TaskDefinitionKey"] = task.taskDefinitionKey ?: [NSNull null];
-		row[@"FormKey"] = task.form.formKey ?: [NSNull null];
-		row[@"ProcessInstanceId"] = task.processInstanceId ?: [NSNull null];
-		row[@"BusinessKey"] = task.processInstance.businessKey ?: [NSNull null];
-		row[@"Assignee"] = task.assignee ?: [NSNull null];
-		row[@"CreatedAt"] = task.createdAt ? [moments stringFromDate:task.createdAt] : (id)[NSNull null];
-		[rows addObject:row];
-	}
-	return rows;
-}
-
-- (NSArray *)allOpenTasks:(ODataReply *)reply
-{
-	return WFODataOpenTasks(reply, nil);
-}
-
-- (NSArray *)tasksOfBusinessKeyWithBusinessKey:(NSString *)businessKey reply:(ODataReply *)reply
-{
-	NSString *key = WFODataValue(businessKey);
-	if (![key isKindOfClass:[NSString class]] || [key length] == 0) {
-		[reply failWithError:ODataServiceError(400, @"TasksOfBusinessKey takes a BusinessKey")];
-		return nil;
-	}
-	return WFODataOpenTasks(reply, key);
 }
 
 - (NSString *)startFormInstanceWithKey:(NSString *)key reply:(ODataReply *)reply

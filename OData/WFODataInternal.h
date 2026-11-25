@@ -28,15 +28,6 @@
 
 @protocol WFODataServiceFunctions <ODataFunctions>
 - (NSString *)startFormInstanceWithKey:(NSString *)key reply:(ODataReply *)reply;
-/* AllOpenTasks(), TasksOfBusinessKey(BusinessKey): the caller's open tasks
- * (those Tasks shows them), or those of one process's business key, each
- * with that business key: TaskId, Name, TaskDefinitionKey, FormKey,
- * ProcessInstanceId, BusinessKey, Assignee, CreatedAt (ISO 8601), the
- * oldest first. Under Tasks.Work, as Tasks are: a task list needs which
- * order (which business key) each task is of, and a business key is its
- * process instance's, which only Operations.Read reads. */
-- (NSArray *)allOpenTasks:(ODataReply *)reply;
-- (NSArray *)tasksOfBusinessKeyWithBusinessKey:(NSString *)businessKey reply:(ODataReply *)reply;
 @end
 
 /* XML text a request carries, as a document; nil, answered 400, when it is
