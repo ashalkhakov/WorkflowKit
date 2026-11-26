@@ -3,6 +3,7 @@
 #import "WKDEditor.h"
 #import "WKDRenderer.h"
 #import "WKDXML.h"
+#import <objc/runtime.h>
 
 typedef NS_ENUM(NSInteger, WKDGesture) {
 	WKDGestureNone,
@@ -998,7 +999,7 @@ WKDPointHandle(NSPoint point, double zoom)
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
-	if ([item action] == @selector(delete:)) {
+	if (sel_isEqual([item action], @selector(delete:))) {
 		return [_picked count] > 0;
 	}
 	return YES;
@@ -1090,17 +1091,25 @@ WKDPointHandle(NSPoint point, double zoom)
 	}
 }
 
+/* Escape gives the rename up (cancelOperation: on macOS, complete: from
+ * GNUstep's key bindings; on macOS complete: is Option-Esc, completion);
+ * Return keeps it. By name: the key bindings' selectors are made from names,
+ * on GNUstep not always == @selector(). */
 - (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)command
 {
 	if (control != _nameField) {
 		return NO;
 	}
-	if (command == @selector(cancelOperation:)) {
+	BOOL escape = sel_isEqual(command, @selector(cancelOperation:));
+#ifdef GNUSTEP
+	escape = escape || sel_isEqual(command, @selector(complete:));
+#endif
+	if (escape) {
 		_cancelRenaming = YES;
 		[self endRenaming:NO];
 		return YES;
 	}
-	if (command == @selector(insertNewline:)) {
+	if (sel_isEqual(command, @selector(insertNewline:))) {
 		[self endRenaming:YES];
 		return YES;
 	}

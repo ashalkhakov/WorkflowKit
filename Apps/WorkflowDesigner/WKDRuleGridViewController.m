@@ -1,5 +1,6 @@
 #import "WKDRuleGridViewController.h"
 #import "WKDExpressionField.h"
+#import <objc/runtime.h>
 
 static NSString * const WKDNumberColumn = @"#";
 static NSString * const WKDAnnotationColumn = @"annotation";
@@ -443,29 +444,29 @@ WKDHitPolicyLetter(WKDDmnDecision *decision)
 	WKDDmnDecision *decision = [self decision];
 	BOOL table = decision.isTable;
 	NSUInteger rule = [self selectedRule], chosen = _decisionEditor.column;
-	if (action == @selector(addRule:) || action == @selector(addInput:) || action == @selector(addOutput:)) {
+	if (sel_isEqual(action, @selector(addRule:)) || sel_isEqual(action, @selector(addInput:)) || sel_isEqual(action, @selector(addOutput:))) {
 		return table;
 	}
-	if (action == @selector(duplicate:)) {
+	if (sel_isEqual(action, @selector(duplicate:))) {
 		return table && rule != NSNotFound;
 	}
-	if (action == @selector(delete:)) {
+	if (sel_isEqual(action, @selector(delete:))) {
 		return table && [[self.grid selectedRowIndexes] count] > 0;
 	}
-	if (action == @selector(moveRuleUp:)) {
+	if (sel_isEqual(action, @selector(moveRuleUp:))) {
 		return table && rule != NSNotFound && rule > 0;
 	}
-	if (action == @selector(moveRuleDown:)) {
+	if (sel_isEqual(action, @selector(moveRuleDown:))) {
 		return table && rule != NSNotFound && rule + 1 < [decision.rules count];
 	}
 	BOOL column = table && chosen != NSNotFound && chosen < [decision.columns count];
-	if (action == @selector(deleteColumn:)) {
+	if (sel_isEqual(action, @selector(deleteColumn:))) {
 		return column;
 	}
-	if (action == @selector(moveColumnLeft:)) {
+	if (sel_isEqual(action, @selector(moveColumnLeft:))) {
 		return column && chosen != 0 && chosen != [decision.inputs count];
 	}
-	if (action == @selector(moveColumnRight:)) {
+	if (sel_isEqual(action, @selector(moveColumnRight:))) {
 		return column && chosen + 1 != [decision.inputs count] && chosen + 1 != [decision.columns count];
 	}
 	return YES;

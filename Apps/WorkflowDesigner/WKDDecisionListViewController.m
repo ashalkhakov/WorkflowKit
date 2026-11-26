@@ -1,4 +1,5 @@
 #import "WKDDecisionListViewController.h"
+#import <objc/runtime.h>
 
 @implementation WKDDecisionListViewController
 {
@@ -93,7 +94,7 @@
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
-	if ([item action] == @selector(deleteDecision:)) {
+	if (sel_isEqual([item action], @selector(deleteDecision:))) {
 		return _decisionEditor.decision != nil;
 	}
 	return YES;

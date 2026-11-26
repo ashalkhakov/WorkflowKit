@@ -6,6 +6,7 @@
 #import "WDTasksWindowController.h"
 #import "WDTracing.h"
 #import "WKDUpdater.h"
+#import <objc/runtime.h>
 
 @implementation WDAppDelegate
 {
@@ -31,7 +32,7 @@
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item
 {
-	if ([item action] == @selector(checkForUpdates:)) {
+	if (sel_isEqual([item action], @selector(checkForUpdates:))) {
 		return [_updater canCheckForUpdates];
 	}
 	return YES;
@@ -124,10 +125,10 @@
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
 	SEL action = [item action];
-	if (action == @selector(showTasks:) || action == @selector(showOperations:)) {
+	if (sel_isEqual(action, @selector(showTasks:)) || sel_isEqual(action, @selector(showOperations:))) {
 		return _session != nil;
 	}
-	if (action == @selector(signOut:)) {
+	if (sel_isEqual(action, @selector(signOut:))) {
 		return _session != nil;
 	}
 	return YES;
