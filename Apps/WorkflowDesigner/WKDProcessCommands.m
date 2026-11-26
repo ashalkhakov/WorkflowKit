@@ -2,6 +2,7 @@
 #import "WKDDecisions.h"
 #import "WKDDeployment.h"
 #import "WKDXML.h"
+#import <objc/runtime.h>
 
 static NSString * const WKDFragmentPasteboardType = @"local.workflowkit.bpmn-fragment";
 
@@ -346,16 +347,16 @@ static NSString * const WKDFragmentPasteboardType = @"local.workflowkit.bpmn-fra
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
 	SEL action = [item action];
-	if (action == @selector(editForm:)) {
+	if (sel_isEqual(action, @selector(editForm:))) {
 		return [self formElement] != nil;
 	}
-	if (action == @selector(editDecision:)) {
+	if (sel_isEqual(action, @selector(editDecision:))) {
 		return [self decisionElement] != nil;
 	}
-	if (action == @selector(addPool:)) {
+	if (sel_isEqual(action, @selector(addPool:))) {
 		return [self editor].model.pool == nil;
 	}
-	if (action == @selector(copy:) || action == @selector(cut:) || action == @selector(duplicate:)) {
+	if (sel_isEqual(action, @selector(copy:)) || sel_isEqual(action, @selector(cut:)) || sel_isEqual(action, @selector(duplicate:))) {
 		return [[self selection].selectedIds count] > 0;
 	}
 	NSString *name = NSStringFromSelector(action);
@@ -365,10 +366,10 @@ static NSString * const WKDFragmentPasteboardType = @"local.workflowkit.bpmn-fra
 	if ([name hasPrefix:@"distribute"]) {
 		return [[self selectedShapes] count] >= 3;
 	}
-	if (action == @selector(rename:) || action == @selector(changeType:)) {
+	if (sel_isEqual(action, @selector(rename:)) || sel_isEqual(action, @selector(changeType:))) {
 		return [self selectedId] != nil;
 	}
-	if (action == @selector(paste:)) {
+	if (sel_isEqual(action, @selector(paste:))) {
 		NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
 		return [pasteboard availableTypeFromArray:@[ WKDFragmentPasteboardType, NSPasteboardTypeString ]] != nil;
 	}

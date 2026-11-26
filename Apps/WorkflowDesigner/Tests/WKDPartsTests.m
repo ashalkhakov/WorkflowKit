@@ -6,6 +6,7 @@
 #import "WKDInspectorViewController.h"
 #import "WKDProcessCommands.h"
 #import "WKDFixtures.h"
+#import <objc/runtime.h>
 
 /* What the commands told their host. */
 @interface WKDTestHost : NSObject <WKDProcessCommandsHost>
@@ -135,7 +136,7 @@ WKDTitles(NSMenu *menu)
 	NSUInteger current = 0;
 	for (NSMenuItem *item in [types itemArray]) {
 		current += [item state] == NSControlStateValueOn ? 1 : 0;
-		XCTAssertEqual([item action], @selector(changeType:));
+		XCTAssertTrue(sel_isEqual([item action], @selector(changeType:)));
 		XCTAssertNotNil([item representedObject]);
 	}
 	XCTAssertEqual(current, (NSUInteger)1, @"its own type checked");
@@ -147,6 +148,30 @@ WKDTitles(NSMenu *menu)
 	XCTAssertTrue([titles containsObject:@"Distribute"]);
 	XCTAssertFalse([titles containsObject:@"Rename"], @"two selected");
 	XCTAssertTrue([titles containsObject:@"Copy"]);
+}
+
+/* The commands are validated by their actions' names: a XIB's action,
+ * made from its name, is not always == the compiler's @selector() on
+ * GNUstep. */
+- (void)testTheCommandsAreValidatedByTheirActionsNames
+{
+	WKDProcessEditor *editor = [self modeller];
+	WKDProcessCommands *commands = [[WKDProcessCommands alloc] initWithProcessEditor:editor];
+	commands.host = [[WKDTestHost alloc] init];
+	BOOL (^enabled)(NSString *) = ^BOOL(NSString *action) {
+		NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:action action:NSSelectorFromString(action) keyEquivalent:@""];
+		return [commands validateUserInterfaceItem:item];
+	};
+	editor.selection.selectedIds = @[];
+	for (NSString *action in @[ @"copy:", @"cut:", @"duplicate:", @"rename:", @"changeType:" ]) {
+		XCTAssertFalse(enabled(action), @"%@ with nothing selected", action);
+	}
+	editor.selection.selectedIds = @[ @"review" ];
+	XCTAssertTrue(enabled(@"copy:"));
+	XCTAssertTrue(enabled(@"rename:"), @"one selected");
+	XCTAssertEqual(enabled(@"addPool:"), editor.editor.model.pool == nil);
+	editor.selection.selectedIds = @[ @"review", @"ok" ];
+	XCTAssertFalse(enabled(@"rename:"), @"two selected");
 }
 
 - (void)testTheCommandsActOnTheSelection
